@@ -211,7 +211,7 @@ config = {
 if st.session_state.drawing:
     event = st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         config=config,
         on_select="rerun",
         selection_mode=["points"],
@@ -241,7 +241,7 @@ if st.session_state.drawing:
                     st.session_state.drawing = False
                     st.rerun()
 else:
-    st.plotly_chart(fig, use_container_width=True, config=config)
+    st.plotly_chart(fig, width="stretch", config=config)
 
 if st.session_state.lines:
     st.markdown("**Active Trend Lines**")
