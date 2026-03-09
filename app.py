@@ -12,10 +12,6 @@ if "lines" not in st.session_state:
     st.session_state.lines = []
 if "prob_result" not in st.session_state:
     st.session_state.prob_result = None
-if "click_a" not in st.session_state:
-    st.session_state.click_a = None
-if "drawing" not in st.session_state:
-    st.session_state.drawing = False
 
 
 @st.cache_data(ttl=300)
@@ -68,31 +64,6 @@ with col_refresh:
 
 st.markdown("**SOXL Price** · Log Scale")
 
-bcol1, bcol2, bcol3 = st.columns([1, 1, 3])
-with bcol1:
-    if st.session_state.drawing:
-        if st.button("🛑 Cancel Drawing", use_container_width=True):
-            st.session_state.drawing = False
-            st.session_state.click_a = None
-            st.rerun()
-    else:
-        if st.button("✏️ Draw Trend Line", use_container_width=True, type="primary"):
-            st.session_state.drawing = True
-            st.session_state.click_a = None
-            st.rerun()
-with bcol2:
-    if st.session_state.lines:
-        if st.button("🗑️ Clear All Lines", use_container_width=True):
-            st.session_state.lines = []
-            st.rerun()
-with bcol3:
-    if st.session_state.drawing:
-        if st.session_state.click_a:
-            pt = st.session_state.click_a
-            st.success(f"✓ Point A: {pt['date']} at ${pt['price']:.2f} — Now click a second point on the chart.")
-        else:
-            st.info("👆 Click on any point on the price line to set Point A.")
-
 today = datetime.now()
 future_end = today + relativedelta(years=5)
 line_colors = [
@@ -133,7 +104,7 @@ for i, ln in enumerate(st.session_state.lines):
             showlegend=False,
             line=dict(color=color, width=2),
             marker=dict(size=6, color=color),
-            hoverinfo="skip",
+            hovertemplate="Trend line<br>%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>",
         )
     )
 
@@ -168,19 +139,6 @@ for i, ln in enumerate(st.session_state.lines):
             )
         )
 
-if st.session_state.click_a:
-    pt = st.session_state.click_a
-    fig.add_trace(
-        go.Scatter(
-            x=[pd.Timestamp(pt["date"])],
-            y=[pt["price"]],
-            mode="markers",
-            marker=dict(size=12, color="red", symbol="cross"),
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
-
 x_start = data.index[0]
 if st.session_state.lines:
     earliest_back = min(
@@ -196,7 +154,7 @@ fig.update_layout(
     margin=dict(l=60, r=20, t=40, b=40),
     showlegend=False,
     hovermode="x unified",
-    dragmode="pan" if not st.session_state.drawing else "zoom",
+    dragmode="pan",
     plot_bgcolor="white",
     paper_bgcolor="white",
     font=dict(color="#333333"),
@@ -207,46 +165,65 @@ config = {
     "displayModeBar": True,
     "modeBarButtonsToRemove": ["select2d", "lasso2d"],
 }
+st.plotly_chart(fig, width="stretch", config=config)
 
-if st.session_state.drawing:
-    event = st.plotly_chart(
-        fig,
-        width="stretch",
-        config=config,
-        on_select="rerun",
-        selection_mode=["points"],
-        key="soxl_chart",
+st.markdown("#### ✏️ Draw Trend Line")
+min_date = data.index[0].date()
+max_date = date.today()
+
+c1, c2, c3, c4, c5 = st.columns([2, 1.5, 2, 1.5, 1])
+with c1:
+    date_a = st.date_input(
+        "Point A date",
+        value=date(2010, 3, 11),
+        min_value=min_date,
+        max_value=max_date,
+        key="date_a",
     )
-
-    if event and event.selection and event.selection.points:
-        point = event.selection.points[0]
-        click_idx = point.get("point_index", None)
-        if click_idx is not None and point.get("curve_number", -1) == 0:
-            click_date = str(data.index[click_idx].date())
-            click_price = float(data["Close"].iloc[click_idx])
-
-            if st.session_state.click_a is None:
-                st.session_state.click_a = {"date": click_date, "price": click_price}
-                st.rerun()
-            else:
-                pt_a = st.session_state.click_a
-                if pt_a["date"] != click_date:
-                    st.session_state.lines.append({
-                        "x1": pt_a["date"],
-                        "x2": click_date,
-                        "y1": pt_a["price"],
-                        "y2": click_price,
-                    })
-                    st.session_state.click_a = None
-                    st.session_state.drawing = False
-                    st.rerun()
-else:
-    st.plotly_chart(fig, width="stretch", config=config)
+with c2:
+    ts_a = pd.Timestamp(date_a)
+    idx_a = data.index.get_indexer([ts_a], method="nearest")[0]
+    price_a_default = float(data.iloc[idx_a]["Close"])
+    price_a = st.number_input(
+        "Point A price ($)",
+        value=price_a_default,
+        min_value=0.01,
+        format="%.2f",
+        key="price_a",
+    )
+with c3:
+    date_b = st.date_input(
+        "Point B date",
+        value=max_date,
+        min_value=min_date,
+        max_value=max_date,
+        key="date_b",
+    )
+with c4:
+    ts_b = pd.Timestamp(date_b)
+    idx_b = data.index.get_indexer([ts_b], method="nearest")[0]
+    price_b_default = float(data.iloc[idx_b]["Close"])
+    price_b = st.number_input(
+        "Point B price ($)",
+        value=price_b_default,
+        min_value=0.01,
+        format="%.2f",
+        key="price_b",
+    )
+with c5:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Add Line ➕", use_container_width=True, type="primary"):
+        if date_a == date_b:
+            st.error("Pick two different dates.")
+        else:
+            st.session_state.lines.append(
+                {"x1": str(date_a), "x2": str(date_b), "y1": price_a, "y2": price_b}
+            )
+            st.rerun()
 
 if st.session_state.lines:
-    st.markdown("**Active Trend Lines**")
     for i, ln in enumerate(st.session_state.lines):
-        col_info, col_del = st.columns([5, 1])
+        col_info, col_del = st.columns([6, 1])
         with col_info:
             st.caption(
                 f"Line {i + 1}: {ln['x1']} (${ln['y1']:.2f}) → {ln['x2']} (${ln['y2']:.2f})"
