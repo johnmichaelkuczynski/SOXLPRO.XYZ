@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
-from streamlit_plotly_events import plotly_events
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
@@ -13,10 +12,10 @@ if "lines" not in st.session_state:
     st.session_state.lines = []
 if "prob_result" not in st.session_state:
     st.session_state.prob_result = None
-if "pending_click" not in st.session_state:
-    st.session_state.pending_click = None
-if "drawing_mode" not in st.session_state:
-    st.session_state.drawing_mode = False
+if "click_a" not in st.session_state:
+    st.session_state.click_a = None
+if "drawing" not in st.session_state:
+    st.session_state.drawing = False
 
 
 @st.cache_data(ttl=300)
@@ -69,29 +68,30 @@ with col_refresh:
 
 st.markdown("**SOXL Price** · Log Scale")
 
-draw_col1, draw_col2, draw_col3 = st.columns([1, 1, 2])
-with draw_col1:
-    draw_clicked = st.button(
-        "✏️ Start Drawing" if not st.session_state.drawing_mode else "🛑 Cancel Drawing",
-        use_container_width=True,
-        type="primary" if not st.session_state.drawing_mode else "secondary",
-    )
-    if draw_clicked:
-        st.session_state.drawing_mode = not st.session_state.drawing_mode
-        st.session_state.pending_click = None
-        st.rerun()
-with draw_col2:
+bcol1, bcol2, bcol3 = st.columns([1, 1, 3])
+with bcol1:
+    if st.session_state.drawing:
+        if st.button("🛑 Cancel Drawing", use_container_width=True):
+            st.session_state.drawing = False
+            st.session_state.click_a = None
+            st.rerun()
+    else:
+        if st.button("✏️ Draw Trend Line", use_container_width=True, type="primary"):
+            st.session_state.drawing = True
+            st.session_state.click_a = None
+            st.rerun()
+with bcol2:
     if st.session_state.lines:
         if st.button("🗑️ Clear All Lines", use_container_width=True):
             st.session_state.lines = []
             st.rerun()
-with draw_col3:
-    if st.session_state.drawing_mode:
-        if st.session_state.pending_click:
-            pt = st.session_state.pending_click
-            st.info(f"Point A set: {pt['x'][:10]} at ${pt['y']:.2f} — Now click a second point on the chart.")
+with bcol3:
+    if st.session_state.drawing:
+        if st.session_state.click_a:
+            pt = st.session_state.click_a
+            st.success(f"✓ Point A: {pt['date']} at ${pt['price']:.2f} — Now click a second point on the chart.")
         else:
-            st.info("Click on the price line to set Point A.")
+            st.info("👆 Click on any point on the price line to set Point A.")
 
 today = datetime.now()
 future_end = today + relativedelta(years=5)
@@ -168,12 +168,12 @@ for i, ln in enumerate(st.session_state.lines):
             )
         )
 
-if st.session_state.pending_click:
-    pt = st.session_state.pending_click
+if st.session_state.click_a:
+    pt = st.session_state.click_a
     fig.add_trace(
         go.Scatter(
-            x=[pd.Timestamp(pt["x"])],
-            y=[pt["y"]],
+            x=[pd.Timestamp(pt["date"])],
+            y=[pt["price"]],
             mode="markers",
             marker=dict(size=12, color="red", symbol="cross"),
             showlegend=False,
@@ -196,7 +196,7 @@ fig.update_layout(
     margin=dict(l=60, r=20, t=40, b=40),
     showlegend=False,
     hovermode="x unified",
-    dragmode="pan",
+    dragmode="pan" if not st.session_state.drawing else "zoom",
     plot_bgcolor="white",
     paper_bgcolor="white",
     font=dict(color="#333333"),
@@ -205,39 +205,43 @@ fig.update_layout(
 config = {
     "scrollZoom": True,
     "displayModeBar": True,
-    "modeBarButtonsToRemove": ["select2d", "lasso2d", "drawline", "eraseshape"],
+    "modeBarButtonsToRemove": ["select2d", "lasso2d"],
 }
 
-selected_points = plotly_events(
-    fig,
-    click_event=True,
-    select_event=False,
-    hover_event=False,
-    override_height=700,
-    override_width="100%",
-    config=config,
-)
+if st.session_state.drawing:
+    event = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config=config,
+        on_select="rerun",
+        selection_mode=["points"],
+        key="soxl_chart",
+    )
 
-if st.session_state.drawing_mode and selected_points:
-    click = selected_points[0]
-    click_x = click.get("x")
-    click_y = click.get("y")
+    if event and event.selection and event.selection.points:
+        point = event.selection.points[0]
+        click_idx = point.get("point_index", None)
+        if click_idx is not None and point.get("curve_number", -1) == 0:
+            click_date = str(data.index[click_idx].date())
+            click_price = float(data["Close"].iloc[click_idx])
 
-    if click_x is not None and click_y is not None:
-        if st.session_state.pending_click is None:
-            st.session_state.pending_click = {"x": str(click_x), "y": float(click_y)}
-            st.rerun()
-        else:
-            pt_a = st.session_state.pending_click
-            st.session_state.lines.append({
-                "x1": pt_a["x"][:10],
-                "x2": str(click_x)[:10],
-                "y1": float(pt_a["y"]),
-                "y2": float(click_y),
-            })
-            st.session_state.pending_click = None
-            st.session_state.drawing_mode = False
-            st.rerun()
+            if st.session_state.click_a is None:
+                st.session_state.click_a = {"date": click_date, "price": click_price}
+                st.rerun()
+            else:
+                pt_a = st.session_state.click_a
+                if pt_a["date"] != click_date:
+                    st.session_state.lines.append({
+                        "x1": pt_a["date"],
+                        "x2": click_date,
+                        "y1": pt_a["price"],
+                        "y2": click_price,
+                    })
+                    st.session_state.click_a = None
+                    st.session_state.drawing = False
+                    st.rerun()
+else:
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 if st.session_state.lines:
     st.markdown("**Active Trend Lines**")

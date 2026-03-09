@@ -818,7 +818,6 @@ dependencies = [
     { name = "plotly" },
     { name = "python-dateutil" },
     { name = "streamlit" },
-    { name = "streamlit-plotly-events" },
     { name = "yfinance" },
 ]
 
@@ -829,7 +828,6 @@ requires-dist = [
     { name = "plotly", specifier = ">=6.6.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
     { name = "streamlit", specifier = ">=1.55.0" },
-    { name = "streamlit-plotly-events", specifier = ">=0.0.6" },
     { name = "yfinance", specifier = ">=1.2.0" },
 ]
 
@@ -1010,19 +1008,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/8e/f2b8b4fa8ba65aae251170c54f8ce198fb588fc348301c2b624f8c63efac/streamlit-1.55.0.tar.gz", hash = "sha256:015e512bbd02d000f4047e51118dc086b70e7d9c46b4a11a33c2509731379626", size = 8612008, upload-time = "2026-03-03T22:26:02.149Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/e6/412c1e1f200ca8c32ecf10201839183e261ad61ced3ede34a66f6d4be3cf/streamlit-1.55.0-py3-none-any.whl", hash = "sha256:1e4a16449c6131696180f4ddb40ea8c51834e89c2a43e1b0362bc9b1cfd9b415", size = 9075714, upload-time = "2026-03-03T22:25:59.126Z" },
-]
-
-[[package]]
-name = "streamlit-plotly-events"
-version = "0.0.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "plotly" },
-    { name = "streamlit" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/61/8c/e51c4867cc4d819f8452811199241d0edbcec73621768270ada66153f874/streamlit-plotly-events-0.0.6.tar.gz", hash = "sha256:1fe25dbf0e5d803aeb90253be04d7b395f5bcfdf3c654f96ff3c19424e7f9582", size = 4874598, upload-time = "2021-04-26T23:36:16.973Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/08/51dd5c822e27410f6452c3cfe61f7163fdeb40f4d285f2da6c2b9f88584d/streamlit_plotly_events-0.0.6-py3-none-any.whl", hash = "sha256:e63fbe3c6a0746fdfce20060fc45ba5cd97805505c332b27372dcbd02c2ede29", size = 14802161, upload-time = "2021-04-26T23:36:09.194Z" },
 ]
 
 [[package]]

@@ -5,6 +5,7 @@ run = ["streamlit", "run", "app.py", "--server.port", "5000"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["glibcLocales"]
 
 [workflows]
 runButton = "Project"
