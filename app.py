@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 
-st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="centered")
+st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
 if "lines" not in st.session_state:
     st.session_state.lines = []
@@ -19,12 +19,6 @@ def fetch_soxl_data():
     df = yf.Ticker("SOXL").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
-
-
-def get_nearest_price(data, target_date):
-    ts = pd.Timestamp(target_date)
-    idx = data.index.get_indexer([ts], method="nearest")[0]
-    return float(data.iloc[idx]["Close"])
 
 
 def convert_to_trading_days(value, unit):
@@ -68,7 +62,7 @@ with col_refresh:
         st.cache_data.clear()
         st.rerun()
 
-st.markdown("**SOXL Price** · Log Scale")
+st.markdown("**SOXL Price** · Log Scale  ·  *Use the line tool (📏) in the chart toolbar to draw directly on the chart. Use the eraser (🧹) to remove drawn lines.*")
 
 today = datetime.now()
 future_end = today + relativedelta(years=5)
@@ -155,24 +149,30 @@ fig.update_layout(
     yaxis=dict(type="log", tickprefix="$", title=""),
     xaxis=dict(range=[x_start, future_end], title=""),
     template="plotly_white",
-    height=500,
-    margin=dict(l=60, r=20, t=10, b=40),
+    height=700,
+    margin=dict(l=60, r=20, t=40, b=40),
     showlegend=False,
     hovermode="x unified",
-    dragmode="pan",
+    dragmode="drawline",
     plot_bgcolor="white",
     paper_bgcolor="white",
     font=dict(color="#333333"),
+    newshape=dict(
+        line=dict(color="#888888", width=2, dash="solid"),
+        drawdirection="diagonal",
+    ),
 )
 
 config = {
     "scrollZoom": True,
     "displayModeBar": True,
+    "modeBarButtonsToAdd": ["drawline", "eraseshape"],
     "modeBarButtonsToRemove": ["select2d", "lasso2d"],
 }
 st.plotly_chart(fig, use_container_width=True, config=config)
 
-with st.expander("📏 Draw Trend Line"):
+with st.expander("📏 Add Auto-Extending Trend Line (by coordinates)"):
+    st.caption("Lines added here auto-extend into the future (dashed) and backward (dashed).")
     min_date = data.index[0].date()
     max_date = date.today()
 
@@ -187,7 +187,9 @@ with st.expander("📏 Draw Trend Line"):
             key="date_a",
             label_visibility="collapsed",
         )
-        price_a_default = get_nearest_price(data, date_a)
+        ts_a = pd.Timestamp(date_a)
+        idx_a = data.index.get_indexer([ts_a], method="nearest")[0]
+        price_a_default = float(data.iloc[idx_a]["Close"])
         price_a = st.number_input(
             "Price A ($)",
             value=price_a_default,
@@ -206,7 +208,9 @@ with st.expander("📏 Draw Trend Line"):
             key="date_b",
             label_visibility="collapsed",
         )
-        price_b_default = get_nearest_price(data, date_b)
+        ts_b = pd.Timestamp(date_b)
+        idx_b = data.index.get_indexer([ts_b], method="nearest")[0]
+        price_b_default = float(data.iloc[idx_b]["Close"])
         price_b = st.number_input(
             "Price B ($)",
             value=price_b_default,
@@ -225,7 +229,7 @@ with st.expander("📏 Draw Trend Line"):
             st.rerun()
 
 if st.session_state.lines:
-    st.markdown("**Active Lines**")
+    st.markdown("**Auto-Extending Lines**")
     for i, ln in enumerate(st.session_state.lines):
         col_info, col_del = st.columns([5, 1])
         with col_info:
