@@ -160,6 +160,9 @@ fig.update_layout(
     showlegend=False,
     hovermode="x unified",
     dragmode="pan",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    font=dict(color="#333333"),
 )
 
 config = {
