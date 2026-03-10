@@ -298,61 +298,72 @@ selectOverlay.addEventListener('mouseleave', function() {
   }
 });
 
-chartDiv.addEventListener('plotly_doubleclick', function() {
+chartDiv.addEventListener('plotly_doubleclick', function(e) {
+  if (e && e.preventDefault) e.preventDefault();
   return false;
 });
 
-chartDiv.on('plotly_click', function(eventData) {
-  if (!eventData || !eventData.points || eventData.points.length === 0) return;
+chartDiv.addEventListener('dblclick', function(e) {
   if (lines.length === 0) return;
-
-  var pt = eventData.points[0];
-  var clickX = new Date(pt.x).getTime();
-  var clickY = pt.y;
-  if (clickY <= 0) return;
-  var clickLogY = Math.log10(clickY);
+  if (currentMode === 'select') return;
 
   var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis || !layout.yaxis) return;
+
+  var plotArea = layout._size;
+  var chartRect = chartDiv.getBoundingClientRect();
+  var relX = e.clientX - chartRect.left - plotArea.l;
+  var relY = e.clientY - chartRect.top - plotArea.t;
+
+  if (relX < 0 || relX > plotArea.w || relY < 0 || relY > plotArea.h) return;
+
   var xRange = layout.xaxis.range;
   var yRange = layout.yaxis.range;
-  var x0 = new Date(xRange[0]).getTime();
-  var x1 = new Date(xRange[1]).getTime();
+  var xFrac = relX / plotArea.w;
+  var yFrac = 1 - (relY / plotArea.h);
+
+  var x0, x1;
+  if (typeof xRange[0] === 'string') {
+    x0 = new Date(xRange[0]).getTime();
+    x1 = new Date(xRange[1]).getTime();
+  } else {
+    x0 = xRange[0]; x1 = xRange[1];
+  }
+  var clickXms = x0 + xFrac * (x1 - x0);
+  var clickLogY = yRange[0] + yFrac * (yRange[1] - yRange[0]);
+
   var xSpan = x1 - x0;
   var ySpan = yRange[1] - yRange[0];
 
   var bestIdx = -1;
   var bestDist = Infinity;
-  var threshold = 0.03;
+  var threshold = 0.05;
 
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
+    if (!ln.y1 || !ln.y2 || ln.y1 <= 0 || ln.y2 <= 0) continue;
     var lx1 = ln.x1_ms, ly1 = Math.log10(ln.y1);
     var lx2 = ln.x2_ms, ly2 = Math.log10(ln.y2);
     var dt = lx2 - lx1;
     if (dt === 0) continue;
     var slope = (ly2 - ly1) / dt;
-    var projLogY = ly1 + slope * (clickX - lx1);
-    var normDx = 0;
+    var projLogY = ly1 + slope * (clickXms - lx1);
     var normDy = Math.abs(projLogY - clickLogY) / ySpan;
-    var dist = normDy;
-    if (dist < threshold && dist < bestDist) {
-      bestDist = dist;
+    if (normDy < threshold && normDy < bestDist) {
+      bestDist = normDy;
       bestIdx = i;
     }
   }
 
   if (bestIdx >= 0) {
-    if (!window._lastLineClick || window._lastLineClick.idx !== bestIdx || (Date.now() - window._lastLineClick.time) > 500) {
-      window._lastLineClick = { idx: bestIdx, time: Date.now() };
-      return;
-    }
-    window._lastLineClick = null;
+    e.stopPropagation();
+    e.preventDefault();
     lines.splice(bestIdx, 1);
     renderChart();
     renderLineList();
     setComponentValue({action: "set_all", lines: lines});
   }
-});
+}, true);
 
 chartDiv.addEventListener('plotly_relayout', function(eventData) {
   if (currentMode !== 'draw' || !eventData) return;
