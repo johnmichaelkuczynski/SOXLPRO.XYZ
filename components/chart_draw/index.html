@@ -41,6 +41,8 @@ var drawMode = false;
 var lines = [];
 var chartData = null;
 var rendered = false;
+var knownShapeCount = 0;
+var ignoreRelayout = false;
 
 function sendToStreamlit(type, data) {
   window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*");
@@ -80,7 +82,7 @@ function toggleDraw() {
   btn.textContent = drawMode ? '[ ] Stop Drawing' : '\u270E Draw Line';
   document.getElementById('status').textContent = drawMode ? 'Click and drag on the chart to draw a line' : '';
   Plotly.relayout(chartDiv, {
-    dragmode: drawMode ? 'drawline' : 'pan',
+    dragmode: drawMode ? 'drawline' : 'zoom',
     'newshape.line.color': '#888',
     'newshape.line.width': 2
   });
@@ -88,6 +90,7 @@ function toggleDraw() {
 
 function clearAll() {
   lines = [];
+  knownShapeCount = 0;
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
@@ -106,10 +109,20 @@ function msToDateStr(ms) {
 }
 
 chartDiv.addEventListener('plotly_relayout', function(eventData) {
+  if (ignoreRelayout) return;
   if (!drawMode || !eventData) return;
 
+  var hasShapeKey = false;
+  for (var key in eventData) {
+    if (key.indexOf('shapes') === 0) {
+      hasShapeKey = true;
+      break;
+    }
+  }
+  if (!hasShapeKey) return;
+
   var shapes = (chartDiv.layout && chartDiv.layout.shapes) ? chartDiv.layout.shapes : [];
-  if (shapes.length === 0) return;
+  if (shapes.length <= knownShapeCount) return;
 
   var lastShape = shapes[shapes.length - 1];
   if (!lastShape || lastShape.type !== 'line') return;
@@ -147,7 +160,9 @@ function renderChart() {
     x: chartData.dates, y: chartData.prices,
     mode: 'lines', name: 'SOXL',
     line: {color: '#1E88E5', width: 1.5},
-    hovertemplate: '%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    hovertemplate: '%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>',
+    xaxis: 'x',
+    yaxis: 'y'
   });
 
   var futureMs = new Date(chartData.future_end).getTime();
@@ -197,6 +212,17 @@ function renderChart() {
     }
   }
 
+  var miniTrace = {
+    x: chartData.dates, y: chartData.prices,
+    mode: 'lines', name: 'nav',
+    line: {color: '#90CAF9', width: 1},
+    showlegend: false,
+    xaxis: 'x2',
+    yaxis: 'y2',
+    hoverinfo: 'skip'
+  };
+  traces.push(miniTrace);
+
   var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
   var priceMax = Math.max.apply(null, chartData.prices);
   var yPad = 0.3;
@@ -205,33 +231,47 @@ function renderChart() {
     yaxis: {
       type: 'log', tickprefix: '$', title: '',
       gridcolor: '#eee',
-      range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad]
+      range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad],
+      domain: [0.18, 1]
     },
     xaxis: {
       range: [chartData.dates[0], chartData.future_end],
       title: '', gridcolor: '#eee',
       dtick: 'M12', tickformat: '%Y',
-      rangeslider: {
-        visible: true,
-        thickness: 0.08,
-        bgcolor: '#f5f5f5',
-        bordercolor: '#ddd',
-        borderwidth: 1
-      }
+      domain: [0, 1]
+    },
+    yaxis2: {
+      type: 'log',
+      range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad],
+      domain: [0, 0.12],
+      showticklabels: false,
+      showgrid: false,
+      zeroline: false,
+      fixedrange: true
+    },
+    xaxis2: {
+      range: [chartData.dates[0], chartData.future_end],
+      domain: [0, 1],
+      showticklabels: false,
+      showgrid: false,
+      zeroline: false,
+      matches: 'x',
+      anchor: 'y2'
     },
     template: 'plotly_white',
     height: chartData.chart_height,
-    margin: {l: 65, r: 20, t: 10, b: 40},
+    margin: {l: 65, r: 20, t: 10, b: 30},
     showlegend: false,
     hovermode: 'x unified',
-    dragmode: drawMode ? 'drawline' : 'pan',
+    dragmode: drawMode ? 'drawline' : 'zoom',
     newshape: {
       line: { color: '#888', width: 2 }
     },
     shapes: [],
     plot_bgcolor: 'white',
     paper_bgcolor: 'white',
-    font: {color: '#333'}
+    font: {color: '#333'},
+    grid: {rows: 2, columns: 1, pattern: 'independent', roworder: 'top to bottom'}
   };
 
   var config = {
@@ -240,7 +280,11 @@ function renderChart() {
     modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape']
   };
 
+  ignoreRelayout = true;
   Plotly.react(chartDiv, traces, layout, config);
+  knownShapeCount = 0;
+  ignoreRelayout = false;
+
   document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
 }
 
