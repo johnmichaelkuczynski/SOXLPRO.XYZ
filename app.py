@@ -17,6 +17,8 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
 if "strategy_html" not in st.session_state:
     st.session_state.strategy_html = None
+if "analyze_result" not in st.session_state:
+    st.session_state.analyze_result = None
 
 chart_component = components.declare_component("chart_draw", path="components/chart_draw")
 
@@ -89,8 +91,112 @@ with tab_chart:
     )
 
     if result is not None:
-        if result.get("action") == "set_all":
+        action = result.get("action")
+        if action == "set_all":
             st.session_state.lines = result.get("lines", [])
+        elif action == "analyze":
+            st.session_state.lines = result.get("lines", [])
+            analyze_start = result.get("analyze_start")
+            analyze_end = result.get("analyze_end")
+            if analyze_start and analyze_end:
+                start_dt = pd.to_datetime(analyze_start)
+                end_dt = pd.to_datetime(analyze_end)
+                window_data = data[(data.index >= start_dt) & (data.index <= end_dt)]
+                if len(window_data) >= 5:
+                    close_w = window_data["Close"].values
+                    after_data = data[data.index > end_dt]
+                    horizons = [
+                        ("1 Week", 5), ("2 Weeks", 10), ("1 Month", 21),
+                        ("3 Months", 63), ("6 Months", 126), ("1 Year", 252)
+                    ]
+                    magnitudes = [5, 10, 15, 20, 25, 30, 50]
+                    predictions = []
+                    for h_label, h_days in horizons:
+                        total = len(close_w) - h_days
+                        if total <= 0:
+                            continue
+                        returns = []
+                        for i in range(total):
+                            pct = (close_w[i + h_days] - close_w[i]) / close_w[i] * 100
+                            returns.append(pct)
+                        avg_ret = np.mean(returns)
+                        med_ret = np.median(returns)
+                        mag_probs = {}
+                        for mag in magnitudes:
+                            up_count = sum(1 for r in returns if r >= mag)
+                            down_count = sum(1 for r in returns if r <= -mag)
+                            mag_probs[mag] = {
+                                "up": round(up_count / total * 100, 1),
+                                "down": round(down_count / total * 100, 1)
+                            }
+                        actual_ret = None
+                        if len(after_data) >= h_days:
+                            end_price = window_data["Close"].iloc[-1]
+                            future_price = after_data["Close"].iloc[min(h_days - 1, len(after_data) - 1)]
+                            actual_ret = round((future_price - end_price) / end_price * 100, 1)
+                        predictions.append({
+                            "horizon": h_label,
+                            "days": h_days,
+                            "avg_return": round(avg_ret, 1),
+                            "median_return": round(med_ret, 1),
+                            "mag_probs": mag_probs,
+                            "actual_return": actual_ret,
+                            "total_periods": total
+                        })
+                    st.session_state.analyze_result = {
+                        "start": analyze_start,
+                        "end": analyze_end,
+                        "data_points": len(window_data),
+                        "start_price": round(window_data["Close"].iloc[0], 2),
+                        "end_price": round(window_data["Close"].iloc[-1], 2),
+                        "period_return": round((window_data["Close"].iloc[-1] - window_data["Close"].iloc[0]) / window_data["Close"].iloc[0] * 100, 1),
+                        "predictions": predictions
+                    }
+                else:
+                    st.session_state.analyze_result = None
+
+    if st.session_state.analyze_result:
+        ar = st.session_state.analyze_result
+        st.divider()
+        st.markdown(f"### Period Analysis: {ar['start']} to {ar['end']}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Start Price", f"${ar['start_price']}")
+        c2.metric("End Price", f"${ar['end_price']}")
+        c3.metric("Period Return", f"{ar['period_return']}%")
+        c4.metric("Data Points", ar['data_points'])
+
+        st.markdown("**Predictions based on this period's data vs. what actually happened after:**")
+
+        for pred in ar["predictions"]:
+            with st.expander(f"{pred['horizon']} ({pred['days']} trading days) — {pred['total_periods']} samples", expanded=pred['horizon'] in ['1 Month', '3 Months']):
+                col_pred, col_actual = st.columns(2)
+                with col_pred:
+                    st.markdown("**Predicted (from selected period)**")
+                    st.markdown(f"- Average return: **{pred['avg_return']}%**")
+                    st.markdown(f"- Median return: **{pred['median_return']}%**")
+                    prob_lines = []
+                    for mag, probs in pred["mag_probs"].items():
+                        prob_lines.append(f"- ≥{mag}% up: **{probs['up']}%** prob | ≥{mag}% down: **{probs['down']}%** prob")
+                    st.markdown("\n".join(prob_lines))
+                with col_actual:
+                    if pred["actual_return"] is not None:
+                        actual = pred["actual_return"]
+                        color = "green" if actual >= 0 else "red"
+                        st.markdown("**What actually happened**")
+                        st.markdown(f"- Actual return after {pred['horizon']}: :{color}[**{actual:+.1f}%**]")
+                        if actual >= 0:
+                            predicted_up_prob = pred["mag_probs"].get(5, {}).get("up", 0)
+                            st.markdown(f"- Model gave {predicted_up_prob}% probability of ≥5% up move")
+                        else:
+                            predicted_down_prob = pred["mag_probs"].get(5, {}).get("down", 0)
+                            st.markdown(f"- Model gave {predicted_down_prob}% probability of ≥5% down move")
+                    else:
+                        st.markdown("**What actually happened**")
+                        st.markdown("*Not enough future data to verify*")
+
+        if st.button("Clear Analysis"):
+            st.session_state.analyze_result = None
+            st.rerun()
 
     st.divider()
 
