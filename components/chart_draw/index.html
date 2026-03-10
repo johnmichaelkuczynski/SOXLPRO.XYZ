@@ -5,7 +5,7 @@
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; }
   #toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 2px; flex-wrap: wrap; }
   .tbtn {
     padding: 7px 18px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;
@@ -14,12 +14,45 @@
   }
   .tbtn:hover { background: #f0f0f0; }
   .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
-  .tbtn.analyze { background: #43A047; color: #fff; border-color: #43A047; }
-  .tbtn.analyze:hover { background: #388E3C; }
   .tbtn.danger { color: #E53935; border-color: #E53935; }
   .tbtn.danger:hover { background: #E53935; color: #fff; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
+  #chart-container { position: relative; width: 100%; }
   #chart { width: 100%; }
+  #select-overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    cursor: crosshair;
+    z-index: 100;
+  }
+  #select-highlight {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(74, 144, 217, 0.25);
+    border-left: 3px solid #1565C0;
+    border-right: 3px solid #1565C0;
+    display: none;
+    pointer-events: none;
+  }
+  #analyze-bar {
+    display: none;
+    padding: 10px 12px; margin: 6px 2px;
+    background: #E3F2FD; border: 2px solid #1565C0; border-radius: 8px;
+    align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  #analyze-bar span { font-size: 14px; color: #1565C0; font-weight: 600; }
+  .analyze-btn {
+    padding: 8px 24px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 700; color: #fff; background: #43A047;
+  }
+  .analyze-btn:hover { background: #388E3C; }
+  .analyze-clear {
+    padding: 6px 12px; border: 1px solid #90CAF9; border-radius: 6px; cursor: pointer;
+    font-size: 13px; background: #fff; color: #1565C0;
+  }
+  .analyze-clear:hover { background: #BBDEFB; }
   #line-list { padding: 4px 2px; }
   .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
   .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -30,22 +63,37 @@
 <body>
 <div id="toolbar">
   <button class="tbtn" id="drawBtn" onclick="toggleDraw()">&#9998; Draw Line</button>
+  <button class="tbtn" id="selectBtn" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
-  <button class="tbtn analyze" onclick="analyzeVisible()">&#128269; Analyze Visible Range</button>
   <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
-  <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom &#8226; Zoom into a period, then click Analyze</span>
+  <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
 </div>
-<div id="chart"></div>
+<div id="chart-container">
+  <div id="chart"></div>
+  <div id="select-overlay"></div>
+  <div id="select-highlight"></div>
+</div>
+<div id="analyze-bar">
+  <span id="analyze-text"></span>
+  <button class="analyze-btn" onclick="analyzeSelection()">Analyze This Period</button>
+  <button class="analyze-clear" onclick="clearSelection()">&#10005; Clear</button>
+</div>
 <div id="line-list"></div>
 
 <script>
 var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
 var chartDiv = document.getElementById('chart');
-var drawMode = false;
+var selectOverlay = document.getElementById('select-overlay');
+var selectHighlight = document.getElementById('select-highlight');
+var currentMode = 'pan';
 var lines = [];
 var chartData = null;
 var rendered = false;
 var knownShapeCount = 0;
+
+var selecting = false;
+var selectStartX = 0;
+var selectedRange = null;
 
 function sendToStreamlit(type, data) {
   window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*");
@@ -78,20 +126,35 @@ window.addEventListener("message", function(event) {
 
 sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
 
-function toggleDraw() {
-  drawMode = !drawMode;
-  var btn = document.getElementById('drawBtn');
-  btn.classList.toggle('active', drawMode);
-  btn.textContent = drawMode ? '[ ] Stop Drawing' : '\u270E Draw Line';
-  document.getElementById('status').textContent = drawMode
-    ? 'Click and drag on the chart to draw a line'
-    : 'Drag left/right to scroll \u2022 Scroll wheel to zoom \u2022 Zoom into a period, then click Analyze';
+function setMode(mode) {
+  currentMode = mode;
+  var drawBtn = document.getElementById('drawBtn');
+  var selectBtn = document.getElementById('selectBtn');
+  drawBtn.classList.toggle('active', mode === 'draw');
+  selectBtn.classList.toggle('active', mode === 'select');
+  drawBtn.textContent = mode === 'draw' ? '[ ] Stop Drawing' : '\u270E Draw Line';
+  selectBtn.textContent = mode === 'select' ? '[ ] Stop Selecting' : '\u25A2 Select Period';
+
+  selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
+
+  if (mode !== 'select') {
+    selectHighlight.style.display = 'none';
+  }
+
+  var statusText = 'Drag left/right to scroll \u2022 Scroll wheel to zoom';
+  if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line';
+  if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
+  document.getElementById('status').textContent = statusText;
+
   Plotly.relayout(chartDiv, {
-    dragmode: drawMode ? 'drawline' : 'pan',
+    dragmode: mode === 'draw' ? 'drawline' : 'pan',
     'newshape.line.color': '#888',
     'newshape.line.width': 2
   });
 }
+
+function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
+function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
 
 function resetView() {
   if (!chartData) return;
@@ -104,23 +167,10 @@ function resetView() {
   });
 }
 
-function analyzeVisible() {
-  if (!chartDiv.layout || !chartDiv.layout.xaxis) return;
-  var xRange = chartDiv.layout.xaxis.range;
-  if (!xRange || xRange.length < 2) return;
-  var startDate = msToDateStr(new Date(xRange[0]).getTime());
-  var endDate = msToDateStr(new Date(xRange[1]).getTime());
-  setComponentValue({
-    action: "analyze",
-    lines: lines,
-    analyze_start: startDate,
-    analyze_end: endDate
-  });
-}
-
 function clearAll() {
   lines = [];
   knownShapeCount = 0;
+  clearSelection();
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
@@ -133,13 +183,123 @@ function deleteLine(idx) {
   setComponentValue({action: "set_all", lines: lines});
 }
 
+function clearSelection() {
+  selectedRange = null;
+  selectHighlight.style.display = 'none';
+  document.getElementById('analyze-bar').style.display = 'none';
+  renderChart();
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+
+function analyzeSelection() {
+  if (!selectedRange) return;
+  setComponentValue({
+    action: "analyze",
+    lines: lines,
+    analyze_start: selectedRange.start,
+    analyze_end: selectedRange.end
+  });
+}
+
 function msToDateStr(ms) {
   var d = new Date(ms);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+function pxToDate(px) {
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis) return null;
+  var plotArea = layout._size;
+  var containerRect = document.getElementById('chart-container').getBoundingClientRect();
+  var chartRect = chartDiv.getBoundingClientRect();
+  var relX = px - (chartRect.left - containerRect.left) - plotArea.l;
+  var xRange = layout.xaxis.range;
+  var frac = relX / plotArea.w;
+  if (frac < 0) frac = 0;
+  if (frac > 1) frac = 1;
+  var xMs;
+  if (typeof xRange[0] === 'string') {
+    var x0 = new Date(xRange[0]).getTime();
+    var x1 = new Date(xRange[1]).getTime();
+    xMs = x0 + frac * (x1 - x0);
+  } else {
+    xMs = xRange[0] + frac * (xRange[1] - xRange[0]);
+  }
+  return xMs;
+}
+
+function dateToPx(dateMs) {
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis) return 0;
+  var plotArea = layout._size;
+  var xRange = layout.xaxis.range;
+  var x0, x1;
+  if (typeof xRange[0] === 'string') {
+    x0 = new Date(xRange[0]).getTime();
+    x1 = new Date(xRange[1]).getTime();
+  } else {
+    x0 = xRange[0]; x1 = xRange[1];
+  }
+  var frac = (dateMs - x0) / (x1 - x0);
+  var chartRect = chartDiv.getBoundingClientRect();
+  var containerRect = document.getElementById('chart-container').getBoundingClientRect();
+  return (chartRect.left - containerRect.left) + plotArea.l + frac * plotArea.w;
+}
+
+selectOverlay.addEventListener('mousedown', function(e) {
+  if (currentMode !== 'select') return;
+  selecting = true;
+  selectStartX = e.offsetX;
+  selectHighlight.style.left = selectStartX + 'px';
+  selectHighlight.style.width = '0px';
+  selectHighlight.style.display = 'block';
+  e.preventDefault();
+});
+
+selectOverlay.addEventListener('mousemove', function(e) {
+  if (!selecting) return;
+  var currentX = e.offsetX;
+  var left = Math.min(selectStartX, currentX);
+  var width = Math.abs(currentX - selectStartX);
+  selectHighlight.style.left = left + 'px';
+  selectHighlight.style.width = width + 'px';
+});
+
+selectOverlay.addEventListener('mouseup', function(e) {
+  if (!selecting) return;
+  selecting = false;
+  var endX = e.offsetX;
+  var leftPx = Math.min(selectStartX, endX);
+  var rightPx = Math.max(selectStartX, endX);
+
+  if (rightPx - leftPx < 10) {
+    selectHighlight.style.display = 'none';
+    return;
+  }
+
+  var startMs = pxToDate(leftPx);
+  var endMs = pxToDate(rightPx);
+  if (!startMs || !endMs) return;
+
+  var startDate = msToDateStr(startMs);
+  var endDate = msToDateStr(endMs);
+  selectedRange = { start: startDate, end: endDate, startMs: startMs, endMs: endMs };
+
+  document.getElementById('analyze-text').textContent = 'Selected: ' + startDate + ' to ' + endDate;
+  document.getElementById('analyze-bar').style.display = 'flex';
+
+  renderChart();
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 100);
+});
+
+selectOverlay.addEventListener('mouseleave', function() {
+  if (selecting) {
+    selecting = false;
+  }
+});
+
 chartDiv.addEventListener('plotly_relayout', function(eventData) {
-  if (!drawMode || !eventData) return;
+  if (currentMode !== 'draw' || !eventData) return;
 
   var hasShapeKey = false;
   for (var key in eventData) {
@@ -243,6 +403,18 @@ function renderChart() {
   var priceMax = Math.max.apply(null, chartData.prices);
   var yPad = 0.3;
 
+  var shapes = [];
+  if (selectedRange) {
+    shapes.push({
+      type: 'rect',
+      xref: 'x', yref: 'paper',
+      x0: selectedRange.start, x1: selectedRange.end,
+      y0: 0, y1: 1,
+      fillcolor: 'rgba(21, 101, 192, 0.15)',
+      line: { color: '#1565C0', width: 2 }
+    });
+  }
+
   var layout = {
     yaxis: {
       type: 'log', tickprefix: '$', title: '',
@@ -261,19 +433,19 @@ function renderChart() {
     margin: {l: 65, r: 20, t: 10, b: 40},
     showlegend: false,
     hovermode: 'x unified',
-    dragmode: drawMode ? 'drawline' : 'pan',
+    dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
     newshape: {
       line: { color: '#888', width: 2 }
     },
-    shapes: [],
+    shapes: shapes,
     plot_bgcolor: 'white',
     paper_bgcolor: 'white',
     font: {color: '#333'}
   };
 
   var config = {
-    scrollZoom: true,
-    displayModeBar: true,
+    scrollZoom: currentMode !== 'select',
+    displayModeBar: currentMode !== 'select',
     modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape']
   };
 
