@@ -210,7 +210,14 @@ function renderChart() {
     xaxis: {
       range: [chartData.dates[0], chartData.future_end],
       title: '', gridcolor: '#eee',
-      dtick: 'M12', tickformat: '%Y'
+      dtick: 'M12', tickformat: '%Y',
+      rangeslider: {
+        visible: true,
+        thickness: 0.08,
+        bgcolor: '#f5f5f5',
+        bordercolor: '#ddd',
+        borderwidth: 1
+      }
     },
     template: 'plotly_white',
     height: chartData.chart_height,
