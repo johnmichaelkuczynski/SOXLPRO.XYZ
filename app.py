@@ -19,6 +19,10 @@ if "strategy_html" not in st.session_state:
     st.session_state.strategy_html = None
 if "analyze_result" not in st.session_state:
     st.session_state.analyze_result = None
+if "show_qqq" not in st.session_state:
+    st.session_state.show_qqq = False
+if "show_short_interest" not in st.session_state:
+    st.session_state.show_short_interest = False
 
 chart_component = components.declare_component("chart_draw", path="components/chart_draw")
 
@@ -28,6 +32,36 @@ def fetch_soxl_data():
     df = yf.Ticker("SOXL").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_qqq_data():
+    df = yf.Ticker("QQQ").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=3600)
+def fetch_short_interest():
+    ticker = yf.Ticker("SOXL")
+    info = ticker.info
+    result = {}
+    fields = [
+        ("sharesShort", "Shares Short"),
+        ("shortRatio", "Short Ratio (Days to Cover)"),
+        ("shortPercentOfFloat", "Short % of Float"),
+        ("sharesShortPriorMonth", "Shares Short (Prior Month)"),
+        ("sharesOutstanding", "Shares Outstanding"),
+        ("floatShares", "Float Shares"),
+    ]
+    for key, label in fields:
+        val = info.get(key)
+        if val is not None:
+            result[label] = val
+    date_short = info.get("dateShortInterest")
+    if date_short:
+        result["_date"] = datetime.fromtimestamp(date_short).strftime("%Y-%m-%d")
+    return result
 
 
 def convert_to_trading_days(value, unit):
@@ -124,15 +158,44 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🎯 Strategy Builder"])
 
 with tab_chart:
-    st.markdown("**SOXL Price** · Log Scale")
+    overlay_cols = st.columns([2, 2, 2, 6])
+    with overlay_cols[0]:
+        st.markdown("**SOXL Price** · Log Scale")
+    with overlay_cols[1]:
+        if st.button(
+            "Hide QQQ" if st.session_state.show_qqq else "Show QQQ Benchmark",
+            type="primary" if st.session_state.show_qqq else "secondary",
+        ):
+            st.session_state.show_qqq = not st.session_state.show_qqq
+            st.rerun()
+    with overlay_cols[2]:
+        if st.button(
+            "Hide Short Interest" if st.session_state.show_short_interest else "Show Short Interest",
+            type="primary" if st.session_state.show_short_interest else "secondary",
+        ):
+            st.session_state.show_short_interest = not st.session_state.show_short_interest
+            st.rerun()
 
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
     dates_list = [d.strftime("%Y-%m-%d") for d in data.index]
     prices_list = data["Close"].tolist()
 
+    qqq_dates_list = []
+    qqq_prices_list = []
+    if st.session_state.show_qqq:
+        try:
+            qqq_data = fetch_qqq_data()
+            if not qqq_data.empty:
+                qqq_dates_list = [d.strftime("%Y-%m-%d") for d in qqq_data.index]
+                qqq_prices_list = qqq_data["Close"].tolist()
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
+        qqq_dates=qqq_dates_list,
+        qqq_prices=qqq_prices_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=900,
@@ -247,6 +310,41 @@ with tab_chart:
         if st.button("Clear Analysis"):
             st.session_state.analyze_result = None
             st.rerun()
+
+    if st.session_state.show_short_interest:
+        st.divider()
+        st.markdown("### Short Interest — SOXL")
+        try:
+            si = fetch_short_interest()
+            if si:
+                report_date = si.pop("_date", "Unknown")
+                st.markdown(f"*Latest report date: {report_date}*")
+                si_cols = st.columns(len(si))
+                for idx, (label, val) in enumerate(si.items()):
+                    with si_cols[idx]:
+                        if "%" in label or "Percent" in label.replace(" ", ""):
+                            display_val = f"{val * 100:.2f}%" if val < 1 else f"{val:.2f}%"
+                        elif val >= 1_000_000:
+                            display_val = f"{val / 1_000_000:.2f}M"
+                        elif val >= 1_000:
+                            display_val = f"{val / 1_000:.1f}K"
+                        else:
+                            display_val = f"{val:.2f}"
+                        st.metric(label=label, value=display_val)
+
+                shares_short = si.get("Shares Short")
+                prior = si.get("Shares Short (Prior Month)")
+                if shares_short and prior and prior > 0:
+                    change_pct = (shares_short - prior) / prior * 100
+                    change_dir = "increased" if change_pct > 0 else "decreased"
+                    st.info(
+                        f"Short interest has **{change_dir}** by **{abs(change_pct):.1f}%** "
+                        f"from the prior month ({prior / 1_000_000:.2f}M to {shares_short / 1_000_000:.2f}M shares)."
+                    )
+            else:
+                st.warning("Short interest data not available.")
+        except Exception as e:
+            st.error(f"Failed to fetch short interest data: {e}")
 
     st.divider()
 

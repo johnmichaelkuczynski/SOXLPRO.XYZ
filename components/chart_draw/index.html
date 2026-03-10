@@ -111,6 +111,8 @@ window.addEventListener("message", function(event) {
     chartData = {
       dates: args.dates,
       prices: args.prices,
+      qqq_dates: args.qqq_dates || [],
+      qqq_prices: args.qqq_prices || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -412,12 +414,25 @@ function renderChart() {
   if (!chartData) return;
   var traces = [];
 
+  var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
+
   traces.push({
     x: chartData.dates, y: chartData.prices,
     mode: 'lines', name: 'SOXL',
     line: {color: '#1E88E5', width: 1.5},
-    hovertemplate: '%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    yaxis: 'y',
+    hovertemplate: 'SOXL: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
   });
+
+  if (hasQQQ) {
+    traces.push({
+      x: chartData.qqq_dates, y: chartData.qqq_prices,
+      mode: 'lines', name: 'QQQ',
+      line: {color: '#FF6F00', width: 1.5},
+      yaxis: 'y2',
+      hovertemplate: 'QQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
 
   var futureMs = new Date(chartData.future_end).getTime();
 
@@ -484,10 +499,12 @@ function renderChart() {
 
   var layout = {
     yaxis: {
-      type: 'log', tickprefix: '$', title: '',
+      type: 'log', tickprefix: '$', title: hasQQQ ? 'SOXL' : '',
       gridcolor: '#eee',
       range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad],
-      fixedrange: false
+      fixedrange: false,
+      titlefont: { color: '#1E88E5' },
+      tickfont: { color: '#1E88E5' }
     },
     xaxis: {
       range: [chartData.dates[0], chartData.future_end],
@@ -497,8 +514,9 @@ function renderChart() {
     },
     template: 'plotly_white',
     height: chartData.chart_height,
-    margin: {l: 65, r: 20, t: 10, b: 40},
-    showlegend: false,
+    margin: {l: 65, r: hasQQQ ? 65 : 20, t: 10, b: 40},
+    showlegend: hasQQQ,
+    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
     hovermode: 'x unified',
     dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
     newshape: {
@@ -509,6 +527,20 @@ function renderChart() {
     paper_bgcolor: 'white',
     font: {color: '#333'}
   };
+
+  if (hasQQQ) {
+    var qqqMin = Math.min.apply(null, chartData.qqq_prices.filter(function(p){return p>0;}));
+    var qqqMax = Math.max.apply(null, chartData.qqq_prices);
+    layout.yaxis2 = {
+      type: 'log', tickprefix: '$', title: 'QQQ',
+      overlaying: 'y', side: 'right',
+      gridcolor: 'rgba(0,0,0,0)',
+      range: [Math.log10(qqqMin) - yPad, Math.log10(qqqMax) + yPad],
+      fixedrange: false,
+      titlefont: { color: '#FF6F00' },
+      tickfont: { color: '#FF6F00' }
+    };
+  }
 
   var config = {
     scrollZoom: currentMode !== 'select',
