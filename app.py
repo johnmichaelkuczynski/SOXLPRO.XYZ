@@ -83,7 +83,7 @@ with tab_chart:
         prices=prices_list,
         lines=st.session_state.lines,
         future_end=future_end,
-        chart_height=700,
+        chart_height=900,
         key="soxl_chart",
         default=None,
     )
