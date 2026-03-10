@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; }
+  #toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 2px; flex-wrap: wrap; }
+  .tbtn {
+    padding: 7px 18px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;
+    font-size: 14px; background: #fff; color: #333; transition: all 0.15s;
+  }
+  .tbtn:hover { background: #f0f0f0; }
+  .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
+  .tbtn.danger { color: #E53935; border-color: #E53935; }
+  .tbtn.danger:hover { background: #E53935; color: #fff; }
+  #status { font-size: 13px; color: #555; margin-left: 8px; }
+  #chart { width: 100%; cursor: default; }
+  #line-list { padding: 4px 2px; }
+  .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
+  .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .ldel { cursor: pointer; color: #E53935; border: none; background: none; font-size: 15px; padding: 2px 6px; }
+  .ldel:hover { background: #fee; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button class="tbtn" id="drawBtn" onclick="toggleDraw()">✏️ Draw Line</button>
+  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">🗑️ Clear All</button>
+  <span id="status"></span>
+</div>
+<div id="chart"></div>
+<div id="line-list"></div>
+
+<script>
+var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
+var chartDiv = document.getElementById('chart');
+var drawMode = false;
+var firstClick = null;
+var lines = [];
+var chartData = null;
+var rendered = false;
+
+function sendToStreamlit(type, data) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*");
+}
+function setComponentValue(value) {
+  sendToStreamlit("streamlit:setComponentValue", {value: value});
+}
+function setFrameHeight(h) {
+  sendToStreamlit("streamlit:setFrameHeight", {height: h});
+}
+
+window.addEventListener("message", function(event) {
+  if (event.data.type === "streamlit:render") {
+    var args = event.data.args;
+    chartData = {
+      dates: args.dates,
+      prices: args.prices,
+      future_end: args.future_end,
+      chart_height: args.chart_height || 700,
+    };
+    if (!rendered) {
+      lines = (args.lines || []).slice();
+    }
+    renderChart();
+    renderLineList();
+    setTimeout(function() {
+      setFrameHeight(document.body.scrollHeight + 20);
+    }, 100);
+  }
+});
+
+sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
+
+function toggleDraw() {
+  drawMode = !drawMode;
+  firstClick = null;
+  var btn = document.getElementById('drawBtn');
+  btn.classList.toggle('active', drawMode);
+  btn.textContent = drawMode ? '🛑 Stop Drawing' : '✏️ Draw Line';
+  document.getElementById('status').textContent = drawMode ? '👆 Click anywhere on the chart to set Point A' : '';
+  chartDiv.style.cursor = drawMode ? 'crosshair' : 'default';
+  if (!drawMode) {
+    renderChart();
+  }
+}
+
+function clearAll() {
+  lines = [];
+  firstClick = null;
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+}
+
+function deleteLine(idx) {
+  lines.splice(idx, 1);
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+}
+
+function getDataCoords(evt) {
+  var layout = chartDiv._fullLayout;
+  var xaxis = layout.xaxis;
+  var yaxis = layout.yaxis;
+  var pa = layout._size;
+  var rect = chartDiv.getBoundingClientRect();
+  var x_px = evt.clientX - rect.left;
+  var y_px = evt.clientY - rect.top;
+
+  if (x_px < pa.l || x_px > pa.l + pa.w || y_px < pa.t || y_px > pa.t + pa.h) return null;
+
+  var x_frac = (x_px - pa.l) / pa.w;
+  var y_frac = (y_px - pa.t) / pa.h;
+
+  var xr0 = new Date(xaxis.range[0]).getTime();
+  var xr1 = new Date(xaxis.range[1]).getTime();
+  var x_ms = xr0 + x_frac * (xr1 - xr0);
+
+  var yr = yaxis.range;
+  var y_log = yr[1] - y_frac * (yr[1] - yr[0]);
+  var y_val = Math.pow(10, y_log);
+
+  return {x_ms: x_ms, y: y_val};
+}
+
+function msToDateStr(ms) {
+  var d = new Date(ms);
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, '0');
+  var day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+chartDiv.addEventListener('click', function(evt) {
+  if (!drawMode) return;
+  var coords = getDataCoords(evt);
+  if (!coords) return;
+
+  if (!firstClick) {
+    firstClick = coords;
+    document.getElementById('status').textContent =
+      '✓ Point A: ' + msToDateStr(coords.x_ms) + ' $' + coords.y.toFixed(2) + ' — click Point B';
+    Plotly.addTraces(chartDiv, [{
+      x: [new Date(coords.x_ms)], y: [coords.y],
+      mode: 'markers', marker: {size: 12, color: 'red', symbol: 'cross'},
+      showlegend: false, hoverinfo: 'skip'
+    }]);
+  } else {
+    var a = firstClick;
+    var b = coords;
+    lines.push({
+      x1_ms: a.x_ms, y1: a.y, x2_ms: b.x_ms, y2: b.y,
+      x1: msToDateStr(a.x_ms), x2: msToDateStr(b.x_ms)
+    });
+    firstClick = null;
+    document.getElementById('status').textContent = '👆 Click Point A for next line (or stop drawing)';
+    renderChart();
+    renderLineList();
+    setComponentValue({action: "set_all", lines: lines});
+  }
+});
+
+function renderChart() {
+  if (!chartData) return;
+  var traces = [];
+
+  traces.push({
+    x: chartData.dates, y: chartData.prices,
+    mode: 'lines', name: 'SOXL',
+    line: {color: '#1E88E5', width: 1.5},
+    hovertemplate: '%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+  });
+
+  var futureMs = new Date(chartData.future_end).getTime();
+
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var x1 = ln.x1_ms, y1 = ln.y1, x2 = ln.x2_ms, y2 = ln.y2;
+    var dt = x2 - x1;
+    if (dt === 0) continue;
+    var logSlope = (Math.log10(y2) - Math.log10(y1)) / dt;
+    var color = COLORS[i % COLORS.length];
+
+    traces.push({
+      x: [new Date(x1), new Date(x2)], y: [y1, y2],
+      mode: 'lines+markers', showlegend: false,
+      line: {color: color, width: 2},
+      marker: {size: 5, color: color},
+      hovertemplate: 'Line ' + (i+1) + '<br>%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+
+    var fwdEnd = Math.max(x1, x2);
+    var fwdStart = fwdEnd === x2 ? x2 : x1;
+    var fwdY0 = fwdEnd === x2 ? y2 : y1;
+    var fwdLogY = Math.log10(fwdY0) + logSlope * (futureMs - fwdEnd);
+    if (fwdLogY > -5 && fwdLogY < 8) {
+      traces.push({
+        x: [new Date(fwdEnd), new Date(futureMs)],
+        y: [fwdY0, Math.pow(10, fwdLogY)],
+        mode: 'lines', showlegend: false,
+        line: {color: color, width: 2, dash: 'dash'},
+        hoverinfo: 'skip'
+      });
+    }
+
+    var backEnd = Math.min(x1, x2);
+    var backY0 = backEnd === x1 ? y1 : y2;
+    var backMs = backEnd - 63072000000;
+    var backLogY = Math.log10(backY0) + logSlope * (backMs - backEnd);
+    if (backLogY > -5 && backLogY < 8) {
+      traces.push({
+        x: [new Date(backMs), new Date(backEnd)],
+        y: [Math.pow(10, backLogY), backY0],
+        mode: 'lines', showlegend: false,
+        line: {color: color, width: 2, dash: 'dash'},
+        hoverinfo: 'skip'
+      });
+    }
+  }
+
+  var xStart = chartData.dates[0];
+  if (lines.length > 0) {
+    var earliest = Math.min.apply(null, lines.map(function(l) { return Math.min(l.x1_ms, l.x2_ms); }));
+    var backEarliest = earliest - 63072000000;
+    if (new Date(backEarliest) < new Date(xStart)) xStart = new Date(backEarliest).toISOString();
+  }
+
+  var layout = {
+    yaxis: {type: 'log', tickprefix: '$', title: '', gridcolor: '#eee'},
+    xaxis: {range: [xStart, chartData.future_end], title: '', gridcolor: '#eee', dtick: 'M12', tickformat: '%Y'},
+    template: 'plotly_white',
+    height: chartData.chart_height,
+    margin: {l: 60, r: 20, t: 10, b: 40},
+    showlegend: false,
+    hovermode: 'x unified',
+    dragmode: drawMode ? false : 'pan',
+    plot_bgcolor: 'white',
+    paper_bgcolor: 'white',
+    font: {color: '#333'}
+  };
+
+  var config = {
+    scrollZoom: true,
+    displayModeBar: true,
+    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawline', 'eraseshape']
+  };
+
+  Plotly.react(chartDiv, traces, layout, config);
+  document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
+}
+
+function renderLineList() {
+  var el = document.getElementById('line-list');
+  if (lines.length === 0) { el.innerHTML = ''; return; }
+  var html = '';
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var color = COLORS[i % COLORS.length];
+    html += '<div class="line-row">'
+      + '<span class="line-dot" style="background:' + color + '"></span>'
+      + '<span>Line ' + (i+1) + ': ' + ln.x1 + ' ($' + ln.y1.toFixed(2) + ') → ' + ln.x2 + ' ($' + ln.y2.toFixed(2) + ')</span>'
+      + '<button class="ldel" onclick="deleteLine(' + i + ')">✕</button>'
+      + '</div>';
+  }
+  el.innerHTML = html;
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+</script>
+</body>
+</html>

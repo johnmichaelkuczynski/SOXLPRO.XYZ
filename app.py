@@ -1,9 +1,9 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
-import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
@@ -12,6 +12,8 @@ if "lines" not in st.session_state:
     st.session_state.lines = []
 if "prob_result" not in st.session_state:
     st.session_state.prob_result = None
+
+chart_component = components.declare_component("chart_draw", path="components/chart_draw")
 
 
 @st.cache_data(ttl=300)
@@ -64,174 +66,23 @@ with col_refresh:
 
 st.markdown("**SOXL Price** · Log Scale")
 
-today = datetime.now()
-future_end = today + relativedelta(years=5)
-line_colors = [
-    "#666666", "#E53935", "#43A047", "#FB8C00", "#8E24AA", "#00ACC1",
-    "#6D4C41", "#D81B60", "#00897B", "#FFB300",
-]
+future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
+dates_list = [d.strftime("%Y-%m-%d") for d in data.index]
+prices_list = data["Close"].tolist()
 
-fig = go.Figure()
-
-fig.add_trace(
-    go.Scatter(
-        x=data.index,
-        y=data["Close"],
-        mode="lines",
-        name="SOXL",
-        line=dict(color="#1E88E5", width=1.5),
-        hovertemplate="%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>",
-    )
+result = chart_component(
+    dates=dates_list,
+    prices=prices_list,
+    lines=st.session_state.lines,
+    future_end=future_end,
+    chart_height=700,
+    key="soxl_chart",
+    default=None,
 )
 
-for i, ln in enumerate(st.session_state.lines):
-    x1_dt = pd.Timestamp(ln["x1"])
-    x2_dt = pd.Timestamp(ln["x2"])
-    y1, y2 = ln["y1"], ln["y2"]
-
-    dt_seconds = (x2_dt - x1_dt).total_seconds()
-    if dt_seconds == 0:
-        continue
-
-    log_slope = (np.log10(y2) - np.log10(y1)) / dt_seconds
-    color = line_colors[i % len(line_colors)]
-
-    fig.add_trace(
-        go.Scatter(
-            x=[x1_dt, x2_dt],
-            y=[y1, y2],
-            mode="lines+markers",
-            showlegend=False,
-            line=dict(color=color, width=2),
-            marker=dict(size=6, color=color),
-            hovertemplate="Trend line<br>%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>",
-        )
-    )
-
-    fwd_dt = (pd.Timestamp(future_end) - x2_dt).total_seconds()
-    fwd_log_y = np.log10(y2) + log_slope * fwd_dt
-    if -10 < fwd_log_y < 10:
-        fwd_y = 10**fwd_log_y
-        fig.add_trace(
-            go.Scatter(
-                x=[x2_dt, future_end],
-                y=[y2, fwd_y],
-                mode="lines",
-                showlegend=False,
-                line=dict(color=color, width=2, dash="dash"),
-                hoverinfo="skip",
-            )
-        )
-
-    back_date = x1_dt - relativedelta(years=2)
-    back_dt = (pd.Timestamp(back_date) - x1_dt).total_seconds()
-    back_log_y = np.log10(y1) + log_slope * back_dt
-    if -10 < back_log_y < 10:
-        back_y = 10**back_log_y
-        fig.add_trace(
-            go.Scatter(
-                x=[back_date, x1_dt],
-                y=[back_y, y1],
-                mode="lines",
-                showlegend=False,
-                line=dict(color=color, width=2, dash="dash"),
-                hoverinfo="skip",
-            )
-        )
-
-x_start = data.index[0]
-if st.session_state.lines:
-    earliest_back = min(
-        pd.Timestamp(ln["x1"]) - relativedelta(years=2) for ln in st.session_state.lines
-    )
-    x_start = min(x_start, earliest_back)
-
-fig.update_layout(
-    yaxis=dict(type="log", tickprefix="$", title=""),
-    xaxis=dict(range=[x_start, future_end], title=""),
-    template="plotly_white",
-    height=700,
-    margin=dict(l=60, r=20, t=40, b=40),
-    showlegend=False,
-    hovermode="x unified",
-    dragmode="pan",
-    plot_bgcolor="white",
-    paper_bgcolor="white",
-    font=dict(color="#333333"),
-)
-
-config = {
-    "scrollZoom": True,
-    "displayModeBar": True,
-    "modeBarButtonsToRemove": ["select2d", "lasso2d"],
-}
-st.plotly_chart(fig, width="stretch", config=config)
-
-st.markdown("#### ✏️ Draw Trend Line")
-min_date = data.index[0].date()
-max_date = date.today()
-
-c1, c2, c3, c4, c5 = st.columns([2, 1.5, 2, 1.5, 1])
-with c1:
-    date_a = st.date_input(
-        "Point A date",
-        value=date(2010, 3, 11),
-        min_value=min_date,
-        max_value=max_date,
-        key="date_a",
-    )
-with c2:
-    ts_a = pd.Timestamp(date_a)
-    idx_a = data.index.get_indexer([ts_a], method="nearest")[0]
-    price_a_default = float(data.iloc[idx_a]["Close"])
-    price_a = st.number_input(
-        "Point A price ($)",
-        value=price_a_default,
-        min_value=0.01,
-        format="%.2f",
-        key="price_a",
-    )
-with c3:
-    date_b = st.date_input(
-        "Point B date",
-        value=max_date,
-        min_value=min_date,
-        max_value=max_date,
-        key="date_b",
-    )
-with c4:
-    ts_b = pd.Timestamp(date_b)
-    idx_b = data.index.get_indexer([ts_b], method="nearest")[0]
-    price_b_default = float(data.iloc[idx_b]["Close"])
-    price_b = st.number_input(
-        "Point B price ($)",
-        value=price_b_default,
-        min_value=0.01,
-        format="%.2f",
-        key="price_b",
-    )
-with c5:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Add Line ➕", use_container_width=True, type="primary"):
-        if date_a == date_b:
-            st.error("Pick two different dates.")
-        else:
-            st.session_state.lines.append(
-                {"x1": str(date_a), "x2": str(date_b), "y1": price_a, "y2": price_b}
-            )
-            st.rerun()
-
-if st.session_state.lines:
-    for i, ln in enumerate(st.session_state.lines):
-        col_info, col_del = st.columns([6, 1])
-        with col_info:
-            st.caption(
-                f"Line {i + 1}: {ln['x1']} (${ln['y1']:.2f}) → {ln['x2']} (${ln['y2']:.2f})"
-            )
-        with col_del:
-            if st.button("🗑️", key=f"del_{i}"):
-                st.session_state.lines.pop(i)
-                st.rerun()
+if result is not None:
+    if result.get("action") == "set_all":
+        st.session_state.lines = result.get("lines", [])
 
 st.divider()
 
