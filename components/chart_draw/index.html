@@ -16,10 +16,10 @@
   .tbtn.danger { color: #E53935; border-color: #E53935; }
   .tbtn.danger:hover { background: #E53935; color: #fff; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
-  #chart { width: 100%; cursor: default; }
+  #chart { width: 100%; }
   #line-list { padding: 4px 2px; }
   .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
-  .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .ldel { cursor: pointer; color: #E53935; border: none; background: none; font-size: 15px; padding: 2px 6px; }
   .ldel:hover { background: #fee; border-radius: 4px; }
 </style>
@@ -37,7 +37,9 @@
 var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
 var chartDiv = document.getElementById('chart');
 var drawMode = false;
-var firstClick = null;
+var dragStart = null;
+var isDragging = false;
+var previewTraceIdx = -1;
 var lines = [];
 var chartData = null;
 var rendered = false;
@@ -59,16 +61,15 @@ window.addEventListener("message", function(event) {
       dates: args.dates,
       prices: args.prices,
       future_end: args.future_end,
-      chart_height: args.chart_height || 700,
+      chart_height: args.chart_height || 700
     };
     if (!rendered) {
       lines = (args.lines || []).slice();
+      rendered = true;
     }
     renderChart();
     renderLineList();
-    setTimeout(function() {
-      setFrameHeight(document.body.scrollHeight + 20);
-    }, 100);
+    setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 200);
   }
 });
 
@@ -76,20 +77,27 @@ sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
 
 function toggleDraw() {
   drawMode = !drawMode;
-  firstClick = null;
+  dragStart = null;
+  isDragging = false;
+  removePreview();
   var btn = document.getElementById('drawBtn');
   btn.classList.toggle('active', drawMode);
   btn.textContent = drawMode ? '🛑 Stop Drawing' : '✏️ Draw Line';
-  document.getElementById('status').textContent = drawMode ? '👆 Click anywhere on the chart to set Point A' : '';
-  chartDiv.style.cursor = drawMode ? 'crosshair' : 'default';
-  if (!drawMode) {
-    renderChart();
-  }
+  document.getElementById('status').textContent = drawMode ? 'Click and drag on the chart to draw a trend line' : '';
+  updateDragMode();
+}
+
+function updateDragMode() {
+  if (!chartDiv._fullLayout) return;
+  Plotly.relayout(chartDiv, {dragmode: drawMode ? false : 'pan'});
+  chartDiv.style.cursor = drawMode ? 'crosshair' : '';
 }
 
 function clearAll() {
   lines = [];
-  firstClick = null;
+  dragStart = null;
+  isDragging = false;
+  removePreview();
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
@@ -102,67 +110,151 @@ function deleteLine(idx) {
   setComponentValue({action: "set_all", lines: lines});
 }
 
-function getDataCoords(evt) {
+function removePreview() {
+  if (previewTraceIdx >= 0 && chartDiv.data && previewTraceIdx < chartDiv.data.length) {
+    Plotly.deleteTraces(chartDiv, [previewTraceIdx]);
+  }
+  previewTraceIdx = -1;
+}
+
+function pixelToData(clientX, clientY) {
   var layout = chartDiv._fullLayout;
-  var xaxis = layout.xaxis;
-  var yaxis = layout.yaxis;
-  var pa = layout._size;
+  if (!layout || !layout.xaxis || !layout.yaxis) return null;
+  var xa = layout.xaxis;
+  var ya = layout.yaxis;
+  var plotArea = layout._size;
   var rect = chartDiv.getBoundingClientRect();
-  var x_px = evt.clientX - rect.left;
-  var y_px = evt.clientY - rect.top;
 
-  if (x_px < pa.l || x_px > pa.l + pa.w || y_px < pa.t || y_px > pa.t + pa.h) return null;
+  var px_x = clientX - rect.left - plotArea.l;
+  var px_y = clientY - rect.top - plotArea.t;
 
-  var x_frac = (x_px - pa.l) / pa.w;
-  var y_frac = (y_px - pa.t) / pa.h;
+  if (px_x < 0 || px_x > plotArea.w || px_y < 0 || px_y > plotArea.h) return null;
 
-  var xr0 = new Date(xaxis.range[0]).getTime();
-  var xr1 = new Date(xaxis.range[1]).getTime();
-  var x_ms = xr0 + x_frac * (xr1 - xr0);
+  var xRange = xa.range;
+  var yRange = ya.range;
 
-  var yr = yaxis.range;
-  var y_log = yr[1] - y_frac * (yr[1] - yr[0]);
-  var y_val = Math.pow(10, y_log);
+  var x_frac = px_x / plotArea.w;
+  var y_frac = 1.0 - (px_y / plotArea.h);
 
-  return {x_ms: x_ms, y: y_val};
+  var x_data = xRange[0] + x_frac * (xRange[1] - xRange[0]);
+  var y_log = yRange[0] + y_frac * (yRange[1] - yRange[0]);
+
+  var y_data = Math.pow(10, y_log);
+
+  return {x_ms: x_data, y: y_data};
 }
 
 function msToDateStr(ms) {
   var d = new Date(ms);
-  var y = d.getFullYear();
-  var m = String(d.getMonth() + 1).padStart(2, '0');
-  var day = String(d.getDate()).padStart(2, '0');
-  return y + '-' + m + '-' + day;
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-chartDiv.addEventListener('click', function(evt) {
-  if (!drawMode) return;
-  var coords = getDataCoords(evt);
-  if (!coords) return;
+var overlay = null;
+function getOverlay() {
+  if (!overlay) {
+    var plotArea = chartDiv._fullLayout._size;
+    overlay = document.createElement('div');
+    overlay.style.position = 'absolute';
+    overlay.style.left = plotArea.l + 'px';
+    overlay.style.top = plotArea.t + 'px';
+    overlay.style.width = plotArea.w + 'px';
+    overlay.style.height = plotArea.h + 'px';
+    overlay.style.cursor = 'crosshair';
+    overlay.style.zIndex = '1000';
+    chartDiv.style.position = 'relative';
+    chartDiv.appendChild(overlay);
 
-  if (!firstClick) {
-    firstClick = coords;
-    document.getElementById('status').textContent =
-      '✓ Point A: ' + msToDateStr(coords.x_ms) + ' $' + coords.y.toFixed(2) + ' — click Point B';
-    Plotly.addTraces(chartDiv, [{
-      x: [new Date(coords.x_ms)], y: [coords.y],
-      mode: 'markers', marker: {size: 12, color: 'red', symbol: 'cross'},
-      showlegend: false, hoverinfo: 'skip'
-    }]);
-  } else {
-    var a = firstClick;
-    var b = coords;
-    lines.push({
-      x1_ms: a.x_ms, y1: a.y, x2_ms: b.x_ms, y2: b.y,
-      x1: msToDateStr(a.x_ms), x2: msToDateStr(b.x_ms)
-    });
-    firstClick = null;
-    document.getElementById('status').textContent = '👆 Click Point A for next line (or stop drawing)';
-    renderChart();
-    renderLineList();
-    setComponentValue({action: "set_all", lines: lines});
+    overlay.addEventListener('mousedown', onMouseDown);
+    overlay.addEventListener('mousemove', onMouseMove);
+    overlay.addEventListener('mouseup', onMouseUp);
+    overlay.addEventListener('mouseleave', onMouseLeave);
   }
-});
+  return overlay;
+}
+
+function removeOverlay() {
+  if (overlay) {
+    overlay.removeEventListener('mousedown', onMouseDown);
+    overlay.removeEventListener('mousemove', onMouseMove);
+    overlay.removeEventListener('mouseup', onMouseUp);
+    overlay.removeEventListener('mouseleave', onMouseLeave);
+    overlay.remove();
+    overlay = null;
+  }
+}
+
+function onMouseDown(evt) {
+  if (!drawMode) return;
+  var coords = pixelToData(evt.clientX, evt.clientY);
+  if (!coords || coords.y <= 0) return;
+  dragStart = coords;
+  isDragging = true;
+  evt.preventDefault();
+  evt.stopPropagation();
+}
+
+function onMouseMove(evt) {
+  if (!drawMode || !isDragging || !dragStart) return;
+  var coords = pixelToData(evt.clientX, evt.clientY);
+  if (!coords || coords.y <= 0) return;
+
+  var previewData = {
+    x: [new Date(dragStart.x_ms), new Date(coords.x_ms)],
+    y: [dragStart.y, coords.y],
+    mode: 'lines',
+    line: {color: '#999', width: 2, dash: 'dot'},
+    showlegend: false,
+    hoverinfo: 'skip'
+  };
+
+  if (previewTraceIdx >= 0 && chartDiv.data && previewTraceIdx < chartDiv.data.length) {
+    Plotly.restyle(chartDiv, {
+      x: [previewData.x],
+      y: [previewData.y]
+    }, [previewTraceIdx]);
+  } else {
+    Plotly.addTraces(chartDiv, [previewData]);
+    previewTraceIdx = chartDiv.data.length - 1;
+  }
+}
+
+function onMouseUp(evt) {
+  if (!drawMode || !isDragging || !dragStart) return;
+  isDragging = false;
+  var coords = pixelToData(evt.clientX, evt.clientY);
+
+  removePreview();
+
+  if (!coords || coords.y <= 0) {
+    dragStart = null;
+    return;
+  }
+
+  var a = dragStart;
+  var b = coords;
+  dragStart = null;
+
+  if (Math.abs(a.x_ms - b.x_ms) < 86400000 * 7) {
+    return;
+  }
+
+  lines.push({
+    x1_ms: a.x_ms, y1: a.y, x2_ms: b.x_ms, y2: b.y,
+    x1: msToDateStr(a.x_ms), x2: msToDateStr(b.x_ms)
+  });
+
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+}
+
+function onMouseLeave(evt) {
+  if (isDragging) {
+    isDragging = false;
+    dragStart = null;
+    removePreview();
+  }
+}
 
 function renderChart() {
   if (!chartData) return;
@@ -180,6 +272,7 @@ function renderChart() {
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
     var x1 = ln.x1_ms, y1 = ln.y1, x2 = ln.x2_ms, y2 = ln.y2;
+    if (!y1 || !y2 || y1 <= 0 || y2 <= 0) continue;
     var dt = x2 - x1;
     if (dt === 0) continue;
     var logSlope = (Math.log10(y2) - Math.log10(y1)) / dt;
@@ -188,16 +281,15 @@ function renderChart() {
     traces.push({
       x: [new Date(x1), new Date(x2)], y: [y1, y2],
       mode: 'lines+markers', showlegend: false,
-      line: {color: color, width: 2},
-      marker: {size: 5, color: color},
+      line: {color: color, width: 2.5},
+      marker: {size: 6, color: color},
       hovertemplate: 'Line ' + (i+1) + '<br>%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
     });
 
     var fwdEnd = Math.max(x1, x2);
-    var fwdStart = fwdEnd === x2 ? x2 : x1;
     var fwdY0 = fwdEnd === x2 ? y2 : y1;
     var fwdLogY = Math.log10(fwdY0) + logSlope * (futureMs - fwdEnd);
-    if (fwdLogY > -5 && fwdLogY < 8) {
+    if (fwdLogY > -3 && fwdLogY < 6) {
       traces.push({
         x: [new Date(fwdEnd), new Date(futureMs)],
         y: [fwdY0, Math.pow(10, fwdLogY)],
@@ -211,7 +303,7 @@ function renderChart() {
     var backY0 = backEnd === x1 ? y1 : y2;
     var backMs = backEnd - 63072000000;
     var backLogY = Math.log10(backY0) + logSlope * (backMs - backEnd);
-    if (backLogY > -5 && backLogY < 8) {
+    if (backLogY > -3 && backLogY < 6) {
       traces.push({
         x: [new Date(backMs), new Date(backEnd)],
         y: [Math.pow(10, backLogY), backY0],
@@ -222,19 +314,24 @@ function renderChart() {
     }
   }
 
-  var xStart = chartData.dates[0];
-  if (lines.length > 0) {
-    var earliest = Math.min.apply(null, lines.map(function(l) { return Math.min(l.x1_ms, l.x2_ms); }));
-    var backEarliest = earliest - 63072000000;
-    if (new Date(backEarliest) < new Date(xStart)) xStart = new Date(backEarliest).toISOString();
-  }
+  var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
+  var priceMax = Math.max.apply(null, chartData.prices);
+  var yPad = 0.3;
 
   var layout = {
-    yaxis: {type: 'log', tickprefix: '$', title: '', gridcolor: '#eee'},
-    xaxis: {range: [xStart, chartData.future_end], title: '', gridcolor: '#eee', dtick: 'M12', tickformat: '%Y'},
+    yaxis: {
+      type: 'log', tickprefix: '$', title: '',
+      gridcolor: '#eee',
+      range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad]
+    },
+    xaxis: {
+      range: [chartData.dates[0], chartData.future_end],
+      title: '', gridcolor: '#eee',
+      dtick: 'M12', tickformat: '%Y'
+    },
     template: 'plotly_white',
     height: chartData.chart_height,
-    margin: {l: 60, r: 20, t: 10, b: 40},
+    margin: {l: 65, r: 20, t: 10, b: 40},
     showlegend: false,
     hovermode: 'x unified',
     dragmode: drawMode ? false : 'pan',
@@ -244,13 +341,20 @@ function renderChart() {
   };
 
   var config = {
-    scrollZoom: true,
-    displayModeBar: true,
-    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawline', 'eraseshape']
+    scrollZoom: !drawMode,
+    displayModeBar: !drawMode,
+    modeBarButtonsToRemove: ['select2d', 'lasso2d']
   };
 
   Plotly.react(chartDiv, traces, layout, config);
+
+  removeOverlay();
+  if (drawMode) {
+    getOverlay();
+  }
+
   document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
+  previewTraceIdx = -1;
 }
 
 function renderLineList() {
