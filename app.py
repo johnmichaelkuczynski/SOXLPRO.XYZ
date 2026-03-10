@@ -65,11 +65,61 @@ except Exception as e:
 
 col_title, col_refresh = st.columns([8, 1])
 with col_title:
-    st.markdown("### 📈 SOXL Analysis")
+    st.markdown("### SOXL Analysis")
 with col_refresh:
-    if st.button("🔄", help="Refresh data"):
+    if st.button("Refresh", help="Refresh data"):
         st.cache_data.clear()
         st.rerun()
+
+
+def get_price_at_offset(df, days_ago):
+    target_date = df.index[-1] - timedelta(days=days_ago)
+    mask = df.index <= target_date
+    if mask.any():
+        return df.loc[mask, "Close"].iloc[-1]
+    return None
+
+
+current_price = data["Close"].iloc[-1]
+latest_date = data.index[-1].strftime("%Y-%m-%d")
+
+periods = [
+    ("Today", 1),
+    ("1W", 7),
+    ("1M", 30),
+    ("1Y", 365),
+    ("5Y", 1825),
+    ("All Time", None),
+]
+
+period_data = []
+for label, days in periods:
+    if days is None:
+        old_price = data["Close"].iloc[0]
+    else:
+        old_price = get_price_at_offset(data, days)
+    if old_price is not None and old_price > 0:
+        pct = (current_price - old_price) / old_price * 100
+        dollar = current_price - old_price
+        period_data.append((label, pct, dollar))
+    else:
+        period_data.append((label, None, None))
+
+price_cols = st.columns([1.5] + [1] * len(period_data))
+with price_cols[0]:
+    st.metric(label=f"SOXL ({latest_date})", value=f"${current_price:.2f}")
+
+for i, (label, pct, dollar) in enumerate(period_data):
+    with price_cols[i + 1]:
+        if pct is not None:
+            sign = "+" if dollar >= 0 else ""
+            st.metric(
+                label=label,
+                value=f"{sign}{pct:.1f}%",
+                delta=f"${sign}{dollar:.2f}",
+            )
+        else:
+            st.metric(label=label, value="N/A")
 
 tab_chart, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🎯 Strategy Builder"])
 
