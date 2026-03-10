@@ -141,8 +141,8 @@ function setMode(mode) {
     selectHighlight.style.display = 'none';
   }
 
-  var statusText = 'Drag left/right to scroll \u2022 Scroll wheel to zoom';
-  if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line';
+  var statusText = 'Drag left/right to scroll \u2022 Scroll wheel to zoom \u2022 Double-click a line to delete it';
+  if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line \u2022 Double-click a line to delete it';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
   document.getElementById('status').textContent = statusText;
 
@@ -295,6 +295,62 @@ selectOverlay.addEventListener('mouseup', function(e) {
 selectOverlay.addEventListener('mouseleave', function() {
   if (selecting) {
     selecting = false;
+  }
+});
+
+chartDiv.addEventListener('plotly_doubleclick', function() {
+  return false;
+});
+
+chartDiv.on('plotly_click', function(eventData) {
+  if (!eventData || !eventData.points || eventData.points.length === 0) return;
+  if (lines.length === 0) return;
+
+  var pt = eventData.points[0];
+  var clickX = new Date(pt.x).getTime();
+  var clickY = pt.y;
+  if (clickY <= 0) return;
+  var clickLogY = Math.log10(clickY);
+
+  var layout = chartDiv._fullLayout;
+  var xRange = layout.xaxis.range;
+  var yRange = layout.yaxis.range;
+  var x0 = new Date(xRange[0]).getTime();
+  var x1 = new Date(xRange[1]).getTime();
+  var xSpan = x1 - x0;
+  var ySpan = yRange[1] - yRange[0];
+
+  var bestIdx = -1;
+  var bestDist = Infinity;
+  var threshold = 0.03;
+
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var lx1 = ln.x1_ms, ly1 = Math.log10(ln.y1);
+    var lx2 = ln.x2_ms, ly2 = Math.log10(ln.y2);
+    var dt = lx2 - lx1;
+    if (dt === 0) continue;
+    var slope = (ly2 - ly1) / dt;
+    var projLogY = ly1 + slope * (clickX - lx1);
+    var normDx = 0;
+    var normDy = Math.abs(projLogY - clickLogY) / ySpan;
+    var dist = normDy;
+    if (dist < threshold && dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i;
+    }
+  }
+
+  if (bestIdx >= 0) {
+    if (!window._lastLineClick || window._lastLineClick.idx !== bestIdx || (Date.now() - window._lastLineClick.time) > 500) {
+      window._lastLineClick = { idx: bestIdx, time: Date.now() };
+      return;
+    }
+    window._lastLineClick = null;
+    lines.splice(bestIdx, 1);
+    renderChart();
+    renderLineList();
+    setComponentValue({action: "set_all", lines: lines});
   }
 });
 
