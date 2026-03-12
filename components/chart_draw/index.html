@@ -117,6 +117,8 @@ window.addEventListener("message", function(event) {
       tqqq_prices: args.tqqq_prices || [],
       tlt_dates: args.tlt_dates || [],
       tlt_prices: args.tlt_prices || [],
+      xlu_dates: args.xlu_dates || [],
+      xlu_prices: args.xlu_prices || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -420,7 +422,8 @@ function renderChart() {
   var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
   var hasTQQQ = chartData.tqqq_dates && chartData.tqqq_dates.length > 0;
   var hasTLT = chartData.tlt_dates && chartData.tlt_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ || hasTLT;
+  var hasXLU = chartData.xlu_dates && chartData.xlu_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -457,6 +460,16 @@ function renderChart() {
       line: {color: '#26A69A', width: 1.5},
       yaxis: 'y',
       hovertemplate: 'TLT: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasXLU) {
+    traces.push({
+      x: chartData.xlu_dates, y: chartData.xlu_prices,
+      mode: 'lines', name: 'XLU',
+      line: {color: '#EF5350', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'XLU: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
     });
   }
 
@@ -537,6 +550,11 @@ function renderChart() {
     var tltValidPrices = chartData.tlt_prices.filter(function(p){return p>0;});
     priceMin = Math.min(priceMin, Math.min.apply(null, tltValidPrices));
     priceMax = Math.max(priceMax, Math.max.apply(null, tltValidPrices));
+  }
+  if (hasXLU) {
+    var xluValidPrices = chartData.xlu_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, xluValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, xluValidPrices));
   }
 
   var layout = {
