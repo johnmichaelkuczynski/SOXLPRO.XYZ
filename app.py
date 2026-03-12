@@ -653,6 +653,11 @@ with tab_chart:
             best = max(all_returns) if all_returns else 0
             worst = min(all_returns) if all_returns else 0
 
+            percentile_5 = sorted(all_returns)[int(len(all_returns) * 0.05)] if all_returns else 0
+            percentile_25 = sorted(all_returns)[int(len(all_returns) * 0.25)] if all_returns else 0
+            percentile_75 = sorted(all_returns)[int(len(all_returns) * 0.75)] if all_returns else 0
+            percentile_95 = sorted(all_returns)[int(len(all_returns) * 0.95)] if all_returns else 0
+
             st.session_state.prob_result = {
                 "count": count,
                 "total": total,
@@ -667,34 +672,172 @@ with tab_chart:
                 "up_count": up_count,
                 "down_count": down_count,
                 "up_pct": round(up_count / total * 100, 1) if total > 0 else 0,
+                "all_returns": all_returns,
+                "p5": round(percentile_5, 1),
+                "p25": round(percentile_25, 1),
+                "p75": round(percentile_75, 1),
+                "p95": round(percentile_95, 1),
             }
 
     if st.session_state.prob_result:
+        import plotly.graph_objects as go
+
         r = st.session_state.prob_result
         dir_word = (
             "dropped" if r["direction"] == "DOWN" else "rose" if r["direction"] == "UP" else "moved"
         )
-        opposite_prob = 100 - r["prob"]
+        prob_val = r["prob"]
+        up_pct = r["up_pct"]
+
+        if r["direction"] == "DOWN":
+            gauge_pct = 100 - prob_val
+            gauge_label = f"{100 - prob_val:.0f}% chance it does NOT drop {r['magnitude']}%+"
+        elif r["direction"] == "UP":
+            gauge_pct = prob_val
+            gauge_label = f"{prob_val:.0f}% chance it rises {r['magnitude']}%+"
+        else:
+            gauge_pct = 50
+            gauge_label = f"{prob_val:.0f}% chance of {r['magnitude']}%+ move either way"
 
         st.markdown("---")
-        st.markdown(f"#### Results: What happens over {r['horizon_label']}?")
 
-        rc1, rc2, rc3, rc4 = st.columns(4)
-        rc1.metric("Probability of Event", f"{r['prob']:.1f}%",
-                    help=f"Chance SOXL {dir_word} {r['magnitude']}%+ in {r['horizon_label']}")
-        rc2.metric("Opposite Outcome", f"{opposite_prob:.1f}%",
-                    help=f"Chance it did NOT {dir_word.replace('dropped','drop').replace('rose','rise').replace('moved','move')} {r['magnitude']}%+")
-        rc3.metric("Sample Size", f"{r['total']:,} periods")
-        rc4.metric("Events Found", f"{r['count']:,}")
+        gauge_html = f"""
+        <div style="margin: 10px 0 25px 0;">
+          <div style="text-align:center; font-size:16px; font-weight:600; margin-bottom:8px; color:#333;">
+            SOXL over {r['horizon_label']} — How likely is a {r['magnitude']}%+ {'drop' if r['direction']=='DOWN' else 'gain' if r['direction']=='UP' else 'move'}?
+          </div>
+          <div style="position:relative; height:60px; border-radius:30px; overflow:hidden;
+                      background: linear-gradient(to right, #D32F2F, #E53935, #FF7043, #FFB74D, #FFF176, #AED581, #66BB6A, #43A047, #2E7D32);
+                      box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+            <div style="position:absolute; top:0; left:{gauge_pct}%; transform:translateX(-50%);
+                        width:6px; height:60px; background:#111; border-radius:3px; z-index:3;"></div>
+            <div style="position:absolute; top:0; left:{gauge_pct}%; transform:translateX(-50%);
+                        width:22px; height:60px; background:rgba(255,255,255,0.35); border-radius:11px; z-index:2;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-top:4px; font-size:13px; color:#888;">
+            <span style="color:#D32F2F; font-weight:700;">BEARISH</span>
+            <span style="color:#2E7D32; font-weight:700;">BULLISH</span>
+          </div>
+          <div style="text-align:center; margin-top:6px; font-size:22px; font-weight:800;
+                      color:{'#2E7D32' if gauge_pct > 60 else '#D32F2F' if gauge_pct < 40 else '#E65100'};">
+            {gauge_label}
+          </div>
+        </div>
+        """
+        st.markdown(gauge_html, unsafe_allow_html=True)
 
-        st.markdown("##### Overall Historical Performance")
-        pc1, pc2, pc3, pc4, pc5 = st.columns(5)
-        pc1.metric("Avg Return", f"{r['avg_return']:+.1f}%")
-        pc2.metric("Median Return", f"{r['median_return']:+.1f}%")
-        pc3.metric("Best Case", f"{r['best']:+.1f}%")
-        pc4.metric("Worst Case", f"{r['worst']:+.1f}%")
-        pc5.metric("Win Rate", f"{r['up_pct']:.1f}%",
-                    help="% of periods with positive returns")
+        chart_col1, chart_col2 = st.columns(2)
+
+        with chart_col1:
+            returns = r["all_returns"]
+            neg_returns = [x for x in returns if x < 0]
+            pos_returns = [x for x in returns if x >= 0]
+
+            fig_hist = go.Figure()
+            if neg_returns:
+                fig_hist.add_trace(go.Histogram(
+                    x=neg_returns, name="Losses",
+                    marker_color="#EF5350",
+                    opacity=0.85,
+                    nbinsx=40,
+                ))
+            if pos_returns:
+                fig_hist.add_trace(go.Histogram(
+                    x=pos_returns, name="Gains",
+                    marker_color="#66BB6A",
+                    opacity=0.85,
+                    nbinsx=40,
+                ))
+
+            mag = r["magnitude"]
+            if r["direction"] == "DOWN":
+                fig_hist.add_vline(x=-mag, line_dash="dash", line_color="#D32F2F", line_width=2,
+                                   annotation_text=f"-{mag}%", annotation_position="top")
+            elif r["direction"] == "UP":
+                fig_hist.add_vline(x=mag, line_dash="dash", line_color="#2E7D32", line_width=2,
+                                   annotation_text=f"+{mag}%", annotation_position="top")
+            else:
+                fig_hist.add_vline(x=-mag, line_dash="dash", line_color="#D32F2F", line_width=2,
+                                   annotation_text=f"-{mag}%", annotation_position="top")
+                fig_hist.add_vline(x=mag, line_dash="dash", line_color="#2E7D32", line_width=2,
+                                   annotation_text=f"+{mag}%", annotation_position="top")
+
+            fig_hist.add_vline(x=0, line_color="#333", line_width=1)
+
+            fig_hist.update_layout(
+                title=dict(text=f"Return Distribution ({r['horizon_label']})", font=dict(size=14)),
+                xaxis_title="Return %",
+                yaxis_title="Frequency",
+                template="plotly_white",
+                height=350,
+                margin=dict(l=50, r=20, t=40, b=40),
+                showlegend=False,
+                bargap=0.05,
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        with chart_col2:
+            labels = ["Gains", "Losses"]
+            values = [r["up_count"], r["down_count"]]
+            colors = ["#66BB6A", "#EF5350"]
+
+            fig_donut = go.Figure(data=[go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.6,
+                marker=dict(colors=colors),
+                textinfo="label+percent",
+                textfont=dict(size=14),
+                hovertemplate="%{label}: %{value} periods (%{percent})<extra></extra>",
+            )])
+            fig_donut.update_layout(
+                title=dict(text=f"Win/Loss Split ({r['total']:,} periods)", font=dict(size=14)),
+                template="plotly_white",
+                height=350,
+                margin=dict(l=20, r=20, t=40, b=20),
+                showlegend=False,
+                annotations=[dict(
+                    text=f"<b>{r['up_pct']:.0f}%</b><br>Win Rate",
+                    x=0.5, y=0.5, font_size=18, showarrow=False,
+                    font=dict(color="#2E7D32" if r["up_pct"] >= 50 else "#D32F2F"),
+                )],
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+        range_html = f"""
+        <div style="background:#f8f9fa; border-radius:12px; padding:16px 20px; margin:5px 0 15px 0;
+                    border: 1px solid #e0e0e0;">
+          <div style="text-align:center; font-weight:600; font-size:14px; color:#555; margin-bottom:10px;">
+            Historical Return Range over {r['horizon_label']}
+          </div>
+          <div style="position:relative; height:40px; margin:0 40px;">
+            <div style="position:absolute; top:16px; left:0; right:0; height:8px;
+                        background:linear-gradient(to right, #EF5350, #FFEE58, #66BB6A);
+                        border-radius:4px;"></div>
+            <div style="position:absolute; top:12px; left:{max(0, min(100, (r['p5'] - r['worst']) / (r['best'] - r['worst']) * 100)) if r['best'] != r['worst'] else 5}%;
+                        transform:translateX(-50%); font-size:11px; color:#D32F2F; font-weight:700; text-align:center;">
+              <div style="width:2px; height:16px; background:#D32F2F; margin:0 auto;"></div>
+              {r['p5']:+.0f}%<br><span style="font-size:9px;">5th pctl</span>
+            </div>
+            <div style="position:absolute; top:12px; left:{max(0, min(100, (r['median_return'] - r['worst']) / (r['best'] - r['worst']) * 100)) if r['best'] != r['worst'] else 50}%;
+                        transform:translateX(-50%); font-size:11px; color:#333; font-weight:700; text-align:center;">
+              <div style="width:3px; height:16px; background:#333; margin:0 auto;"></div>
+              {r['median_return']:+.0f}%<br><span style="font-size:9px;">Median</span>
+            </div>
+            <div style="position:absolute; top:12px; left:{max(0, min(100, (r['p95'] - r['worst']) / (r['best'] - r['worst']) * 100)) if r['best'] != r['worst'] else 95}%;
+                        transform:translateX(-50%); font-size:11px; color:#2E7D32; font-weight:700; text-align:center;">
+              <div style="width:2px; height:16px; background:#2E7D32; margin:0 auto;"></div>
+              {r['p95']:+.0f}%<br><span style="font-size:9px;">95th pctl</span>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin:20px 40px 0 40px; font-size:12px;">
+            <span style="color:#D32F2F; font-weight:700;">Worst: {r['worst']:+.1f}%</span>
+            <span style="color:#555;">Avg: {r['avg_return']:+.1f}%</span>
+            <span style="color:#2E7D32; font-weight:700;">Best: {r['best']:+.1f}%</span>
+          </div>
+        </div>
+        """
+        st.markdown(range_html, unsafe_allow_html=True)
 
         if r["direction"] == "DOWN":
             if r["prob"] < 25:
