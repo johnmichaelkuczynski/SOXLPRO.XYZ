@@ -119,6 +119,8 @@ window.addEventListener("message", function(event) {
       tlt_prices: args.tlt_prices || [],
       xlu_dates: args.xlu_dates || [],
       xlu_prices: args.xlu_prices || [],
+      vix_dates: args.vix_dates || [],
+      vix_prices: args.vix_prices || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -423,7 +425,8 @@ function renderChart() {
   var hasTQQQ = chartData.tqqq_dates && chartData.tqqq_dates.length > 0;
   var hasTLT = chartData.tlt_dates && chartData.tlt_dates.length > 0;
   var hasXLU = chartData.xlu_dates && chartData.xlu_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU;
+  var hasVIX = chartData.vix_dates && chartData.vix_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -470,6 +473,16 @@ function renderChart() {
       line: {color: '#EF5350', width: 1.5},
       yaxis: 'y',
       hovertemplate: 'XLU: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasVIX) {
+    traces.push({
+      x: chartData.vix_dates, y: chartData.vix_prices,
+      mode: 'lines', name: 'VIX',
+      line: {color: '#FFB300', width: 1.5, dash: 'dot'},
+      yaxis: 'y',
+      hovertemplate: 'VIX: %{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>'
     });
   }
 
@@ -555,6 +568,11 @@ function renderChart() {
     var xluValidPrices = chartData.xlu_prices.filter(function(p){return p>0;});
     priceMin = Math.min(priceMin, Math.min.apply(null, xluValidPrices));
     priceMax = Math.max(priceMax, Math.max.apply(null, xluValidPrices));
+  }
+  if (hasVIX) {
+    var vixValidPrices = chartData.vix_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, vixValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, vixValidPrices));
   }
 
   var layout = {

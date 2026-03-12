@@ -27,6 +27,8 @@ if "show_tlt" not in st.session_state:
     st.session_state.show_tlt = False
 if "show_xlu" not in st.session_state:
     st.session_state.show_xlu = False
+if "show_vix" not in st.session_state:
+    st.session_state.show_vix = False
 if "show_short_interest" not in st.session_state:
     st.session_state.show_short_interest = False
 
@@ -64,6 +66,13 @@ def fetch_tlt_data():
 @st.cache_data(ttl=300)
 def fetch_xlu_data():
     df = yf.Ticker("XLU").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_vix_data():
+    df = yf.Ticker("^VIX").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -231,40 +240,47 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🎯 Strategy Builder"])
 
 with tab_chart:
-    overlay_cols = st.columns([2, 2, 2, 2, 2, 2, 2])
+    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
     with overlay_cols[0]:
         st.markdown("**SOXL Price** · Log Scale")
     with overlay_cols[1]:
         if st.button(
-            "Hide QQQ" if st.session_state.show_qqq else "Show QQQ",
+            "Hide QQQ" if st.session_state.show_qqq else "QQQ",
             type="primary" if st.session_state.show_qqq else "secondary",
         ):
             st.session_state.show_qqq = not st.session_state.show_qqq
             st.rerun()
     with overlay_cols[2]:
         if st.button(
-            "Hide TQQQ" if st.session_state.show_tqqq else "Show TQQQ",
+            "Hide TQQQ" if st.session_state.show_tqqq else "TQQQ",
             type="primary" if st.session_state.show_tqqq else "secondary",
         ):
             st.session_state.show_tqqq = not st.session_state.show_tqqq
             st.rerun()
     with overlay_cols[3]:
         if st.button(
-            "Hide TLT" if st.session_state.show_tlt else "Show TLT",
+            "Hide TLT" if st.session_state.show_tlt else "TLT",
             type="primary" if st.session_state.show_tlt else "secondary",
         ):
             st.session_state.show_tlt = not st.session_state.show_tlt
             st.rerun()
     with overlay_cols[4]:
         if st.button(
-            "Hide XLU" if st.session_state.show_xlu else "Show XLU",
+            "Hide XLU" if st.session_state.show_xlu else "XLU",
             type="primary" if st.session_state.show_xlu else "secondary",
         ):
             st.session_state.show_xlu = not st.session_state.show_xlu
             st.rerun()
     with overlay_cols[5]:
         if st.button(
-            "Hide Short Interest" if st.session_state.show_short_interest else "Short Interest",
+            "Hide VIX" if st.session_state.show_vix else "VIX",
+            type="primary" if st.session_state.show_vix else "secondary",
+        ):
+            st.session_state.show_vix = not st.session_state.show_vix
+            st.rerun()
+    with overlay_cols[6]:
+        if st.button(
+            "Hide Short Int." if st.session_state.show_short_interest else "Short Int.",
             type="primary" if st.session_state.show_short_interest else "secondary",
         ):
             st.session_state.show_short_interest = not st.session_state.show_short_interest
@@ -318,6 +334,17 @@ with tab_chart:
         except Exception:
             pass
 
+    vix_dates_list = []
+    vix_prices_list = []
+    if st.session_state.show_vix:
+        try:
+            vix_data = fetch_vix_data()
+            if not vix_data.empty:
+                vix_dates_list = [d.strftime("%Y-%m-%d") for d in vix_data.index]
+                vix_prices_list = vix_data["Close"].tolist()
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
@@ -329,6 +356,8 @@ with tab_chart:
         tlt_prices=tlt_prices_list,
         xlu_dates=xlu_dates_list,
         xlu_prices=xlu_prices_list,
+        vix_dates=vix_dates_list,
+        vix_prices=vix_prices_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=900,
