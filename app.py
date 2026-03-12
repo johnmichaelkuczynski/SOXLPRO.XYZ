@@ -21,6 +21,8 @@ if "analyze_result" not in st.session_state:
     st.session_state.analyze_result = None
 if "show_qqq" not in st.session_state:
     st.session_state.show_qqq = False
+if "show_tqqq" not in st.session_state:
+    st.session_state.show_tqqq = False
 if "show_short_interest" not in st.session_state:
     st.session_state.show_short_interest = False
 
@@ -37,6 +39,13 @@ def fetch_soxl_data():
 @st.cache_data(ttl=300)
 def fetch_qqq_data():
     df = yf.Ticker("QQQ").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_tqqq_data():
+    df = yf.Ticker("TQQQ").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -158,19 +167,26 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🎯 Strategy Builder"])
 
 with tab_chart:
-    overlay_cols = st.columns([2, 2, 2, 6])
+    overlay_cols = st.columns([2, 2, 2, 2, 4])
     with overlay_cols[0]:
         st.markdown("**SOXL Price** · Log Scale")
     with overlay_cols[1]:
         if st.button(
-            "Hide QQQ" if st.session_state.show_qqq else "Show QQQ Benchmark",
+            "Hide QQQ" if st.session_state.show_qqq else "Show QQQ",
             type="primary" if st.session_state.show_qqq else "secondary",
         ):
             st.session_state.show_qqq = not st.session_state.show_qqq
             st.rerun()
     with overlay_cols[2]:
         if st.button(
-            "Hide Short Interest" if st.session_state.show_short_interest else "Show Short Interest",
+            "Hide TQQQ" if st.session_state.show_tqqq else "Show TQQQ",
+            type="primary" if st.session_state.show_tqqq else "secondary",
+        ):
+            st.session_state.show_tqqq = not st.session_state.show_tqqq
+            st.rerun()
+    with overlay_cols[3]:
+        if st.button(
+            "Hide Short Interest" if st.session_state.show_short_interest else "Short Interest",
             type="primary" if st.session_state.show_short_interest else "secondary",
         ):
             st.session_state.show_short_interest = not st.session_state.show_short_interest
@@ -191,11 +207,24 @@ with tab_chart:
         except Exception:
             pass
 
+    tqqq_dates_list = []
+    tqqq_prices_list = []
+    if st.session_state.show_tqqq:
+        try:
+            tqqq_data = fetch_tqqq_data()
+            if not tqqq_data.empty:
+                tqqq_dates_list = [d.strftime("%Y-%m-%d") for d in tqqq_data.index]
+                tqqq_prices_list = tqqq_data["Close"].tolist()
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
         qqq_dates=qqq_dates_list,
         qqq_prices=qqq_prices_list,
+        tqqq_dates=tqqq_dates_list,
+        tqqq_prices=tqqq_prices_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=900,

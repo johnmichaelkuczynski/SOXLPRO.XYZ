@@ -113,6 +113,8 @@ window.addEventListener("message", function(event) {
       prices: args.prices,
       qqq_dates: args.qqq_dates || [],
       qqq_prices: args.qqq_prices || [],
+      tqqq_dates: args.tqqq_dates || [],
+      tqqq_prices: args.tqqq_prices || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -414,6 +416,8 @@ function renderChart() {
   var traces = [];
 
   var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
+  var hasTQQQ = chartData.tqqq_dates && chartData.tqqq_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -430,6 +434,16 @@ function renderChart() {
       line: {color: '#FF6F00', width: 1.5},
       yaxis: 'y',
       hovertemplate: 'QQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasTQQQ) {
+    traces.push({
+      x: chartData.tqqq_dates, y: chartData.tqqq_prices,
+      mode: 'lines', name: 'TQQQ',
+      line: {color: '#AB47BC', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'TQQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
     });
   }
 
@@ -498,10 +512,13 @@ function renderChart() {
 
   if (hasQQQ) {
     var qqqValidPrices = chartData.qqq_prices.filter(function(p){return p>0;});
-    var qqqMin = Math.min.apply(null, qqqValidPrices);
-    var qqqMax = Math.max.apply(null, qqqValidPrices);
-    priceMin = Math.min(priceMin, qqqMin);
-    priceMax = Math.max(priceMax, qqqMax);
+    priceMin = Math.min(priceMin, Math.min.apply(null, qqqValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, qqqValidPrices));
+  }
+  if (hasTQQQ) {
+    var tqqqValidPrices = chartData.tqqq_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, tqqqValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, tqqqValidPrices));
   }
 
   var layout = {
@@ -520,7 +537,7 @@ function renderChart() {
     template: 'plotly_white',
     height: chartData.chart_height,
     margin: {l: 65, r: 20, t: 10, b: 40},
-    showlegend: hasQQQ,
+    showlegend: hasOverlay,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
     hovermode: 'x unified',
     dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
