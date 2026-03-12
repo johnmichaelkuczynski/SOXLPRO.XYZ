@@ -428,7 +428,7 @@ function renderChart() {
       x: chartData.qqq_dates, y: chartData.qqq_prices,
       mode: 'lines', name: 'QQQ',
       line: {color: '#FF6F00', width: 1.5},
-      yaxis: 'y2',
+      yaxis: 'y',
       hovertemplate: 'QQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
     });
   }
@@ -496,14 +496,20 @@ function renderChart() {
     });
   }
 
+  if (hasQQQ) {
+    var qqqValidPrices = chartData.qqq_prices.filter(function(p){return p>0;});
+    var qqqMin = Math.min.apply(null, qqqValidPrices);
+    var qqqMax = Math.max.apply(null, qqqValidPrices);
+    priceMin = Math.min(priceMin, qqqMin);
+    priceMax = Math.max(priceMax, qqqMax);
+  }
+
   var layout = {
     yaxis: {
-      type: 'log', tickprefix: '$', title: hasQQQ ? 'SOXL' : '',
+      type: 'log', tickprefix: '$', title: '',
       gridcolor: '#eee',
       range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad],
-      fixedrange: false,
-      titlefont: { color: '#1E88E5' },
-      tickfont: { color: '#1E88E5' }
+      fixedrange: false
     },
     xaxis: {
       range: [chartData.dates[0], chartData.future_end],
@@ -513,7 +519,7 @@ function renderChart() {
     },
     template: 'plotly_white',
     height: chartData.chart_height,
-    margin: {l: 65, r: hasQQQ ? 65 : 20, t: 10, b: 40},
+    margin: {l: 65, r: 20, t: 10, b: 40},
     showlegend: hasQQQ,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
     hovermode: 'x unified',
@@ -527,19 +533,6 @@ function renderChart() {
     font: {color: '#333'}
   };
 
-  if (hasQQQ) {
-    var qqqMin = Math.min.apply(null, chartData.qqq_prices.filter(function(p){return p>0;}));
-    var qqqMax = Math.max.apply(null, chartData.qqq_prices);
-    layout.yaxis2 = {
-      type: 'log', tickprefix: '$', title: 'QQQ',
-      overlaying: 'y', side: 'right',
-      gridcolor: 'rgba(0,0,0,0)',
-      range: [Math.log10(qqqMin) - yPad, Math.log10(qqqMax) + yPad],
-      fixedrange: false,
-      titlefont: { color: '#FF6F00' },
-      tickfont: { color: '#FF6F00' }
-    };
-  }
 
   var config = {
     scrollZoom: currentMode !== 'select',
