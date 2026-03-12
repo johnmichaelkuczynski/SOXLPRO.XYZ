@@ -23,6 +23,8 @@ if "show_qqq" not in st.session_state:
     st.session_state.show_qqq = False
 if "show_tqqq" not in st.session_state:
     st.session_state.show_tqqq = False
+if "show_tlt" not in st.session_state:
+    st.session_state.show_tlt = False
 if "show_short_interest" not in st.session_state:
     st.session_state.show_short_interest = False
 
@@ -46,6 +48,13 @@ def fetch_qqq_data():
 @st.cache_data(ttl=300)
 def fetch_tqqq_data():
     df = yf.Ticker("TQQQ").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_tlt_data():
+    df = yf.Ticker("TLT").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -213,7 +222,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🎯 Strategy Builder"])
 
 with tab_chart:
-    overlay_cols = st.columns([2, 2, 2, 2, 4])
+    overlay_cols = st.columns([2, 2, 2, 2, 2, 2])
     with overlay_cols[0]:
         st.markdown("**SOXL Price** · Log Scale")
     with overlay_cols[1]:
@@ -231,6 +240,13 @@ with tab_chart:
             st.session_state.show_tqqq = not st.session_state.show_tqqq
             st.rerun()
     with overlay_cols[3]:
+        if st.button(
+            "Hide TLT" if st.session_state.show_tlt else "Show TLT",
+            type="primary" if st.session_state.show_tlt else "secondary",
+        ):
+            st.session_state.show_tlt = not st.session_state.show_tlt
+            st.rerun()
+    with overlay_cols[4]:
         if st.button(
             "Hide Short Interest" if st.session_state.show_short_interest else "Short Interest",
             type="primary" if st.session_state.show_short_interest else "secondary",
@@ -264,6 +280,17 @@ with tab_chart:
         except Exception:
             pass
 
+    tlt_dates_list = []
+    tlt_prices_list = []
+    if st.session_state.show_tlt:
+        try:
+            tlt_data = fetch_tlt_data()
+            if not tlt_data.empty:
+                tlt_dates_list = [d.strftime("%Y-%m-%d") for d in tlt_data.index]
+                tlt_prices_list = tlt_data["Close"].tolist()
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
@@ -271,6 +298,8 @@ with tab_chart:
         qqq_prices=qqq_prices_list,
         tqqq_dates=tqqq_dates_list,
         tqqq_prices=tqqq_prices_list,
+        tlt_dates=tlt_dates_list,
+        tlt_prices=tlt_prices_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=900,

@@ -115,6 +115,8 @@ window.addEventListener("message", function(event) {
       qqq_prices: args.qqq_prices || [],
       tqqq_dates: args.tqqq_dates || [],
       tqqq_prices: args.tqqq_prices || [],
+      tlt_dates: args.tlt_dates || [],
+      tlt_prices: args.tlt_prices || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -417,7 +419,8 @@ function renderChart() {
 
   var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
   var hasTQQQ = chartData.tqqq_dates && chartData.tqqq_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ;
+  var hasTLT = chartData.tlt_dates && chartData.tlt_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -444,6 +447,16 @@ function renderChart() {
       line: {color: '#AB47BC', width: 1.5},
       yaxis: 'y',
       hovertemplate: 'TQQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasTLT) {
+    traces.push({
+      x: chartData.tlt_dates, y: chartData.tlt_prices,
+      mode: 'lines', name: 'TLT',
+      line: {color: '#26A69A', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'TLT: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
     });
   }
 
@@ -519,6 +532,11 @@ function renderChart() {
     var tqqqValidPrices = chartData.tqqq_prices.filter(function(p){return p>0;});
     priceMin = Math.min(priceMin, Math.min.apply(null, tqqqValidPrices));
     priceMax = Math.max(priceMax, Math.max.apply(null, tqqqValidPrices));
+  }
+  if (hasTLT) {
+    var tltValidPrices = chartData.tlt_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, tltValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, tltValidPrices));
   }
 
   var layout = {
