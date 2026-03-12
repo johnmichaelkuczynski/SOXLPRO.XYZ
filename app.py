@@ -462,40 +462,195 @@ with tab_chart:
         """
         st.markdown(summary_html, unsafe_allow_html=True)
 
-        st.markdown("**Based on this period's patterns, here's what historically happens next:**")
+        bt_basis = st.radio(
+            "Backtest basis",
+            ["SOXL Patterns", "Benchmark-Based"],
+            horizontal=True,
+            key="bt_basis",
+        )
 
-        for pred in ar["predictions"]:
+        bench_bt_predictions = None
+        if bt_basis == "Benchmark-Based":
+            bt_bench_col1, bt_bench_col2 = st.columns([1, 3])
+            with bt_bench_col1:
+                bt_bench = st.selectbox("Benchmark", ["QQQ", "TLT", "XLU", "VIX"], key="bt_bench")
+            with bt_bench_col2:
+                st.markdown(
+                    "<div style='padding:8px 0; font-size:13px; color:#666;'>"
+                    f"Uses {bt_bench if 'bt_bench' in dir() else 'QQQ'}'s 30-day behavior during the selected period "
+                    "to predict what SOXL does after the period ends."
+                    "</div>", unsafe_allow_html=True
+                )
+
+            bt_bench_sym = st.session_state.get("bt_bench", "QQQ")
+            bt_bench_yf = "^VIX" if bt_bench_sym == "VIX" else bt_bench_sym
+            try:
+                bench_hist = yf.Ticker(bt_bench_yf).history(period="max", auto_adjust=True)
+                bench_hist.index = bench_hist.index.tz_localize(None)
+            except Exception:
+                bench_hist = pd.DataFrame()
+
+            if not bench_hist.empty:
+                start_dt = pd.to_datetime(ar["start"])
+                end_dt = pd.to_datetime(ar["end"])
+                after_data = data[data.index > end_dt]
+
+                soxl_all = data["Close"]
+                bench_all = bench_hist["Close"]
+                common_idx = soxl_all.index.intersection(bench_all.index)
+                soxl_c = soxl_all.loc[common_idx]
+                bench_c = bench_all.loc[common_idx]
+
+                period_mask = (common_idx >= start_dt) & (common_idx <= end_dt)
+                period_dates = common_idx[period_mask]
+                soxl_period = soxl_c.loc[period_dates].values
+                bench_period = bench_c.loc[period_dates].values
+
+                lookback = 21
+                horizons = [
+                    ("1 Week", 5), ("2 Weeks", 10), ("1 Month", 21),
+                    ("3 Months", 63), ("6 Months", 126), ("1 Year", 252)
+                ]
+                magnitudes = [5, 10, 15, 20, 25, 30, 50]
+
+                bench_30d_at_end = None
+                if len(bench_period) > lookback:
+                    bench_30d_at_end = (bench_period[-1] - bench_period[-lookback - 1]) / bench_period[-lookback - 1] * 100
+
+                bench_bt_predictions = []
+                if bench_30d_at_end is not None:
+                    tolerance = max(5.0, abs(bench_30d_at_end) * 0.3)
+
+                    for h_label, h_days in horizons:
+                        soxl_returns_matched = []
+                        for i in range(lookback, len(bench_period)):
+                            br = (bench_period[i] - bench_period[i - lookback]) / bench_period[i - lookback] * 100
+                            if abs(br - bench_30d_at_end) <= tolerance:
+                                if i + h_days < len(soxl_period):
+                                    sr = (soxl_period[i + h_days] - soxl_period[i]) / soxl_period[i] * 100
+                                    soxl_returns_matched.append(sr)
+
+                        if len(soxl_returns_matched) < 3:
+                            wider = max(10.0, abs(bench_30d_at_end) * 0.5)
+                            soxl_returns_matched = []
+                            for i in range(lookback, len(bench_period)):
+                                br = (bench_period[i] - bench_period[i - lookback]) / bench_period[i - lookback] * 100
+                                if abs(br - bench_30d_at_end) <= wider:
+                                    if i + h_days < len(soxl_period):
+                                        sr = (soxl_period[i + h_days] - soxl_period[i]) / soxl_period[i] * 100
+                                        soxl_returns_matched.append(sr)
+
+                        if len(soxl_returns_matched) < 3:
+                            continue
+
+                        total = len(soxl_returns_matched)
+                        avg_ret = round(float(np.mean(soxl_returns_matched)), 1)
+                        med_ret = round(float(np.median(soxl_returns_matched)), 1)
+                        mag_probs = {}
+                        for mag in magnitudes:
+                            up_c = sum(1 for r in soxl_returns_matched if r >= mag)
+                            dn_c = sum(1 for r in soxl_returns_matched if r <= -mag)
+                            mag_probs[mag] = {
+                                "up": round(up_c / total * 100, 1),
+                                "down": round(dn_c / total * 100, 1)
+                            }
+
+                        actual_ret = None
+                        if len(after_data) >= h_days:
+                            end_price = data.loc[data.index <= end_dt, "Close"].iloc[-1]
+                            future_price = after_data["Close"].iloc[min(h_days - 1, len(after_data) - 1)]
+                            actual_ret = round((future_price - end_price) / end_price * 100, 1)
+
+                        bench_bt_predictions.append({
+                            "horizon": h_label,
+                            "days": h_days,
+                            "avg_return": avg_ret,
+                            "median_return": med_ret,
+                            "mag_probs": mag_probs,
+                            "actual_return": actual_ret,
+                            "total_periods": total,
+                            "bench_name": bt_bench_sym,
+                            "bench_30d_ret": round(bench_30d_at_end, 1),
+                        })
+
+                if not bench_bt_predictions:
+                    st.warning(f"Not enough analogues found in the selected period for {bt_bench_sym}. Try a longer period.")
+
+        use_predictions = bench_bt_predictions if (bt_basis == "Benchmark-Based" and bench_bt_predictions) else ar["predictions"]
+        is_bench_bt = bt_basis == "Benchmark-Based" and bench_bt_predictions
+
+        if is_bench_bt:
+            bt_bench_sym = bench_bt_predictions[0].get("bench_name", "???")
+            bt_bench_ret = bench_bt_predictions[0].get("bench_30d_ret", 0)
+            st.markdown(
+                f"<div style='background:#E3F2FD; border-left:5px solid #1565C0; padding:12px 16px; "
+                f"border-radius:8px; margin-bottom:12px; font-size:15px; line-height:1.6;'>"
+                f"<span style='font-weight:700; color:#1565C0;'>BENCHMARK BACKTEST: {bt_bench_sym}</span><br>"
+                f"Using {bt_bench_sym}'s behavior during {ar['start']} to {ar['end']} "
+                f"({bt_bench_sym} moved {bt_bench_ret:+.1f}% over the final 30 days) "
+                f"to predict what SOXL did after the period ended."
+                f"</div>",
+                unsafe_allow_html=True
+            )
+            st.markdown(f"**Based on {bt_bench_sym}'s patterns during this period, here's what the model predicted vs. reality:**")
+        else:
+            st.markdown("**Based on this period's patterns, here's what historically happens next:**")
+
+        for pred in use_predictions:
             mags = sorted(pred["mag_probs"].keys())
             up_5 = pred["mag_probs"].get(5, {}).get("up", 0)
             down_5 = pred["mag_probs"].get(5, {}).get("down", 0)
             avg_ret = pred["avg_return"]
             actual = pred["actual_return"]
             horizon = pred["horizon"]
+            pred_bench_name = pred.get("bench_name")
 
-            if actual is not None:
-                if actual >= 0:
+            if is_bench_bt and pred_bench_name:
+                if actual is not None:
+                    actual_up_5_text = ""
+                    if actual >= 5:
+                        actual_up_5_text = f" It actually **gained {actual:+.1f}%**."
+                    elif actual <= -5:
+                        actual_up_5_text = f" It actually **fell {actual:.1f}%**."
+                    else:
+                        actual_up_5_text = f" It actually returned **{actual:+.1f}%**."
                     summary_sentence = (
-                        f"Based on this period, SOXL had a **{up_5:.0f}% chance** of gaining at least 5% "
-                        f"over the next {horizon.lower()} — and it actually **gained {actual:+.1f}%**."
+                        f"Based on {pred_bench_name}'s behavior during {ar['start']}–{ar['end']}, "
+                        f"the model predicted SOXL would go **up 5%+** within {horizon.lower()} "
+                        f"**{up_5:.0f}%** of the time.{actual_up_5_text}"
                     )
                 else:
                     summary_sentence = (
-                        f"Based on this period, SOXL had a **{down_5:.0f}% chance** of dropping at least 5% "
-                        f"over the next {horizon.lower()} — and it actually **fell {actual:.1f}%**."
+                        f"Based on {pred_bench_name}'s behavior during {ar['start']}–{ar['end']}, "
+                        f"the model predicted SOXL would go **up 5%+** within {horizon.lower()} "
+                        f"**{up_5:.0f}%** of the time (avg return: {avg_ret:+.1f}%)."
                     )
             else:
-                if avg_ret >= 0:
-                    summary_sentence = (
-                        f"Based on this period, SOXL had a **{up_5:.0f}% chance** of gaining at least 5% "
-                        f"over the next {horizon.lower()}, with an average return of **{avg_ret:+.1f}%**."
-                    )
+                if actual is not None:
+                    if actual >= 0:
+                        summary_sentence = (
+                            f"Based on this period, SOXL had a **{up_5:.0f}% chance** of gaining at least 5% "
+                            f"over the next {horizon.lower()} — and it actually **gained {actual:+.1f}%**."
+                        )
+                    else:
+                        summary_sentence = (
+                            f"Based on this period, SOXL had a **{down_5:.0f}% chance** of dropping at least 5% "
+                            f"over the next {horizon.lower()} — and it actually **fell {actual:.1f}%**."
+                        )
                 else:
-                    summary_sentence = (
-                        f"Based on this period, SOXL had a **{down_5:.0f}% chance** of dropping at least 5% "
-                        f"over the next {horizon.lower()}, with an average return of **{avg_ret:+.1f}%**."
-                    )
+                    if avg_ret >= 0:
+                        summary_sentence = (
+                            f"Based on this period, SOXL had a **{up_5:.0f}% chance** of gaining at least 5% "
+                            f"over the next {horizon.lower()}, with an average return of **{avg_ret:+.1f}%**."
+                        )
+                    else:
+                        summary_sentence = (
+                            f"Based on this period, SOXL had a **{down_5:.0f}% chance** of dropping at least 5% "
+                            f"over the next {horizon.lower()}, with an average return of **{avg_ret:+.1f}%**."
+                        )
 
-            with st.expander(f"{horizon} ({pred['days']} trading days) — {pred['total_periods']} samples", expanded=horizon in ['1 Month', '3 Months']):
+            expander_label = f"{horizon} ({pred['days']} trading days) — {pred['total_periods']} {'analogues' if is_bench_bt else 'samples'}"
+            with st.expander(expander_label, expanded=horizon in ['1 Month', '3 Months']):
 
                 st.markdown(f"<div style='font-size:16px; line-height:1.5; padding:8px 0 12px 0;'>{summary_sentence}</div>", unsafe_allow_html=True)
 

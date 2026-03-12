@@ -6,7 +6,10 @@ A single-page Streamlit web application for analyzing SOXL (Direxion Daily Semic
 ## Features
 - **SOXL Price Chart**: Interactive Plotly chart in log scale showing complete price history from 2010 to present, with x-axis extending 5 years into the future
 - **Trend Line Drawing**: Click-and-drag drawing on the chart via custom Streamlit component; lines auto-extend into the future (dashed) and backward (dashed)
-- **Probability Engine**: Calculate historical probability of price moves of a given magnitude over a given time horizon, using a configurable historical data window
+- **Probability Engine**: Calculate historical probability of price moves of a given magnitude over a given time horizon, using a configurable historical data window. Includes "Benchmark History" mode that predicts SOXL based on a benchmark's recent 30-day behavior and historical analogues.
+- **Period Analysis / Backtest**: Select a period on the chart to analyze. "SOXL Patterns" mode uses SOXL's own rolling returns; "Benchmark-Based" mode builds the relationship between a benchmark's 30-day moves and SOXL's subsequent returns during the selected period, then compares predictions to actual post-period outcomes. Supports QQQ, TLT, XLU, VIX as benchmarks. Shows sample size (analogues) per horizon.
+- **Benchmark Overlays**: QQQ (orange), TQQQ (purple), TLT (teal), XLU (red), VIX (gold dotted) — all on the same log-scale y-axis.
+- **Short Interest**: FINRA daily short volume chart (last 12 months) with parallel HTTP fetching.
 - **Strategy Builder**: AI-powered conversational strategy builder using Anthropic Claude (via Replit AI Integrations). User describes their portfolio, cash, risk tolerance; the AI generates a personalized SOXL entry strategy with tranched buy ladder, operating rules, and statistical basis — rendered as a styled strategy document.
 
 ## Tech Stack
