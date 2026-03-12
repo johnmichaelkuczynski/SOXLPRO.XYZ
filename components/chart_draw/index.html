@@ -139,8 +139,8 @@ function setMode(mode) {
 
   selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
 
-  if (mode !== 'select') {
-    selectHighlight.style.display = 'none';
+  if (mode !== 'select' && selectedRange) {
+    clearSelection();
   }
 
   var statusText = 'Drag left/right to scroll \u2022 Scroll wheel to zoom \u2022 Double-click a line to delete it';
@@ -187,7 +187,6 @@ function deleteLine(idx) {
 
 function clearSelection() {
   selectedRange = null;
-  selectHighlight.style.display = 'none';
   document.getElementById('analyze-bar').style.display = 'none';
   renderChart();
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
@@ -252,19 +251,18 @@ selectOverlay.addEventListener('mousedown', function(e) {
   if (currentMode !== 'select') return;
   selecting = true;
   selectStartX = e.offsetX;
-  selectHighlight.style.left = selectStartX + 'px';
-  selectHighlight.style.width = '0px';
-  selectHighlight.style.display = 'block';
   e.preventDefault();
 });
 
 selectOverlay.addEventListener('mousemove', function(e) {
   if (!selecting) return;
   var currentX = e.offsetX;
-  var left = Math.min(selectStartX, currentX);
-  var width = Math.abs(currentX - selectStartX);
-  selectHighlight.style.left = left + 'px';
-  selectHighlight.style.width = width + 'px';
+  var startMs = pxToDate(Math.min(selectStartX, currentX));
+  var endMs = pxToDate(Math.max(selectStartX, currentX));
+  if (startMs && endMs) {
+    selectedRange = { start: msToDateStr(startMs), end: msToDateStr(endMs), startMs: startMs, endMs: endMs };
+    renderChart();
+  }
 });
 
 selectOverlay.addEventListener('mouseup', function(e) {
@@ -275,7 +273,8 @@ selectOverlay.addEventListener('mouseup', function(e) {
   var rightPx = Math.max(selectStartX, endX);
 
   if (rightPx - leftPx < 10) {
-    selectHighlight.style.display = 'none';
+    selectedRange = null;
+    renderChart();
     return;
   }
 
