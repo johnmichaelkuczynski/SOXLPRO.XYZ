@@ -632,9 +632,11 @@ with tab_chart:
             close = filtered["Close"].values
             total = len(close) - horizon_td
             count = 0
+            all_returns = []
 
             for i in range(total):
                 pct = (close[i + horizon_td] - close[i]) / close[i] * 100
+                all_returns.append(pct)
                 if direction == "UP" and pct >= magnitude:
                     count += 1
                 elif direction == "DOWN" and pct <= -magnitude:
@@ -643,12 +645,28 @@ with tab_chart:
                     count += 1
 
             prob = count / total * 100 if total > 0 else 0
+
+            up_count = sum(1 for r in all_returns if r > 0)
+            down_count = sum(1 for r in all_returns if r < 0)
+            avg_return = sum(all_returns) / len(all_returns) if all_returns else 0
+            median_return = sorted(all_returns)[len(all_returns) // 2] if all_returns else 0
+            best = max(all_returns) if all_returns else 0
+            worst = min(all_returns) if all_returns else 0
+
             st.session_state.prob_result = {
                 "count": count,
                 "total": total,
                 "prob": prob,
                 "magnitude": magnitude,
                 "direction": direction,
+                "horizon_label": f"{horizon_value} {horizon_unit}",
+                "avg_return": round(avg_return, 1),
+                "median_return": round(median_return, 1),
+                "best": round(best, 1),
+                "worst": round(worst, 1),
+                "up_count": up_count,
+                "down_count": down_count,
+                "up_pct": round(up_count / total * 100, 1) if total > 0 else 0,
             }
 
     if st.session_state.prob_result:
@@ -656,11 +674,53 @@ with tab_chart:
         dir_word = (
             "dropped" if r["direction"] == "DOWN" else "rose" if r["direction"] == "UP" else "moved"
         )
-        st.info(
-            f"In **{r['count']}** out of **{r['total']}** comparable periods, "
-            f"SOXL **{dir_word} {r['magnitude']}%** or more.\n\n"
-            f"Historical probability: **{r['prob']:.1f}%**"
-        )
+        opposite_prob = 100 - r["prob"]
+
+        st.markdown("---")
+        st.markdown(f"#### Results: What happens over {r['horizon_label']}?")
+
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        rc1.metric("Probability of Event", f"{r['prob']:.1f}%",
+                    help=f"Chance SOXL {dir_word} {r['magnitude']}%+ in {r['horizon_label']}")
+        rc2.metric("Opposite Outcome", f"{opposite_prob:.1f}%",
+                    help=f"Chance it did NOT {dir_word.replace('dropped','drop').replace('rose','rise').replace('moved','move')} {r['magnitude']}%+")
+        rc3.metric("Sample Size", f"{r['total']:,} periods")
+        rc4.metric("Events Found", f"{r['count']:,}")
+
+        st.markdown("##### Overall Historical Performance")
+        pc1, pc2, pc3, pc4, pc5 = st.columns(5)
+        pc1.metric("Avg Return", f"{r['avg_return']:+.1f}%")
+        pc2.metric("Median Return", f"{r['median_return']:+.1f}%")
+        pc3.metric("Best Case", f"{r['best']:+.1f}%")
+        pc4.metric("Worst Case", f"{r['worst']:+.1f}%")
+        pc5.metric("Win Rate", f"{r['up_pct']:.1f}%",
+                    help="% of periods with positive returns")
+
+        if r["direction"] == "DOWN":
+            if r["prob"] < 25:
+                verdict = f"Historically unlikely. SOXL dropped {r['magnitude']}%+ only {r['prob']:.0f}% of the time over {r['horizon_label']}. The odds favor holding."
+                st.success(f"**Verdict:** {verdict}")
+            elif r["prob"] < 50:
+                verdict = f"Moderate risk. About 1 in {int(round(100/r['prob']))} chance of a {r['magnitude']}%+ drop over {r['horizon_label']}. Consider position sizing accordingly."
+                st.warning(f"**Verdict:** {verdict}")
+            else:
+                verdict = f"Elevated risk. SOXL has dropped {r['magnitude']}%+ in {r['prob']:.0f}% of historical {r['horizon_label']} periods. Proceed with caution."
+                st.error(f"**Verdict:** {verdict}")
+        elif r["direction"] == "UP":
+            if r["prob"] > 60:
+                verdict = f"Strong historical tailwind. SOXL rose {r['magnitude']}%+ in {r['prob']:.0f}% of {r['horizon_label']} periods."
+                st.success(f"**Verdict:** {verdict}")
+            elif r["prob"] > 35:
+                verdict = f"Decent odds. SOXL rose {r['magnitude']}%+ about {r['prob']:.0f}% of the time over {r['horizon_label']}."
+                st.info(f"**Verdict:** {verdict}")
+            else:
+                verdict = f"That's a big move. SOXL rose {r['magnitude']}%+ only {r['prob']:.0f}% of the time over {r['horizon_label']}."
+                st.warning(f"**Verdict:** {verdict}")
+        else:
+            if r["prob"] > 60:
+                st.warning(f"**Verdict:** High volatility expected. A {r['magnitude']}%+ move in either direction happened {r['prob']:.0f}% of the time.")
+            else:
+                st.info(f"**Verdict:** A {r['magnitude']}%+ move in either direction happened {r['prob']:.0f}% of the time over {r['horizon_label']}.")
 
 with tab_strategy:
     st.markdown("### 🎯 Strategy Builder")
