@@ -29,6 +29,8 @@ if "show_xlu" not in st.session_state:
     st.session_state.show_xlu = False
 if "show_vix" not in st.session_state:
     st.session_state.show_vix = False
+if "bench_prob_result" not in st.session_state:
+    st.session_state.bench_prob_result = None
 if "show_short_interest" not in st.session_state:
     st.session_state.show_short_interest = False
 
@@ -713,6 +715,30 @@ with tab_chart:
 
     st.markdown("### Probability Engine")
 
+    pred_basis = st.radio(
+        "Prediction basis",
+        ["SOXL History", "Benchmark History"],
+        horizontal=True,
+        key="pred_basis",
+        help="SOXL History uses SOXL's own past. Benchmark History predicts SOXL based on what a benchmark did recently."
+    )
+
+    if pred_basis == "Benchmark History":
+        bench_col1, bench_col2 = st.columns([1, 3])
+        with bench_col1:
+            bench_ticker = st.selectbox(
+                "Benchmark",
+                ["QQQ", "TLT", "XLU", "VIX"],
+                key="bench_ticker",
+            )
+        with bench_col2:
+            st.markdown(
+                "<div style='padding:8px 0; font-size:13px; color:#666;'>"
+                "This mode looks at what the benchmark did over the prior 30 days, "
+                "then checks what SOXL did next. It finds historical analogues to the benchmark's current behavior."
+                "</div>", unsafe_allow_html=True
+            )
+
     col_h, col_d = st.columns(2)
 
     with col_h:
@@ -758,72 +784,145 @@ with tab_chart:
             "Direction", ["DOWN", "UP", "EITHER"], index=0, key="direction", label_visibility="collapsed"
         )
 
+    def _build_prob_result(all_returns, magnitude, direction, horizon_label, extra=None):
+        total = len(all_returns)
+        count = 0
+        for pct in all_returns:
+            if direction == "UP" and pct >= magnitude:
+                count += 1
+            elif direction == "DOWN" and pct <= -magnitude:
+                count += 1
+            elif direction == "EITHER" and abs(pct) >= magnitude:
+                count += 1
+        prob = count / total * 100 if total > 0 else 0
+        up_count = sum(1 for r in all_returns if r > 0)
+        down_count = sum(1 for r in all_returns if r < 0)
+        avg_return = sum(all_returns) / len(all_returns) if all_returns else 0
+        median_return = sorted(all_returns)[len(all_returns) // 2] if all_returns else 0
+        best = max(all_returns) if all_returns else 0
+        worst = min(all_returns) if all_returns else 0
+        percentile_5 = sorted(all_returns)[int(len(all_returns) * 0.05)] if all_returns else 0
+        percentile_25 = sorted(all_returns)[int(len(all_returns) * 0.25)] if all_returns else 0
+        percentile_75 = sorted(all_returns)[int(len(all_returns) * 0.75)] if all_returns else 0
+        percentile_95 = sorted(all_returns)[int(len(all_returns) * 0.95)] if all_returns else 0
+        result = {
+            "count": count, "total": total, "prob": prob,
+            "magnitude": magnitude, "direction": direction,
+            "horizon_label": horizon_label,
+            "avg_return": round(avg_return, 1), "median_return": round(median_return, 1),
+            "best": round(best, 1), "worst": round(worst, 1),
+            "up_count": up_count, "down_count": down_count,
+            "up_pct": round(up_count / total * 100, 1) if total > 0 else 0,
+            "all_returns": all_returns,
+            "p5": round(percentile_5, 1), "p25": round(percentile_25, 1),
+            "p75": round(percentile_75, 1), "p95": round(percentile_95, 1),
+        }
+        if extra:
+            result.update(extra)
+        return result
+
     if st.button("Calculate Probability", use_container_width=True, type="primary"):
         horizon_td = convert_to_trading_days(horizon_value, horizon_unit)
+        horizon_label = f"{horizon_value} {horizon_unit}"
 
-        if dataset_unit == "all available":
-            filtered = data
+        if pred_basis == "Benchmark History":
+            bench_sym = st.session_state.get("bench_ticker", "QQQ")
+            bench_yf_sym = "^VIX" if bench_sym == "VIX" else bench_sym
+            try:
+                bench_df = yf.Ticker(bench_yf_sym).history(period="max", auto_adjust=True)
+                bench_df.index = bench_df.index.tz_localize(None)
+            except Exception:
+                st.error(f"Could not fetch {bench_sym} data.")
+                bench_df = pd.DataFrame()
+
+            if not bench_df.empty:
+                soxl_close = data["Close"]
+                bench_close = bench_df["Close"]
+
+                common_dates = soxl_close.index.intersection(bench_close.index)
+                soxl_aligned = soxl_close.loc[common_dates].values
+                bench_aligned = bench_close.loc[common_dates].values
+                common_dates_arr = common_dates
+
+                if dataset_unit != "all available":
+                    cutoff = datetime.now() - convert_to_timedelta(dataset_value, dataset_unit)
+                    mask = common_dates_arr >= cutoff
+                    soxl_aligned = soxl_aligned[mask]
+                    bench_aligned = bench_aligned[mask]
+                    common_dates_arr = common_dates_arr[mask]
+
+                lookback = 21
+                bench_30d_returns = []
+                for i in range(lookback, len(bench_aligned)):
+                    br = (bench_aligned[i] - bench_aligned[i - lookback]) / bench_aligned[i - lookback] * 100
+                    bench_30d_returns.append((i, br))
+
+                current_bench_ret = bench_30d_returns[-1][1] if bench_30d_returns else 0
+                tolerance = max(5.0, abs(current_bench_ret) * 0.3)
+
+                soxl_returns = []
+                matched_bench_rets = []
+                for idx, br in bench_30d_returns:
+                    if abs(br - current_bench_ret) <= tolerance:
+                        if idx + horizon_td < len(soxl_aligned):
+                            soxl_ret = (soxl_aligned[idx + horizon_td] - soxl_aligned[idx]) / soxl_aligned[idx] * 100
+                            soxl_returns.append(soxl_ret)
+                            matched_bench_rets.append(br)
+
+                if len(soxl_returns) < 5:
+                    wider_tolerance = max(10.0, abs(current_bench_ret) * 0.5)
+                    soxl_returns = []
+                    matched_bench_rets = []
+                    for idx, br in bench_30d_returns:
+                        if abs(br - current_bench_ret) <= wider_tolerance:
+                            if idx + horizon_td < len(soxl_aligned):
+                                soxl_ret = (soxl_aligned[idx + horizon_td] - soxl_aligned[idx]) / soxl_aligned[idx] * 100
+                                soxl_returns.append(soxl_ret)
+                                matched_bench_rets.append(br)
+                    tolerance = wider_tolerance
+
+                if len(soxl_returns) >= 3:
+                    st.session_state.prob_result = _build_prob_result(
+                        soxl_returns, magnitude, direction, horizon_label,
+                        extra={
+                            "mode": "benchmark",
+                            "bench_name": bench_sym,
+                            "bench_current_ret": round(current_bench_ret, 1),
+                            "tolerance": round(tolerance, 1),
+                            "analogues": len(soxl_returns),
+                        }
+                    )
+                    st.session_state.bench_prob_result = st.session_state.prob_result
+                else:
+                    st.error(f"Not enough historical analogues found (only {len(soxl_returns)}). Try a wider dataset window.")
         else:
-            cutoff = datetime.now() - convert_to_timedelta(dataset_value, dataset_unit)
-            filtered = data[data.index >= cutoff]
+            if dataset_unit == "all available":
+                filtered = data
+            else:
+                cutoff = datetime.now() - convert_to_timedelta(dataset_value, dataset_unit)
+                filtered = data[data.index >= cutoff]
 
-        if len(filtered) < horizon_td + 1:
-            st.error("Not enough data for the selected parameters.")
-        else:
-            close = filtered["Close"].values
-            total = len(close) - horizon_td
-            count = 0
-            all_returns = []
+            if len(filtered) < horizon_td + 1:
+                st.error("Not enough data for the selected parameters.")
+            else:
+                close = filtered["Close"].values
+                total = len(close) - horizon_td
+                all_returns = []
+                for i in range(total):
+                    pct = (close[i + horizon_td] - close[i]) / close[i] * 100
+                    all_returns.append(pct)
 
-            for i in range(total):
-                pct = (close[i + horizon_td] - close[i]) / close[i] * 100
-                all_returns.append(pct)
-                if direction == "UP" and pct >= magnitude:
-                    count += 1
-                elif direction == "DOWN" and pct <= -magnitude:
-                    count += 1
-                elif direction == "EITHER" and abs(pct) >= magnitude:
-                    count += 1
-
-            prob = count / total * 100 if total > 0 else 0
-
-            up_count = sum(1 for r in all_returns if r > 0)
-            down_count = sum(1 for r in all_returns if r < 0)
-            avg_return = sum(all_returns) / len(all_returns) if all_returns else 0
-            median_return = sorted(all_returns)[len(all_returns) // 2] if all_returns else 0
-            best = max(all_returns) if all_returns else 0
-            worst = min(all_returns) if all_returns else 0
-
-            percentile_5 = sorted(all_returns)[int(len(all_returns) * 0.05)] if all_returns else 0
-            percentile_25 = sorted(all_returns)[int(len(all_returns) * 0.25)] if all_returns else 0
-            percentile_75 = sorted(all_returns)[int(len(all_returns) * 0.75)] if all_returns else 0
-            percentile_95 = sorted(all_returns)[int(len(all_returns) * 0.95)] if all_returns else 0
-
-            st.session_state.prob_result = {
-                "count": count,
-                "total": total,
-                "prob": prob,
-                "magnitude": magnitude,
-                "direction": direction,
-                "horizon_label": f"{horizon_value} {horizon_unit}",
-                "avg_return": round(avg_return, 1),
-                "median_return": round(median_return, 1),
-                "best": round(best, 1),
-                "worst": round(worst, 1),
-                "up_count": up_count,
-                "down_count": down_count,
-                "up_pct": round(up_count / total * 100, 1) if total > 0 else 0,
-                "all_returns": all_returns,
-                "p5": round(percentile_5, 1),
-                "p25": round(percentile_25, 1),
-                "p75": round(percentile_75, 1),
-                "p95": round(percentile_95, 1),
-            }
+                st.session_state.prob_result = _build_prob_result(
+                    all_returns, magnitude, direction, horizon_label,
+                    extra={"mode": "soxl"}
+                )
+                st.session_state.bench_prob_result = None
 
     if st.session_state.prob_result:
         import plotly.graph_objects as go
 
         r = st.session_state.prob_result
+        is_bench = r.get("mode") == "benchmark"
         dir_word = (
             "dropped" if r["direction"] == "DOWN" else "rose" if r["direction"] == "UP" else "moved"
         )
@@ -842,10 +941,45 @@ with tab_chart:
 
         st.markdown("---")
 
+        if is_bench:
+            bench_name = r.get("bench_name", "???")
+            bench_ret = r.get("bench_current_ret", 0)
+            analogues = r.get("analogues", 0)
+            tol = r.get("tolerance", 5)
+            bench_dir = "gained" if bench_ret >= 0 else "lost"
+            up_5 = round(sum(1 for x in r["all_returns"] if x >= 5) / r["total"] * 100, 0) if r["total"] > 0 else 0
+            down_5 = round(sum(1 for x in r["all_returns"] if x <= -5) / r["total"] * 100, 0) if r["total"] > 0 else 0
+
+            if r["avg_return"] >= 0:
+                bench_summary = (
+                    f"When **{bench_name}** behaved similarly (moved ~{bench_ret:+.1f}% over 30 days), "
+                    f"SOXL went **up 5%+** within {r['horizon_label']} about **{up_5:.0f}%** of the time. "
+                    f"Based on **{analogues} historical analogues**."
+                )
+            else:
+                bench_summary = (
+                    f"When **{bench_name}** behaved similarly (moved ~{bench_ret:+.1f}% over 30 days), "
+                    f"SOXL went **down 5%+** within {r['horizon_label']} about **{down_5:.0f}%** of the time. "
+                    f"Based on **{analogues} historical analogues**."
+                )
+
+            bench_badge_color = "#1565C0"
+            st.markdown(
+                f"<div style='background:#E3F2FD; border-left:5px solid {bench_badge_color}; padding:12px 16px; "
+                f"border-radius:8px; margin-bottom:12px; font-size:15px; line-height:1.6;'>"
+                f"<span style='font-weight:700; color:{bench_badge_color};'>BENCHMARK MODE: {bench_name}</span><br>"
+                f"{bench_summary}"
+                f"<br><span style='font-size:12px; color:#888;'>"
+                f"{bench_name} recent 30-day return: {bench_ret:+.1f}% · Match tolerance: ±{tol:.1f}%</span>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
         gauge_html = f"""
         <div style="margin: 10px 0 25px 0;">
           <div style="text-align:center; font-size:16px; font-weight:600; margin-bottom:8px; color:#333;">
             SOXL over {r['horizon_label']} — How likely is a {r['magnitude']}%+ {'drop' if r['direction']=='DOWN' else 'gain' if r['direction']=='UP' else 'move'}?
+            {'<br><span style="font-size:13px; color:#1565C0;">(based on ' + r.get("bench_name", "") + ' behavior)</span>' if is_bench else ''}
           </div>
           <div style="position:relative; height:60px; border-radius:30px; overflow:hidden;
                       background: linear-gradient(to right, #D32F2F, #E53935, #FF7043, #FFB74D, #FFF176, #AED581, #66BB6A, #43A047, #2E7D32);
