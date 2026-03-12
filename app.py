@@ -463,100 +463,152 @@ with tab_chart:
         st.markdown("**Based on this period's patterns, here's what historically happens next:**")
 
         for pred in ar["predictions"]:
-            with st.expander(f"{pred['horizon']} ({pred['days']} trading days) — {pred['total_periods']} samples", expanded=pred['horizon'] in ['1 Month', '3 Months']):
+            mags = sorted(pred["mag_probs"].keys())
+            up_5 = pred["mag_probs"].get(5, {}).get("up", 0)
+            down_5 = pred["mag_probs"].get(5, {}).get("down", 0)
+            avg_ret = pred["avg_return"]
+            actual = pred["actual_return"]
+            horizon = pred["horizon"]
 
-                mags = sorted(pred["mag_probs"].keys())
+            if actual is not None:
+                if actual >= 0:
+                    summary_sentence = (
+                        f"Based on this period, SOXL had a **{up_5:.0f}% chance** of gaining at least 5% "
+                        f"over the next {horizon.lower()} — and it actually **gained {actual:+.1f}%**."
+                    )
+                else:
+                    summary_sentence = (
+                        f"Based on this period, SOXL had a **{down_5:.0f}% chance** of dropping at least 5% "
+                        f"over the next {horizon.lower()} — and it actually **fell {actual:.1f}%**."
+                    )
+            else:
+                if avg_ret >= 0:
+                    summary_sentence = (
+                        f"Based on this period, SOXL had a **{up_5:.0f}% chance** of gaining at least 5% "
+                        f"over the next {horizon.lower()}, with an average return of **{avg_ret:+.1f}%**."
+                    )
+                else:
+                    summary_sentence = (
+                        f"Based on this period, SOXL had a **{down_5:.0f}% chance** of dropping at least 5% "
+                        f"over the next {horizon.lower()}, with an average return of **{avg_ret:+.1f}%**."
+                    )
+
+            with st.expander(f"{horizon} ({pred['days']} trading days) — {pred['total_periods']} samples", expanded=horizon in ['1 Month', '3 Months']):
+
+                st.markdown(f"<div style='font-size:16px; line-height:1.5; padding:8px 0 12px 0;'>{summary_sentence}</div>", unsafe_allow_html=True)
+
                 up_probs = [pred["mag_probs"][m]["up"] for m in mags]
                 down_probs = [pred["mag_probs"][m]["down"] for m in mags]
-                mag_labels = [f"{m}%" for m in mags]
+                mag_labels = [f"±{m}%" for m in mags]
 
                 fig_bars = go.Figure()
                 fig_bars.add_trace(go.Bar(
                     x=mag_labels, y=up_probs,
-                    name="Probability of GAIN",
+                    name="Chance of GAIN this big",
                     marker_color="#66BB6A",
                     text=[f"{p:.0f}%" for p in up_probs],
                     textposition="outside",
-                    textfont=dict(size=11, color="#2E7D32"),
+                    textfont=dict(size=12, color="#2E7D32", family="Arial Black"),
                 ))
                 fig_bars.add_trace(go.Bar(
                     x=mag_labels, y=[-d for d in down_probs],
-                    name="Probability of LOSS",
+                    name="Chance of LOSS this big",
                     marker_color="#EF5350",
                     text=[f"{p:.0f}%" for p in down_probs],
                     textposition="outside",
-                    textfont=dict(size=11, color="#D32F2F"),
+                    textfont=dict(size=12, color="#D32F2F", family="Arial Black"),
                 ))
+
+                if actual is not None:
+                    abs_actual = abs(actual)
+                    closest_mag_idx = 0
+                    for idx_m, m in enumerate(mags):
+                        if abs_actual >= m:
+                            closest_mag_idx = idx_m
+                    act_label = mag_labels[closest_mag_idx]
+                    act_color = "#2E7D32" if actual >= 0 else "#D32F2F"
+                    act_y = up_probs[closest_mag_idx] if actual >= 0 else -down_probs[closest_mag_idx]
+
+                    fig_bars.add_trace(go.Scatter(
+                        x=[act_label], y=[act_y],
+                        mode="markers+text",
+                        marker=dict(size=18, color=act_color, symbol="diamond",
+                                    line=dict(width=3, color="white")),
+                        text=[f"ACTUAL: {actual:+.1f}%"],
+                        textposition="top center",
+                        textfont=dict(size=13, color=act_color, family="Arial Black"),
+                        name=f"Actual: {actual:+.1f}%",
+                        showlegend=True,
+                    ))
+
                 fig_bars.update_layout(
-                    title=dict(text=f"Probability of Moves After {pred['horizon']}", font=dict(size=14)),
-                    xaxis_title="Move Size",
-                    yaxis_title="Probability %",
+                    xaxis_title="How big of a move?",
+                    yaxis_title="How likely?",
                     template="plotly_white",
-                    height=320,
-                    margin=dict(l=50, r=20, t=40, b=50),
+                    height=360,
+                    margin=dict(l=50, r=20, t=10, b=50),
                     barmode="relative",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="center", x=0.5,
+                                font=dict(size=12)),
                     yaxis=dict(zeroline=True, zerolinecolor="#333", zerolinewidth=2,
                                tickvals=list(range(-100, 101, 10)),
                                ticktext=[f"{abs(v)}%" for v in range(-100, 101, 10)]),
                 )
                 st.plotly_chart(fig_bars, use_container_width=True)
 
-                avg_ret = pred["avg_return"]
                 med_ret = pred["median_return"]
                 avg_color = "#2E7D32" if avg_ret >= 0 else "#D32F2F"
                 med_color = "#2E7D32" if med_ret >= 0 else "#D32F2F"
-
                 gauge_val = 50 + min(max(avg_ret, -50), 50)
 
-                info_html = f"""
-                <div style="display:flex; gap:15px; margin:5px 0 10px 0; align-items:stretch;">
-                  <div style="flex:2; position:relative;">
-                    <div style="text-align:center; font-size:12px; color:#888; margin-bottom:4px;">Historical Outlook</div>
-                    <div style="height:36px; border-radius:18px; overflow:hidden;
-                                background:linear-gradient(to right, #D32F2F, #E53935, #FF7043, #FFB74D, #FFF176, #AED581, #66BB6A, #43A047, #2E7D32);
-                                box-shadow: 0 1px 4px rgba(0,0,0,0.12);">
-                      <div style="position:absolute; top:20px; left:{gauge_val}%; transform:translateX(-50%);
-                                  width:4px; height:36px; background:#111; border-radius:2px; z-index:3;"></div>
-                      <div style="position:absolute; top:20px; left:{gauge_val}%; transform:translateX(-50%);
-                                  width:16px; height:36px; background:rgba(255,255,255,0.3); border-radius:8px; z-index:2;"></div>
+                gauge_html = f"""
+                <div style="position:relative; margin:0 0 15px 0;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:13px; font-weight:700; color:#D32F2F;">BEARISH</span>
+                    <span style="font-size:13px; color:#666;">Historical Outlook for {horizon}</span>
+                    <span style="font-size:13px; font-weight:700; color:#2E7D32;">BULLISH</span>
+                  </div>
+                  <div style="position:relative; height:44px; border-radius:22px; overflow:hidden;
+                              background:linear-gradient(to right, #D32F2F, #E53935, #FF7043, #FFB74D, #FFF176, #AED581, #66BB6A, #43A047, #2E7D32);
+                              box-shadow: 0 2px 6px rgba(0,0,0,0.12);">
+                    <div style="position:absolute; top:0; left:{gauge_val}%; transform:translateX(-50%);
+                                width:6px; height:44px; background:#111; border-radius:3px; z-index:3;"></div>
+                    <div style="position:absolute; top:0; left:{gauge_val}%; transform:translateX(-50%);
+                                width:20px; height:44px; background:rgba(255,255,255,0.35); border-radius:10px; z-index:2;"></div>
+                  </div>
+                  <div style="display:flex; gap:12px; margin-top:10px; justify-content:center;">
+                    <div style="background:#f8f9fa; border-radius:8px; padding:8px 20px; text-align:center;">
+                      <span style="font-size:11px; color:#888;">Avg Return</span>
+                      <span style="font-size:18px; font-weight:700; color:{avg_color}; margin-left:8px;">{avg_ret:+.1f}%</span>
                     </div>
-                    <div style="display:flex; justify-content:space-between; font-size:10px; color:#999; margin-top:2px;">
-                      <span style="color:#D32F2F; font-weight:700;">BEARISH</span>
-                      <span style="color:#2E7D32; font-weight:700;">BULLISH</span>
+                    <div style="background:#f8f9fa; border-radius:8px; padding:8px 20px; text-align:center;">
+                      <span style="font-size:11px; color:#888;">Median</span>
+                      <span style="font-size:18px; font-weight:700; color:{med_color}; margin-left:8px;">{med_ret:+.1f}%</span>
                     </div>
-                  </div>
-                  <div style="flex:1; background:#f8f9fa; border-radius:8px; padding:10px; text-align:center;">
-                    <div style="font-size:11px; color:#888;">Avg Return</div>
-                    <div style="font-size:20px; font-weight:700; color:{avg_color};">{avg_ret:+.1f}%</div>
-                  </div>
-                  <div style="flex:1; background:#f8f9fa; border-radius:8px; padding:10px; text-align:center;">
-                    <div style="font-size:11px; color:#888;">Median Return</div>
-                    <div style="font-size:20px; font-weight:700; color:{med_color};">{med_ret:+.1f}%</div>
-                  </div>
                 """
-
-                if pred["actual_return"] is not None:
-                    actual = pred["actual_return"]
-                    act_color = "#2E7D32" if actual >= 0 else "#D32F2F"
+                if actual is not None:
+                    act_color_css = "#2E7D32" if actual >= 0 else "#D32F2F"
+                    act_bg = "#E8F5E9" if actual >= 0 else "#FFEBEE"
                     act_icon = "&#9650;" if actual >= 0 else "&#9660;"
-                    info_html += f"""
-                  <div style="flex:1; background:{'#E8F5E9' if actual >= 0 else '#FFEBEE'}; border-radius:8px; padding:10px; text-align:center;
-                              border:2px solid {act_color};">
-                    <div style="font-size:11px; color:#888;">Actual Result</div>
-                    <div style="font-size:20px; font-weight:700; color:{act_color};">{act_icon} {actual:+.1f}%</div>
-                  </div>
+                    gauge_html += f"""
+                    <div style="background:{act_bg}; border-radius:8px; padding:8px 20px; text-align:center; border:2px solid {act_color_css};">
+                      <span style="font-size:11px; color:#888;">Actual</span>
+                      <span style="font-size:18px; font-weight:700; color:{act_color_css}; margin-left:8px;">{act_icon} {actual:+.1f}%</span>
+                    </div>
                     """
-                else:
-                    info_html += """
-                  <div style="flex:1; background:#f5f5f5; border-radius:8px; padding:10px; text-align:center;">
-                    <div style="font-size:11px; color:#888;">Actual Result</div>
-                    <div style="font-size:14px; color:#aaa; margin-top:2px;">Pending</div>
-                  </div>
-                    """
+                gauge_html += "</div></div>"
+                st.markdown(gauge_html, unsafe_allow_html=True)
 
-                info_html += "</div>"
-                st.markdown(info_html, unsafe_allow_html=True)
+                with st.expander("Show raw numbers"):
+                    num_lines = []
+                    num_lines.append(f"- Average return: **{avg_ret}%**")
+                    num_lines.append(f"- Median return: **{med_ret}%**")
+                    for mag in mags:
+                        probs = pred["mag_probs"][mag]
+                        num_lines.append(f"- ≥{mag}% up: **{probs['up']}%** | ≥{mag}% down: **{probs['down']}%**")
+                    if actual is not None:
+                        num_lines.append(f"- Actual return: **{actual:+.1f}%**")
+                    st.markdown("\n".join(num_lines))
 
         if st.button("Clear Analysis"):
             st.session_state.analyze_result = None
