@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from strategy_builder import generate_strategy, parse_strategy_json, render_strategy_html, STRATEGY_CSS
+from vol_surface import render_vol_surface_tab
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
@@ -239,7 +240,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
         else:
             st.metric(label=label, value="N/A")
 
-tab_chart, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🎯 Strategy Builder"])
+tab_chart, tab_vol, tab_strategy = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "🎯 Strategy Builder"])
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
@@ -1294,6 +1295,9 @@ with tab_chart:
                 st.warning(f"**Verdict:** High volatility expected. A {r['magnitude']}%+ move in either direction happened {r['prob']:.0f}% of the time.")
             else:
                 st.info(f"**Verdict:** A {r['magnitude']}%+ move in either direction happened {r['prob']:.0f}% of the time over {r['horizon_label']}.")
+
+with tab_vol:
+    render_vol_surface_tab()
 
 with tab_strategy:
     st.markdown("### 🎯 Strategy Builder")

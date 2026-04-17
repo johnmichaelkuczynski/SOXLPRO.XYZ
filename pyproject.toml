@@ -8,7 +8,9 @@ dependencies = [
     "numpy>=2.4.3",
     "pandas>=2.3.3",
     "plotly>=6.6.0",
+    "py-vollib>=1.0.1",
     "python-dateutil>=2.9.0.post0",
+    "scipy>=1.17.1",
     "streamlit>=1.55.0",
     "yfinance>=1.2.0",
 ]
