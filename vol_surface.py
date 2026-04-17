@@ -3,8 +3,9 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from scipy.interpolate import griddata
+from scipy.spatial import cKDTree
 
 try:
     from py_vollib.black_scholes.implied_volatility import implied_volatility as bs_iv
@@ -85,6 +86,46 @@ def fetch_options_chain(ticker_symbol="SOXL"):
     return df, spot, datetime.now()
 
 
+def filter_local_outliers(df, k=5, lo=0.5, hi=2.0):
+    if len(df) < k + 1:
+        return df
+    money_scale = 0.05
+    dte_scale = 30.0
+    pts = np.column_stack([
+        df["moneyness"].values / money_scale,
+        df["dte"].values / dte_scale,
+    ])
+    tree = cKDTree(pts)
+    _, idx = tree.query(pts, k=min(k + 1, len(df)))
+    iv = df["iv"].values
+    keep = np.ones(len(df), dtype=bool)
+    for i in range(len(df)):
+        neighbor_ivs = iv[idx[i][1:]]
+        if len(neighbor_ivs) == 0:
+            continue
+        med = np.median(neighbor_ivs)
+        if med <= 0:
+            continue
+        ratio = iv[i] / med
+        if ratio > hi or ratio < lo:
+            keep[i] = False
+    return df[keep].reset_index(drop=True)
+
+
+def next_monthly_opex(today=None):
+    if today is None:
+        today = date.today()
+    year = today.year
+    month = today.month + 1
+    if month > 12:
+        month = 1
+        year += 1
+    first = date(year, month, 1)
+    days_to_friday = (4 - first.weekday()) % 7
+    third_friday = first + timedelta(days=days_to_friday + 14)
+    return third_friday
+
+
 def filter_otm_blend(df):
     if df.empty:
         return df
@@ -153,25 +194,92 @@ def skew_25d(df, target_dte=30, tol_dte=15):
     return float(puts["iv"].median() - calls["iv"].median())
 
 
-def render_surface_figure(grid_money, grid_days, iv_grid, title):
+def render_surface_figure(grid_money, grid_days, iv_grid, spot, title):
+    today = date.today()
+
+    mg, dg = np.meshgrid(grid_money, grid_days)
+    strike_grid = mg * spot
+    exp_dates = np.array([
+        [(today + timedelta(days=int(d))).strftime("%b %d, %Y") for _ in grid_money]
+        for d in grid_days
+    ])
+    customdata = np.dstack([strike_grid, exp_dates])
+
     fig = go.Figure(data=[go.Surface(
         x=grid_money,
         y=grid_days,
         z=iv_grid * 100,
         colorscale="RdYlBu_r",
+        cmin=20,
+        cmax=180,
         colorbar=dict(title="IV %"),
-        hovertemplate="Moneyness: %{x:.2f}<br>Days: %{y:.0f}<br>IV: %{z:.1f}%<extra></extra>",
+        customdata=customdata,
+        hovertemplate=(
+            "<b>Expiration:</b> %{customdata[1]}<br>"
+            "<b>Days to expiry:</b> %{y:.0f}<br>"
+            "<b>Strike:</b> $%{customdata[0]:.2f}<br>"
+            "<b>Moneyness:</b> %{x:.3f}<br>"
+            "<b>IV:</b> %{z:.1f}%"
+            "<extra></extra>"
+        ),
     )])
+
+    candidate_ticks = [30, 60, 90, 180, 365, 540, 730]
+    y_lo, y_hi = float(grid_days.min()), float(grid_days.max())
+    tick_vals = [d for d in candidate_ticks if y_lo <= d <= y_hi]
+    if not tick_vals:
+        tick_vals = [int(round(y_lo)), int(round(y_hi))]
+    tick_text = [
+        f"{d}d<br>{(today + timedelta(days=d)).strftime('%b %d, %Y')}"
+        for d in tick_vals
+    ]
+
+    opex_date = next_monthly_opex(today)
+    opex_dte = (opex_date - today).days
+    if y_lo <= opex_dte <= y_hi:
+        x_line = np.linspace(float(grid_money.min()), float(grid_money.max()), 2)
+        opex_z_top = 180
+        fig.add_trace(go.Scatter3d(
+            x=list(x_line) + list(x_line[::-1]),
+            y=[opex_dte] * 4,
+            z=[0, 0, opex_z_top, opex_z_top],
+            mode="lines",
+            line=dict(color="rgba(80, 80, 80, 0.55)", width=4, dash="dash"),
+            name=f"Next Monthly OPEX: {opex_date.strftime('%b %d, %Y')}",
+            hovertemplate=f"Next Monthly OPEX<br>{opex_date.strftime('%b %d, %Y')} ({opex_dte}d)<extra></extra>",
+            showlegend=True,
+        ))
+        fig.add_trace(go.Scatter3d(
+            x=[float(grid_money.mean())],
+            y=[opex_dte],
+            z=[opex_z_top],
+            mode="text",
+            text=[f"OPEX {opex_date.strftime('%b %d')}"],
+            textfont=dict(size=11, color="#333"),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+
     fig.update_layout(
         title=title,
         scene=dict(
             xaxis_title="Moneyness (Strike / Spot)",
-            yaxis_title="Days to Expiration",
-            zaxis_title="Implied Volatility (%)",
+            yaxis=dict(
+                title="Days to Expiration",
+                tickmode="array",
+                tickvals=tick_vals,
+                ticktext=tick_text,
+                tickfont=dict(size=10),
+            ),
+            zaxis=dict(
+                title="Implied Volatility (%)",
+                range=[0, 180],
+            ),
             camera=dict(eye=dict(x=1.6, y=-1.6, z=0.9)),
         ),
-        height=700,
+        height=720,
         margin=dict(l=10, r=10, t=50, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="center", x=0.5),
     )
     return fig
 
@@ -205,11 +313,15 @@ def render_vol_surface_tab():
         return
 
     if mode == "Calls only":
-        surface_df = df[df["kind"] == "c"]
+        surface_df = df[df["kind"] == "c"].copy()
     elif mode == "Puts only":
-        surface_df = df[df["kind"] == "p"]
+        surface_df = df[df["kind"] == "p"].copy()
     else:
         surface_df = filter_otm_blend(df)
+
+    pre_outlier = len(surface_df)
+    surface_df = filter_local_outliers(surface_df)
+    outliers_dropped = pre_outlier - len(surface_df)
 
     info_cols = st.columns(4)
     iv30 = atm_iv_for_dte(surface_df, 30)
@@ -240,7 +352,8 @@ def render_vol_surface_tab():
 
     st.caption(
         f"Fetched: {fetched_at.strftime('%Y-%m-%d %H:%M:%S')} · "
-        f"Contracts after hygiene filtering: {len(surface_df)} · "
+        f"Contracts after hygiene filtering: {len(surface_df)} "
+        f"({outliers_dropped} local outliers dropped) · "
         f"py_vollib available: {HAS_VOLLIB}"
     )
 
@@ -250,7 +363,7 @@ def render_vol_surface_tab():
         return
 
     title = f"SOXL Implied Volatility Surface — {fetched_at.strftime('%Y-%m-%d %H:%M')}"
-    fig = render_surface_figure(grid_money, grid_days, iv_grid, title)
+    fig = render_surface_figure(grid_money, grid_days, iv_grid, spot, title)
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("Show raw filtered contracts"):
