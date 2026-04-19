@@ -72,10 +72,12 @@ def fetch_options_chain(ticker_symbol="SOXL"):
                         "strike": strike,
                         "moneyness": strike / spot,
                         "dte": dte,
+                        "exp_date": exp_str,
                         "iv": iv,
                         "bid": bid,
                         "ask": ask,
                         "mid": mid,
+                        "spread_pct": spread_pct,
                         "volume": vol,
                         "open_interest": oi,
                     })
@@ -192,6 +194,98 @@ def skew_25d(df, target_dte=30, tol_dte=15):
     if len(puts) == 0 or len(calls) == 0:
         return None
     return float(puts["iv"].median() - calls["iv"].median())
+
+
+def detect_anomalies(df, z_thresh=3.0, min_oi=50, max_spread=0.20,
+                     money_window=0.05, dte_window=14):
+    if df.empty or len(df) < 8:
+        return [], []
+
+    money = df["moneyness"].values
+    dte = df["dte"].values
+    iv = df["iv"].values
+
+    fitted = np.full(len(df), np.nan)
+    local_std = np.full(len(df), np.nan)
+
+    for i in range(len(df)):
+        nbr_mask = (
+            (np.abs(money - money[i]) <= money_window) &
+            (np.abs(dte - dte[i]) <= dte_window)
+        )
+        nbr_mask[i] = False
+        nbr_iv = iv[nbr_mask]
+        if len(nbr_iv) >= 3:
+            fitted[i] = np.median(nbr_iv)
+            local_std[i] = np.std(nbr_iv, ddof=1) if len(nbr_iv) > 1 else np.nan
+
+    residuals = iv - fitted
+    z = np.where(local_std > 0, residuals / local_std, 0.0)
+
+    sells, buys = [], []
+    for i in range(len(df)):
+        if not np.isfinite(z[i]):
+            continue
+        row = df.iloc[i]
+        if row["open_interest"] < min_oi:
+            continue
+        if row["spread_pct"] > max_spread:
+            continue
+        signal = {
+            "strike": float(row["strike"]),
+            "exp_date": row["exp_date"],
+        }
+        if z[i] >= z_thresh:
+            sells.append(signal)
+        elif z[i] <= -z_thresh:
+            buys.append(signal)
+
+    def sort_key(s):
+        return (s["exp_date"], s["strike"])
+    sells.sort(key=sort_key)
+    buys.sort(key=sort_key)
+    return buys, sells
+
+
+def _format_signal_line(sig):
+    try:
+        d = datetime.strptime(sig["exp_date"], "%Y-%m-%d").strftime("%b %d %Y")
+    except Exception:
+        d = sig["exp_date"]
+    return f"${sig['strike']:.0f} strike | {d} expiry"
+
+
+def render_signal_panel(signals, side):
+    if side == "sell":
+        bg = "#FFEBEE"
+        border = "#D32F2F"
+        title_color = "#B71C1C"
+        title = "SELLS"
+    else:
+        bg = "#E8F5E9"
+        border = "#2E7D32"
+        title_color = "#1B5E20"
+        title = "BUYS"
+
+    if signals:
+        items = "".join(
+            f"<div style='font-size:12px; padding:4px 6px; border-bottom:1px solid rgba(0,0,0,0.06); "
+            f"font-family: ui-monospace, Menlo, monospace; color:#222;'>"
+            f"{_format_signal_line(s)}</div>"
+            for s in signals
+        )
+    else:
+        items = "<div style='font-size:13px; padding:10px; color:#888; text-align:center;'>None</div>"
+
+    html = (
+        f"<div style='background:{bg}; border:1px solid {border}; border-radius:8px; "
+        f"padding:8px; height:720px; overflow-y:auto;'>"
+        f"<div style='font-size:14px; font-weight:800; color:{title_color}; "
+        f"text-align:center; padding:6px 0 8px 0; border-bottom:2px solid {border}; "
+        f"margin-bottom:6px;'>{title}</div>"
+        f"{items}</div>"
+    )
+    return html
 
 
 def render_surface_figure(grid_money, grid_days, iv_grid, spot, title):
@@ -364,7 +458,19 @@ def render_vol_surface_tab():
 
     title = f"SOXL Implied Volatility Surface — {fetched_at.strftime('%Y-%m-%d %H:%M')}"
     fig = render_surface_figure(grid_money, grid_days, iv_grid, spot, title)
-    st.plotly_chart(fig, use_container_width=True)
+
+    buys, sells = detect_anomalies(surface_df)
+
+    if not buys and not sells:
+        st.info("No definitive buy/sell signals. All surface deviations within noise margin.")
+
+    panel_col_l, plot_col, panel_col_r = st.columns([15, 70, 15])
+    with panel_col_l:
+        st.markdown(render_signal_panel(sells, "sell"), unsafe_allow_html=True)
+    with plot_col:
+        st.plotly_chart(fig, use_container_width=True)
+    with panel_col_r:
+        st.markdown(render_signal_panel(buys, "buy"), unsafe_allow_html=True)
 
     with st.expander("Show raw filtered contracts"):
         st.dataframe(
