@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, date
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, CubicSpline
 from scipy.spatial import cKDTree
 
 try:
@@ -26,51 +26,64 @@ def _compute_iv_fallback(mid, spot, strike, t_years, flag):
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_options_chain(ticker_symbol="SOXL"):
+def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.15, min_oi=50, min_vol=1):
     ticker = yf.Ticker(ticker_symbol)
     expirations = ticker.options
     if not expirations:
-        return pd.DataFrame(), 0.0, datetime.now()
+        return pd.DataFrame(), 0.0, datetime.now(), {}
 
     hist = ticker.history(period="5d", auto_adjust=True)
     spot = float(hist["Close"].iloc[-1])
 
     rows = []
+    rejection_log = {}
     today = datetime.now().date()
     for exp_str in expirations:
+        rej = {"spread": 0, "liquidity": 0, "iv_fail": 0, "no_quote": 0, "kept": 0}
         try:
             exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
             dte = (exp_date - today).days
             if dte < 7:
                 continue
             t_years = max(dte, 1) / 365.0
+            forward = spot * np.exp(RISK_FREE_RATE * t_years)
             chain = ticker.option_chain(exp_str)
             for kind, df in [("c", chain.calls), ("p", chain.puts)]:
                 for _, row in df.iterrows():
                     bid = float(row.get("bid", 0) or 0)
                     ask = float(row.get("ask", 0) or 0)
                     strike = float(row.get("strike", 0) or 0)
-                    iv = float(row.get("impliedVolatility", 0) or 0)
+                    yf_iv = float(row.get("impliedVolatility", 0) or 0)
                     vol = float(row.get("volume", 0) or 0)
                     oi = float(row.get("openInterest", 0) or 0)
                     if bid <= 0 or ask <= 0 or strike <= 0:
+                        rej["no_quote"] += 1
                         continue
                     mid = (bid + ask) / 2.0
                     if mid <= 0:
+                        rej["no_quote"] += 1
                         continue
                     spread_pct = (ask - bid) / mid
-                    if spread_pct > 0.20:
+                    if spread_pct > spread_cap:
+                        rej["spread"] += 1
                         continue
-                    if vol == 0 and oi == 0:
+                    if oi < min_oi or vol < min_vol:
+                        rej["liquidity"] += 1
                         continue
-                    if iv <= 0 or np.isnan(iv):
-                        iv = _compute_iv_fallback(mid, spot, strike, t_years, kind)
+                    iv = _compute_iv_fallback(mid, spot, strike, t_years, kind)
+                    if not np.isfinite(iv) or iv <= 0:
+                        if yf_iv > 0:
+                            iv = yf_iv
                     if not np.isfinite(iv) or iv < 0.05 or iv > 5.0:
+                        rej["iv_fail"] += 1
                         continue
+                    rej["kept"] += 1
                     rows.append({
                         "kind": kind,
                         "strike": strike,
                         "moneyness": strike / spot,
+                        "log_moneyness": float(np.log(strike / forward)),
+                        "forward": forward,
                         "dte": dte,
                         "exp_date": exp_str,
                         "iv": iv,
@@ -81,11 +94,82 @@ def fetch_options_chain(ticker_symbol="SOXL"):
                         "volume": vol,
                         "open_interest": oi,
                     })
+            rejection_log[exp_str] = rej
         except Exception:
             continue
 
     df = pd.DataFrame(rows)
-    return df, spot, datetime.now()
+    return df, spot, datetime.now(), rejection_log
+
+
+def apply_no_arb_filters(df):
+    if df.empty:
+        return df, {"call_mono": 0, "put_mono": 0, "calendar": 0}
+
+    dropped = {"call_mono": 0, "put_mono": 0, "calendar": 0}
+    keep_idx = set(df.index.tolist())
+
+    for (kind, exp), grp in df.groupby(["kind", "exp_date"]):
+        grp = grp.sort_values("strike")
+        prev_mid = None
+        prev_idx = None
+        violators = []
+        for idx, r in grp.iterrows():
+            if prev_mid is not None:
+                if kind == "c" and r["mid"] > prev_mid + 1e-6:
+                    violators.append(idx)
+                    continue
+                if kind == "p" and r["mid"] < prev_mid - 1e-6:
+                    violators.append(idx)
+                    continue
+            prev_mid = r["mid"]
+            prev_idx = idx
+        for idx in violators:
+            if idx in keep_idx:
+                keep_idx.discard(idx)
+                dropped["call_mono" if kind == "c" else "put_mono"] += 1
+
+    for (kind, strike), grp in df.groupby(["kind", "strike"]):
+        grp = grp.sort_values("dte")
+        prev_mid = None
+        for idx, r in grp.iterrows():
+            if idx not in keep_idx:
+                continue
+            if prev_mid is not None and r["mid"] < prev_mid - 0.05:
+                keep_idx.discard(idx)
+                dropped["calendar"] += 1
+                continue
+            prev_mid = r["mid"]
+
+    return df.loc[sorted(keep_idx)].reset_index(drop=True), dropped
+
+
+def fit_per_expiry_spline(df):
+    if df.empty:
+        return df.assign(fitted_iv=np.nan, residual_pct=np.nan)
+    df = df.copy()
+    df["fitted_iv"] = np.nan
+    for exp, grp in df.groupby("exp_date"):
+        grp = grp.sort_values("log_moneyness")
+        x = grp["log_moneyness"].values
+        y = grp["iv"].values
+        if len(x) < 4:
+            continue
+        ux, ui = np.unique(x, return_index=True)
+        if len(ux) < 4:
+            continue
+        uy = y[ui]
+        try:
+            spline = CubicSpline(ux, uy, bc_type="natural", extrapolate=False)
+            for idx in grp.index:
+                lm = df.loc[idx, "log_moneyness"]
+                fit_val = float(spline(lm))
+                if np.isfinite(fit_val) and fit_val > 0:
+                    df.loc[idx, "fitted_iv"] = fit_val
+        except Exception:
+            continue
+    df["residual_pct"] = (df["iv"] - df["fitted_iv"]) / df["fitted_iv"]
+    return df
 
 
 def filter_local_outliers(df, k=5, lo=0.5, hi=2.0):
@@ -196,96 +280,144 @@ def skew_25d(df, target_dte=30, tol_dte=15):
     return float(puts["iv"].median() - calls["iv"].median())
 
 
-def detect_anomalies(df, z_thresh=3.0, min_oi=50, max_spread=0.20,
-                     money_window=0.05, dte_window=14):
-    if df.empty or len(df) < 8:
-        return [], []
+def detect_anomalies(df_fitted, residual_thresh=0.05):
+    if df_fitted.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    df = df_fitted.dropna(subset=["fitted_iv", "residual_pct"]).copy()
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame()
 
-    money = df["moneyness"].values
-    dte = df["dte"].values
-    iv = df["iv"].values
+    sd = df["residual_pct"].std(ddof=1)
+    if not sd or not np.isfinite(sd) or sd == 0:
+        df["z"] = 0.0
+    else:
+        df["z"] = df["residual_pct"] / sd
 
-    fitted = np.full(len(df), np.nan)
-    local_std = np.full(len(df), np.nan)
+    buys = df[df["residual_pct"] < -residual_thresh].copy()
+    sells = df[df["residual_pct"] > residual_thresh].copy()
 
-    for i in range(len(df)):
-        nbr_mask = (
-            (np.abs(money - money[i]) <= money_window) &
-            (np.abs(dte - dte[i]) <= dte_window)
-        )
-        nbr_mask[i] = False
-        nbr_iv = iv[nbr_mask]
-        if len(nbr_iv) >= 3:
-            fitted[i] = np.median(nbr_iv)
-            local_std[i] = np.std(nbr_iv, ddof=1) if len(nbr_iv) > 1 else np.nan
-
-    residuals = iv - fitted
-    z = np.where(local_std > 0, residuals / local_std, 0.0)
-
-    sells, buys = [], []
-    for i in range(len(df)):
-        if not np.isfinite(z[i]):
-            continue
-        row = df.iloc[i]
-        if row["open_interest"] < min_oi:
-            continue
-        if row["spread_pct"] > max_spread:
-            continue
-        signal = {
-            "strike": float(row["strike"]),
-            "exp_date": row["exp_date"],
-        }
-        if z[i] >= z_thresh:
-            sells.append(signal)
-        elif z[i] <= -z_thresh:
-            buys.append(signal)
-
-    def sort_key(s):
-        return (s["exp_date"], s["strike"])
-    sells.sort(key=sort_key)
-    buys.sort(key=sort_key)
+    buys = buys.sort_values("z", ascending=True)
+    sells = sells.sort_values("z", ascending=False)
     return buys, sells
 
 
-def _format_signal_line(sig):
-    try:
-        d = datetime.strptime(sig["exp_date"], "%Y-%m-%d").strftime("%b %d %Y")
-    except Exception:
-        d = sig["exp_date"]
-    return f"${sig['strike']:.0f} strike | {d} expiry"
+def _kind_label(kind):
+    return "Call" if kind == "c" else "Put"
 
 
-def render_signal_panel(signals, side):
+def render_signals_table(df_signals, side):
     if side == "sell":
         bg = "#FFEBEE"
         border = "#D32F2F"
         title_color = "#B71C1C"
-        title = "SELLS"
+        title = "SELL CANDIDATES (overpriced — market IV > fitted)"
     else:
         bg = "#E8F5E9"
         border = "#2E7D32"
         title_color = "#1B5E20"
-        title = "BUYS"
+        title = "BUY CANDIDATES (underpriced — market IV < fitted)"
 
-    if signals:
-        items = "".join(
-            f"<div style='font-size:12px; padding:4px 6px; border-bottom:1px solid rgba(0,0,0,0.06); "
-            f"font-family: ui-monospace, Menlo, monospace; color:#222;'>"
-            f"{_format_signal_line(s)}</div>"
-            for s in signals
-        )
-    else:
-        items = "<div style='font-size:13px; padding:10px; color:#888; text-align:center;'>None</div>"
-
-    html = (
-        f"<div style='background:{bg}; border:1px solid {border}; border-radius:8px; "
-        f"padding:8px; height:720px; overflow-y:auto;'>"
-        f"<div style='font-size:14px; font-weight:800; color:{title_color}; "
-        f"text-align:center; padding:6px 0 8px 0; border-bottom:2px solid {border}; "
-        f"margin-bottom:6px;'>{title}</div>"
-        f"{items}</div>"
+    st.markdown(
+        f"<div style='background:{bg}; border-left:5px solid {border}; padding:8px 14px; "
+        f"border-radius:6px; margin:8px 0 4px 0;'>"
+        f"<span style='font-weight:800; color:{title_color}; font-size:14px;'>{title}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
     )
-    return html
+
+    if df_signals.empty:
+        st.markdown(
+            f"<div style='padding:8px 14px; color:#888; font-style:italic;'>None</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    show = df_signals.copy()
+    show["Contract"] = show.apply(
+        lambda r: f"${r['strike']:.0f} {_kind_label(r['kind'])} "
+                  f"{datetime.strptime(r['exp_date'], '%Y-%m-%d').strftime('%b %Y')}",
+        axis=1,
+    )
+    show["Expiry"] = show["exp_date"].apply(
+        lambda s: datetime.strptime(s, "%Y-%m-%d").strftime("%Y-%m-%d")
+    )
+    show["DTE"] = show["dte"].astype(int)
+    show["Bid"] = show["bid"].round(2)
+    show["Ask"] = show["ask"].round(2)
+    show["Mid"] = show["mid"].round(2)
+    show["Mkt IV %"] = (show["iv"] * 100).round(1)
+    show["Fit IV %"] = (show["fitted_iv"] * 100).round(1)
+    show["Residual %"] = (show["residual_pct"] * 100).round(1)
+    show["Z"] = show["z"].round(2)
+    show["OI"] = show["open_interest"].astype(int)
+    show["Vol"] = show["volume"].astype(int)
+    cols = ["Contract", "Expiry", "DTE", "Bid", "Ask", "Mid",
+            "Mkt IV %", "Fit IV %", "Residual %", "Z", "OI", "Vol"]
+    st.dataframe(show[cols], use_container_width=True, hide_index=True)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def compute_iv_rank_panel(ticker_symbol="SOXL"):
+    try:
+        hist = yf.Ticker(ticker_symbol).history(period="2y", auto_adjust=True)
+        if len(hist) < 60:
+            return None
+        ret = np.log(hist["Close"] / hist["Close"].shift(1)).dropna()
+        rv30 = ret.rolling(30).std() * np.sqrt(252)
+        rv30 = rv30.dropna()
+        if len(rv30) < 30:
+            return None
+        recent = rv30.tail(252)
+        current = float(rv30.iloc[-1])
+        lo = float(recent.min())
+        hi = float(recent.max())
+        if hi - lo <= 0:
+            rank = 50.0
+        else:
+            rank = (current - lo) / (hi - lo) * 100
+        return {
+            "current_rv30": current,
+            "year_low": lo,
+            "year_high": hi,
+            "rank_pct": rank,
+        }
+    except Exception:
+        return None
+
+
+def render_iv_rank_panel(rv_info, atm_iv30):
+    if rv_info is None:
+        st.info("Realized vol history unavailable.")
+        return
+    current_rv = rv_info["current_rv30"] * 100
+    lo = rv_info["year_low"] * 100
+    hi = rv_info["year_high"] * 100
+    rank = rv_info["rank_pct"]
+    if rank < 25:
+        verdict = "CHEAP"
+        color = "#2E7D32"
+    elif rank > 75:
+        verdict = "EXPENSIVE"
+        color = "#D32F2F"
+    else:
+        verdict = "MID-RANGE"
+        color = "#F57C00"
+
+    iv_text = f"{atm_iv30*100:.1f}%" if atm_iv30 else "N/A"
+
+    st.markdown(
+        f"<div style='background:#F5F5F5; border-left:5px solid {color}; "
+        f"padding:10px 14px; border-radius:6px; margin:6px 0 12px 0;'>"
+        f"<span style='font-weight:800; color:{color}; font-size:14px;'>"
+        f"VOL REGIME: {verdict}</span>"
+        f"<span style='float:right; font-size:13px; color:#555;'>"
+        f"30d ATM IV: <b>{iv_text}</b> · "
+        f"30d Realized: <b>{current_rv:.1f}%</b> · "
+        f"1y range: {lo:.1f}% – {hi:.1f}% · "
+        f"Rank: <b>{rank:.0f}</b>/100</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def render_surface_figure(grid_money, grid_days, iv_grid, spot, title):
@@ -378,18 +510,35 @@ def render_surface_figure(grid_money, grid_days, iv_grid, spot, title):
     return fig
 
 
+def _process_kind(df_kind):
+    pre = len(df_kind)
+    cleaned = filter_local_outliers(df_kind)
+    after_outlier = len(cleaned)
+    cleaned, no_arb_dropped = apply_no_arb_filters(cleaned)
+    after_noarb = len(cleaned)
+    fitted = fit_per_expiry_spline(cleaned)
+    return fitted, {
+        "pre": pre,
+        "outliers": pre - after_outlier,
+        "no_arb": after_outlier - after_noarb,
+        "final": after_noarb,
+        "no_arb_breakdown": no_arb_dropped,
+    }
+
+
 def render_vol_surface_tab():
     st.markdown("### SOXL Implied Volatility Surface")
     st.caption(
-        "Interactive 3D surface of implied volatility across strikes and expirations. "
-        "Drag to rotate, scroll to zoom, hover for details. Cached for 15 minutes."
+        "Calls and puts are fit as separate surfaces in (log-moneyness, time) space using "
+        "per-expiry cubic splines. Recommendations are flagged when market IV diverges from "
+        "the fitted surface by more than 5% AND the contract passes liquidity / no-arbitrage gates."
     )
 
     col_mode, col_refresh = st.columns([3, 1])
     with col_mode:
         mode = st.radio(
-            "Surface basis",
-            ["OTM Blend (cleanest)", "Calls only", "Puts only"],
+            "Surface to display",
+            ["Calls", "Puts"],
             horizontal=True,
             key="vol_surface_mode",
         )
@@ -397,31 +546,30 @@ def render_vol_surface_tab():
         st.write("")
         if st.button("🔄 Refresh now", use_container_width=True):
             fetch_options_chain.clear()
+            compute_iv_rank_panel.clear()
             st.rerun()
 
     with st.spinner("Fetching SOXL option chain..."):
-        df, spot, fetched_at = fetch_options_chain("SOXL")
+        df, spot, fetched_at, rejection_log = fetch_options_chain("SOXL")
 
     if df.empty:
         st.error("No usable options data returned. The chain may be empty or the source is unavailable.")
         return
 
-    if mode == "Calls only":
-        surface_df = df[df["kind"] == "c"].copy()
-    elif mode == "Puts only":
-        surface_df = df[df["kind"] == "p"].copy()
-    else:
-        surface_df = filter_otm_blend(df)
+    calls_df = df[df["kind"] == "c"].copy()
+    puts_df = df[df["kind"] == "p"].copy()
+    calls_fitted, calls_stats = _process_kind(calls_df)
+    puts_fitted, puts_stats = _process_kind(puts_df)
 
-    pre_outlier = len(surface_df)
-    surface_df = filter_local_outliers(surface_df)
-    outliers_dropped = pre_outlier - len(surface_df)
+    rv_info = compute_iv_rank_panel("SOXL")
+    atm_iv30 = atm_iv_for_dte(calls_fitted if mode == "Calls" else puts_fitted, 30)
+    render_iv_rank_panel(rv_info, atm_iv30)
 
     info_cols = st.columns(4)
+    surface_df = calls_fitted if mode == "Calls" else puts_fitted
     iv30 = atm_iv_for_dte(surface_df, 30)
     iv90 = atm_iv_for_dte(surface_df, 90)
     iv365 = atm_iv_for_dte(surface_df, 365)
-    sk25 = skew_25d(surface_df, 30)
 
     with info_cols[0]:
         st.metric("Spot", f"${spot:.2f}", help="Current SOXL price")
@@ -429,54 +577,72 @@ def render_vol_surface_tab():
         v = f"{iv30*100:.1f}%" if iv30 else "N/A"
         v90 = f"{iv90*100:.1f}%" if iv90 else "N/A"
         v365 = f"{iv365*100:.1f}%" if iv365 else "N/A"
-        st.metric("ATM IV — 30d", v, help=f"90d: {v90} · 365d: {v365}")
+        st.metric(f"{mode} ATM IV — 30d", v, help=f"90d: {v90} · 365d: {v365}")
     with info_cols[2]:
-        if sk25 is not None:
-            st.metric("25Δ Skew (30d)", f"{sk25*100:+.1f}%",
-                      help="Put IV minus Call IV. Positive = downside fear.")
-        else:
-            st.metric("25Δ Skew (30d)", "N/A")
+        st.metric(f"{mode} contracts", f"{len(surface_df)}",
+                  help=f"After mid-IV, 15% spread cap, OI≥50, vol≥1, no-arb, outlier filters")
     with info_cols[3]:
         if iv30 and iv90:
             slope = (iv90 - iv30) * 100
-            st.metric("Term Slope (90d−30d)", f"{slope:+.1f}%",
-                      help="Positive = upward-sloping term structure (contango).")
+            st.metric(f"{mode} Term Slope (90d−30d)", f"{slope:+.1f}%",
+                      help="Positive = contango.")
         else:
-            st.metric("Term Slope (90d−30d)", "N/A")
+            st.metric(f"{mode} Term Slope (90d−30d)", "N/A")
 
     st.caption(
         f"Fetched: {fetched_at.strftime('%Y-%m-%d %H:%M:%S')} · "
-        f"Contracts after hygiene filtering: {len(surface_df)} "
-        f"({outliers_dropped} local outliers dropped) · "
-        f"py_vollib available: {HAS_VOLLIB}"
+        f"Calls: {calls_stats['final']} kept ({calls_stats['outliers']} outliers, "
+        f"{calls_stats['no_arb']} no-arb) · "
+        f"Puts: {puts_stats['final']} kept ({puts_stats['outliers']} outliers, "
+        f"{puts_stats['no_arb']} no-arb) · "
+        f"py_vollib mid-IV: {HAS_VOLLIB}"
     )
 
     grid_money, grid_days, iv_grid = build_surface_grid(surface_df)
     if iv_grid is None:
-        st.warning(f"Not enough clean contracts ({len(surface_df)}) to build a surface. Try a different mode.")
-        return
-
-    title = f"SOXL Implied Volatility Surface — {fetched_at.strftime('%Y-%m-%d %H:%M')}"
-    fig = render_surface_figure(grid_money, grid_days, iv_grid, spot, title)
-
-    buys, sells = detect_anomalies(surface_df)
-
-    if not buys and not sells:
-        st.info("No definitive buy/sell signals. All surface deviations within noise margin.")
-
-    panel_col_l, plot_col, panel_col_r = st.columns([15, 70, 15])
-    with panel_col_l:
-        st.markdown(render_signal_panel(sells, "sell"), unsafe_allow_html=True)
-    with plot_col:
+        st.warning(f"Not enough clean {mode.lower()} contracts ({len(surface_df)}) to build a surface.")
+    else:
+        title = f"SOXL {mode} IV Surface — {fetched_at.strftime('%Y-%m-%d %H:%M')}"
+        fig = render_surface_figure(grid_money, grid_days, iv_grid, spot, title)
         st.plotly_chart(fig, use_container_width=True)
-    with panel_col_r:
-        st.markdown(render_signal_panel(buys, "buy"), unsafe_allow_html=True)
 
-    with st.expander("Show raw filtered contracts"):
-        st.dataframe(
-            surface_df[["kind", "strike", "moneyness", "dte", "iv", "bid", "ask", "volume", "open_interest"]]
-            .sort_values(["dte", "strike"])
-            .assign(iv=lambda d: (d["iv"] * 100).round(1)),
-            use_container_width=True,
-            hide_index=True,
-        )
+    calls_buys, calls_sells = detect_anomalies(calls_fitted)
+    puts_buys, puts_sells = detect_anomalies(puts_fitted)
+    all_buys = pd.concat([calls_buys, puts_buys], ignore_index=True) if not (calls_buys.empty and puts_buys.empty) else pd.DataFrame()
+    all_sells = pd.concat([calls_sells, puts_sells], ignore_index=True) if not (calls_sells.empty and puts_sells.empty) else pd.DataFrame()
+
+    if not all_buys.empty:
+        all_buys = all_buys.sort_values("z", ascending=True)
+    if not all_sells.empty:
+        all_sells = all_sells.sort_values("z", ascending=False)
+
+    if all_buys.empty and all_sells.empty:
+        st.info("No definitive buy/sell signals. All surface deviations within noise margin "
+                "(|residual| < 5%) or filtered out by liquidity / no-arb gates.")
+
+    bcol, scol = st.columns(2)
+    with bcol:
+        render_signals_table(all_buys, "buy")
+    with scol:
+        render_signals_table(all_sells, "sell")
+
+    with st.expander("Per-expiry rejection diagnostics"):
+        if rejection_log:
+            rej_df = pd.DataFrame(rejection_log).T.fillna(0).astype(int)
+            rej_df.index.name = "expiry"
+            rej_df = rej_df.reset_index()
+            st.dataframe(rej_df, use_container_width=True, hide_index=True)
+
+    with st.expander("Show raw fitted contracts (current surface)"):
+        if not surface_df.empty:
+            show = surface_df.copy()
+            show["iv_pct"] = (show["iv"] * 100).round(1)
+            show["fit_pct"] = (show["fitted_iv"] * 100).round(1)
+            show["resid_pct"] = (show["residual_pct"] * 100).round(1)
+            cols = ["kind", "strike", "exp_date", "dte", "moneyness", "log_moneyness",
+                    "bid", "ask", "mid", "iv_pct", "fit_pct", "resid_pct",
+                    "volume", "open_interest"]
+            st.dataframe(
+                show[cols].sort_values(["dte", "strike"]),
+                use_container_width=True, hide_index=True,
+            )

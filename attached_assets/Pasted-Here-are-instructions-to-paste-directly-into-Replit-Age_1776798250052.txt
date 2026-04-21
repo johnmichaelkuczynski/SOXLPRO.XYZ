@@ -1,0 +1,48 @@
+Here are instructions to paste directly into Replit Agent:
+
+---
+
+**FIX SOXL VOLATILITY SURFACE APP — RECOMMENDATION LOGIC**
+
+The current BUY/SELL recommendations are unreliable. Implement the following fixes in order:
+
+**1. SEPARATE CALLS AND PUTS**
+- Build two independent IV surfaces: one for calls, one for puts.
+- Never mix them on the same surface or in the same recommendation pool.
+- Label all outputs clearly (e.g., "$90 Call Jan 2028" not "$90 Jan 2028").
+
+**2. USE MID PRICES, NOT LAST-TRADE OR ASK**
+- Compute IV from `(bid + ask) / 2` of the current NBBO.
+- Reject any contract where: bid ≤ 0, ask ≤ 0, or `(ask - bid) / mid > 0.15` (15% spread cap).
+- Log rejection counts per expiry for diagnostics.
+
+**3. ENFORCE NO-ARBITRAGE CONSTRAINTS BEFORE FITTING**
+- Verify call prices monotonically decrease as strike increases (same expiry).
+- Verify put prices monotonically increase as strike increases.
+- Verify calendar monotonicity: longer expiry ≥ shorter expiry at same strike.
+- Drop any contract violating these; log what was dropped.
+
+**4. REQUIRE MINIMUM LIQUIDITY**
+- Drop contracts with open interest < 50 OR volume < 1 in the last 5 trading days.
+- Deep OTM LEAPs often fail this — they should be excluded, not flagged as BUYs.
+
+**5. FIT SURFACE IN (LOG-MONEYNESS, TIME) SPACE**
+- Use log(K/F) where F is the forward price, not raw strike.
+- Use SVI or cubic spline fit per expiry, then interpolate across time.
+- Report fit residuals per contract.
+
+**6. RECOMMENDATION CRITERIA — MAKE THEM STRICT**
+- Only flag a contract as BUY if: `(market_IV - surface_IV) / surface_IV < -0.05` (5% below surface).
+- Only flag as SELL if: `(market_IV - surface_IV) / surface_IV > +0.05`.
+- Require the contract to pass all liquidity + no-arb filters above.
+- Rank by z-score of residual, not raw deviation.
+
+**7. DISPLAY DIAGNOSTIC DATA WITH EACH RECOMMENDATION**
+For every BUY/SELL flag, show: bid, ask, mid, market IV, fitted surface IV, residual %, z-score, open interest, volume, days to expiry. Without this, the recommendation is unverifiable.
+
+**8. ADD A SANITY CHECK PANEL**
+Display overall SOXL IV rank (current 30-day IV vs. 1-year range) so the user knows whether the whole surface is cheap or expensive in absolute terms.
+
+---
+
+Tell the agent to implement in this exact order and show you residual plots after each step.
