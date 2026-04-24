@@ -915,6 +915,88 @@ def _custom_strategy_tab():
         st.markdown("##### Trade log")
         st.dataframe(trade_log, use_container_width=True, hide_index=True)
 
+    # ------------------------------------------------------------------
+    # 💬 Strategy Assistant (natural-language → formal strategy)
+    # ------------------------------------------------------------------
+    _render_strategy_chat()
+
+
+def _render_strategy_chat():
+    import strategy_nl as snl
+
+    st.divider()
+    st.markdown("### 💬 Strategy Assistant")
+    st.caption(
+        "Describe your strategy in plain English. The assistant will ask clarifying "
+        "questions, draft a formal strategy, and let you push it into the boxes above."
+    )
+
+    if "cs_chat_msgs" not in st.session_state:
+        st.session_state.cs_chat_msgs = []
+    if "cs_chat_pending_strategy" not in st.session_state:
+        st.session_state.cs_chat_pending_strategy = None
+
+    # Render conversation history
+    for msg in st.session_state.cs_chat_msgs:
+        with st.chat_message(msg["role"]):
+            display_text = msg["content"]
+            # Hide the raw JSON block from chat view to keep things readable
+            if "===STRATEGY_JSON_START===" in display_text:
+                pre = display_text.split("===STRATEGY_JSON_START===", 1)[0].rstrip()
+                post = display_text.split("===STRATEGY_JSON_END===", 1)[1].lstrip() \
+                    if "===STRATEGY_JSON_END===" in display_text else ""
+                display_text = (pre + ("\n\n_(formal strategy drafted — see button below)_\n\n" + post if pre or post else "")).strip()
+            st.markdown(display_text)
+
+    # Apply / clear buttons when a draft is pending
+    if st.session_state.cs_chat_pending_strategy is not None:
+        cfg = st.session_state.cs_chat_pending_strategy
+        bcols = st.columns([1.5, 1.5, 4])
+        with bcols[0]:
+            if st.button("✨ Apply to builder", type="primary", key="cs_chat_apply"):
+                st.session_state.cs_entry = cfg["entry"]
+                st.session_state.cs_exit = cfg["exit"]
+                st.session_state.cs_controls = cfg["controls"]
+                st.session_state.cs_chat_pending_strategy = None
+                st.success("Strategy populated above. Scroll up to review and run the backtest.")
+                st.rerun()
+        with bcols[1]:
+            if st.button("🗑 Discard draft", key="cs_chat_discard"):
+                st.session_state.cs_chat_pending_strategy = None
+                st.rerun()
+        if snl.uses_options_signals(cfg):
+            with bcols[2]:
+                st.info("ℹ️ This draft uses Vol Surface signals — backtest will be auto-restricted to 2022-present.")
+
+    # Reset
+    bcols = st.columns([1, 1, 6])
+    with bcols[0]:
+        if st.button("🔄 New chat", key="cs_chat_reset"):
+            st.session_state.cs_chat_msgs = []
+            st.session_state.cs_chat_pending_strategy = None
+            st.rerun()
+
+    # Input
+    user_text = st.chat_input(
+        "e.g. 'Buy SOXL when vol is cheap and we're down 10% from recent highs; "
+        "exit on 25% gain or 60 days'"
+    )
+    if user_text:
+        st.session_state.cs_chat_msgs.append({"role": "user", "content": user_text})
+        try:
+            with st.spinner("Thinking..."):
+                reply = snl.chat_refine(st.session_state.cs_chat_msgs)
+        except Exception as e:
+            reply = f"⚠️ Assistant error: {e}"
+        st.session_state.cs_chat_msgs.append({"role": "assistant", "content": reply})
+
+        # Try to extract a formal strategy
+        raw = snl.extract_strategy_json(reply)
+        cfg = snl.normalize_strategy(raw) if raw else None
+        if cfg is not None:
+            st.session_state.cs_chat_pending_strategy = cfg
+        st.rerun()
+
 
 # ----------------------------------------------------------------------------
 # Main render
