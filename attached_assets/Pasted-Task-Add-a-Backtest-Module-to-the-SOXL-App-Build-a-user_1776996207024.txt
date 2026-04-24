@@ -1,0 +1,59 @@
+Task: Add a Backtest Module to the SOXL App
+Build a user-driven backtesting feature that lets users evaluate each analytical function in the app against historical data, benchmarked against buy-and-hold SOXL and buy-and-hold QQQ.
+Data sources (two new API integrations):
+
+EODHD — for SOXL and QQQ equity price history (full 16 years, 2010–present).
+
+API key in env var: EODHD_API_KEY
+Endpoint: https://eodhd.com/api/eod/{SYMBOL}.US?api_token={KEY}&fmt=json&from=YYYY-MM-DD&to=YYYY-MM-DD
+Returns: daily OHLC, adjusted close, volume.
+
+
+Polygon.io — for SOXL options chain history (4 years).
+
+API key in env var: POLYGON_API_KEY
+Endpoint: https://api.polygon.io/v3/snapshot/options/SOXL?apiKey={KEY} (current chain) and https://api.polygon.io/v2/aggs/ticker/{OPTION_TICKER}/range/1/day/{from}/{to}?apiKey={KEY} (historical per-contract).
+
+
+
+UI: Add a "Backtest" tab to each existing function.
+Each function's backtest tab has:
+
+Parameter inputs (function-specific):
+
+Period Analysis: horizon (days), threshold (%).
+Probability Engine: move size M%, horizon H days.
+Vol Regime: regime thresholds (low/mid/high realized vol percentiles).
+SOXL-QQQ Dislocation: z-score entry/exit thresholds, holding period.
+Strategy Builder: parse the structured output levels directly.
+Vol Surface BUY/SELL (2b): mark this tab "Limited — 4 years options history only" and cap the date range accordingly.
+
+
+Date range selector: default to maximum available (16 years for equity-only features, 4 years for options-dependent features).
+Run Backtest button → executes on user click.
+Output panel with:
+
+Equity curve chart: strategy vs. buy-and-hold SOXL vs. buy-and-hold QQQ vs. random-entry baseline (matched trade count).
+Stats table: CAGR, max drawdown, Sharpe ratio, hit rate, avg win/loss, number of trades.
+For Probability Engine specifically: also render a calibration plot (predicted probability vs. realized frequency) and Brier score. Do not use CAGR/Sharpe for this feature — it's a forecast accuracy test, not a P&L test.
+
+
+
+Critical implementation requirements:
+
+Leveraged ETF handling: do NOT use raw SOXL price series naively. Reconstruct returns from daily adjusted closes and compound multiplicatively. Path-dependence matters.
+Walk-forward option for Strategy Builder: add a checkbox "Walk-forward test (recommended)" that splits the date range 70/30 train/test and evaluates on the held-out period. Default to ON.
+Random-entry baseline: for each backtest, also run a strategy that enters at random dates with the same trade count and holding period. Display its return as a dotted line on the equity curve. This is the overfitting check.
+Cache API responses in local storage with a 24-hour TTL to avoid hammering Polygon and EODHD rate limits during iterative testing.
+
+Display disclosures:
+
+On Vol Surface backtests: "Options history limited to 4 years (2022–present). Results may not generalize across regimes."
+On all backtests: "Past performance does not guarantee future results. Backtests are subject to lookahead bias, survivorship bias, and overfitting."
+
+Deliverables:
+
+New /backtest route or tab in existing UI.
+New module backtest_engine.py (or equivalent) with pluggable strategy functions.
+New module data_providers.py wrapping EODHD and Polygon calls with caching.
+Updated README with setup instructions for the two new API keys.
