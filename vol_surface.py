@@ -455,8 +455,9 @@ def render_surface_figure(grid_money, grid_days, iv_grid, spot, title):
     tick_vals = [d for d in candidate_ticks if y_lo <= d <= y_hi]
     if not tick_vals:
         tick_vals = [int(round(y_lo)), int(round(y_hi))]
+    # Shorter single-line labels — multi-line dates wrap and overlap on 3D axes
     tick_text = [
-        f"{d}d<br>{(today + timedelta(days=d)).strftime('%b %d, %Y')}"
+        f"{d}d ({(today + timedelta(days=d)).strftime('%b %y')})"
         for d in tick_vals
     ]
 
@@ -486,25 +487,42 @@ def render_surface_figure(grid_money, grid_days, iv_grid, spot, title):
             hoverinfo="skip",
         ))
 
+    AXIS_TITLE = dict(size=15, color="#1a2332", family="Arial Black")
+    AXIS_TICK = dict(size=13, color="#222")
+
     fig.update_layout(
-        title=title,
+        title=dict(text=title, font=dict(size=16, color="#1a2332")),
         scene=dict(
-            xaxis_title="Moneyness (Strike / Spot)",
+            xaxis=dict(
+                title=dict(text="Moneyness (Strike / Spot)", font=AXIS_TITLE),
+                tickfont=AXIS_TICK,
+                gridcolor="#cfd8dc",
+                showbackground=True,
+                backgroundcolor="rgba(248,249,250,0.6)",
+            ),
             yaxis=dict(
-                title="Days to Expiration",
+                title=dict(text="Days to Expiration", font=AXIS_TITLE),
                 tickmode="array",
                 tickvals=tick_vals,
                 ticktext=tick_text,
-                tickfont=dict(size=10),
+                tickfont=AXIS_TICK,
+                gridcolor="#cfd8dc",
+                showbackground=True,
+                backgroundcolor="rgba(248,249,250,0.6)",
             ),
             zaxis=dict(
-                title="Implied Volatility (%)",
+                title=dict(text="Implied Vol (%)", font=AXIS_TITLE),
+                tickfont=AXIS_TICK,
                 range=[0, 180],
+                gridcolor="#cfd8dc",
+                showbackground=True,
+                backgroundcolor="rgba(248,249,250,0.6)",
             ),
-            camera=dict(eye=dict(x=1.6, y=-1.6, z=0.9)),
+            camera=dict(eye=dict(x=1.7, y=1.7, z=0.85)),
+            aspectratio=dict(x=1.4, y=1.4, z=0.9),
         ),
-        height=720,
-        margin=dict(l=10, r=10, t=50, b=10),
+        height=780,
+        margin=dict(l=20, r=20, t=60, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=0.0, xanchor="center", x=0.5),
     )
     return fig
@@ -616,22 +634,33 @@ def render_vol_surface_tab():
     if not all_sells.empty:
         all_sells = all_sells.sort_values("z", ascending=False)
 
-    if all_buys.empty and all_sells.empty:
-        st.info("No definitive buy/sell signals. All surface deviations within noise margin "
-                "(|residual| < 5%) or filtered out by liquidity / no-arb gates.")
+    # ---- Collapsible signals & diagnostics block (frees space for the surface) ----
+    n_buy = 0 if all_buys.empty else len(all_buys)
+    n_sell = 0 if all_sells.empty else len(all_sells)
+    if n_buy == 0 and n_sell == 0:
+        sig_summary = "No definitive signals — all deviations within noise margin"
+    else:
+        sig_summary = f"{n_buy} BUY · {n_sell} SELL candidate(s)"
 
-    bcol, scol = st.columns(2)
-    with bcol:
-        render_signals_table(all_buys, "buy")
-    with scol:
-        render_signals_table(all_sells, "sell")
+    with st.expander(f"📊 Signal candidates & diagnostics — {sig_summary}", expanded=False):
+        if all_buys.empty and all_sells.empty:
+            st.info("No definitive buy/sell signals. All surface deviations within noise margin "
+                    "(|residual| < 5%) or filtered out by liquidity / no-arb gates.")
 
-    with st.expander("Per-expiry rejection diagnostics"):
+        bcol, scol = st.columns(2)
+        with bcol:
+            render_signals_table(all_buys, "buy")
+        with scol:
+            render_signals_table(all_sells, "sell")
+
+        st.markdown("**Per-expiry rejection diagnostics**")
         if rejection_log:
             rej_df = pd.DataFrame(rejection_log).T.fillna(0).astype(int)
             rej_df.index.name = "expiry"
             rej_df = rej_df.reset_index()
             st.dataframe(rej_df, use_container_width=True, hide_index=True)
+        else:
+            st.caption("None.")
 
     with st.expander("Show raw fitted contracts (current surface)"):
         if not surface_df.empty:
