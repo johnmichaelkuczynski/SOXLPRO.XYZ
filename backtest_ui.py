@@ -16,6 +16,14 @@ from backtest_engine import (
     safe_filename,
 )
 from datetime import datetime as _dt2
+from custom_strategy import (
+    ALL_INDICATORS, INDICATORS_NEEDS_N, OPERATORS, DEFAULT_N, DEFAULT_N2,
+    APP_SIGNALS_CATEGORICAL, APP_SIGNALS_NUMERIC_TWO_PARAM,
+    NEEDS_OPTIONS_DATA, OPTIONS_WINDOW_START, SIGNAL_VERSION,
+    compute_indicator, simulate_custom_strategy, describe_panel,
+    load_all_strategies, save_strategy, delete_strategy,
+    panel_uses_options_signals, is_categorical_signal, strategy_uses_app_signals,
+)
 
 
 def _date_range_picker(key_prefix, max_years=EQUITY_MAX_YEARS):
@@ -587,6 +595,328 @@ def _vol_surface_tab():
 
 
 # ----------------------------------------------------------------------------
+# 7. CUSTOM STRATEGY BUILDER
+# ----------------------------------------------------------------------------
+def _default_condition():
+    return {
+        "lhs": {"kind": "indicator", "indicator": "SOXL price", "n": None},
+        "op": ">",
+        "rhs": {"kind": "value", "value": 0.0, "indicator": None, "n": None},
+    }
+
+
+def _default_panel():
+    return {"combinator": "AND", "conditions": [_default_condition()]}
+
+
+def _init_cs_state():
+    if "cs_entry" not in st.session_state:
+        st.session_state.cs_entry = _default_panel()
+    if "cs_exit" not in st.session_state:
+        st.session_state.cs_exit = {"combinator": "AND", "conditions": []}
+    if "cs_controls" not in st.session_state:
+        st.session_state.cs_controls = {
+            "max_hold": 60, "stop_pct": 15.0, "tp_pct": 30.0, "direction": "Long",
+        }
+
+
+def _render_condition_row(panel_key, idx):
+    cond = st.session_state[panel_key]["conditions"][idx]
+    base = f"{panel_key}_{idx}"
+
+    cols = st.columns([2.6, 1.4, 1.3, 1.4, 1.6, 0.5])
+
+    with cols[0]:
+        lhs_ind = st.selectbox(
+            "Indicator", ALL_INDICATORS,
+            index=ALL_INDICATORS.index(cond["lhs"].get("indicator", "SOXL price")),
+            key=f"{base}_lhs_ind", label_visibility="collapsed",
+        )
+        cond["lhs"]["kind"] = "indicator"
+        cond["lhs"]["indicator"] = lhs_ind
+
+    is_cat = is_categorical_signal(lhs_ind)
+    is_two_param = lhs_ind in APP_SIGNALS_NUMERIC_TWO_PARAM
+
+    with cols[1]:
+        if is_two_param:
+            sub = st.columns(2)
+            with sub[0]:
+                m_val = st.number_input(
+                    "M%", 0.5, 100.0,
+                    value=float(cond["lhs"].get("n") or DEFAULT_N.get(lhs_ind, 10.0)),
+                    step=0.5, key=f"{base}_lhs_m", label_visibility="collapsed",
+                )
+                cond["lhs"]["n"] = float(m_val)
+            with sub[1]:
+                h_val = st.number_input(
+                    "Hd", 1, 252,
+                    value=int(cond["lhs"].get("n2") or DEFAULT_N2.get(lhs_ind, 30)),
+                    key=f"{base}_lhs_h", label_visibility="collapsed",
+                )
+                cond["lhs"]["n2"] = int(h_val)
+        elif lhs_ind in INDICATORS_NEEDS_N:
+            n_val = st.number_input(
+                "N", 2, 504, value=int(cond["lhs"].get("n") or DEFAULT_N.get(lhs_ind, 14)),
+                key=f"{base}_lhs_n", label_visibility="collapsed",
+            )
+            cond["lhs"]["n"] = int(n_val)
+            cond["lhs"]["n2"] = None
+        else:
+            st.markdown("&nbsp;", unsafe_allow_html=True)
+            cond["lhs"]["n"] = None
+            cond["lhs"]["n2"] = None
+
+    with cols[2]:
+        if is_cat:
+            st.selectbox("Op", ["="], index=0, disabled=True,
+                          key=f"{base}_op_cat", label_visibility="collapsed")
+            cond["op"] = "="
+        else:
+            op = st.selectbox("Op", OPERATORS,
+                              index=OPERATORS.index(cond.get("op", ">")) if cond.get("op", ">") in OPERATORS else 0,
+                              key=f"{base}_op", label_visibility="collapsed")
+            cond["op"] = op
+
+    if is_cat:
+        # Hide RHS-kind column; categorical RHS is locked to a category dropdown
+        with cols[3]:
+            st.markdown("&nbsp;equals", unsafe_allow_html=True)
+        with cols[4]:
+            categories = APP_SIGNALS_CATEGORICAL[lhs_ind]
+            current = cond["rhs"].get("value") if cond["rhs"].get("kind") == "category" else categories[0]
+            if current not in categories:
+                current = categories[0]
+            cat = st.selectbox("Category", categories,
+                                index=categories.index(current),
+                                key=f"{base}_rhs_cat", label_visibility="collapsed")
+            cond["rhs"] = {"kind": "category", "value": cat,
+                           "indicator": None, "n": None, "n2": None}
+    else:
+        with cols[3]:
+            rhs_kind = st.selectbox("RHS", ["value", "indicator"],
+                                     index=0 if cond["rhs"].get("kind", "value") == "value" else 1,
+                                     key=f"{base}_rhs_kind", label_visibility="collapsed")
+            cond["rhs"]["kind"] = rhs_kind
+        with cols[4]:
+            if rhs_kind == "value":
+                v = st.number_input("Value",
+                                    value=float(cond["rhs"].get("value") if cond["rhs"].get("value") is not None else 0.0),
+                                    key=f"{base}_rhs_v", label_visibility="collapsed",
+                                    format="%.4f")
+                cond["rhs"]["value"] = float(v)
+                cond["rhs"]["indicator"] = None
+                cond["rhs"]["n"] = None
+                cond["rhs"]["n2"] = None
+            else:
+                rhs_options = [i for i in ALL_INDICATORS
+                               if not is_categorical_signal(i) and i not in APP_SIGNALS_NUMERIC_TWO_PARAM]
+                cur = cond["rhs"].get("indicator") or "SOXL price"
+                if cur not in rhs_options:
+                    cur = "SOXL price"
+                rhs_ind = st.selectbox("Indicator2", rhs_options,
+                                        index=rhs_options.index(cur),
+                                        key=f"{base}_rhs_ind", label_visibility="collapsed")
+                cond["rhs"]["indicator"] = rhs_ind
+                cond["rhs"]["value"] = None
+                if rhs_ind in INDICATORS_NEEDS_N:
+                    n2 = st.number_input("N2", 2, 504,
+                                          value=int(cond["rhs"].get("n") or DEFAULT_N.get(rhs_ind, 14)),
+                                          key=f"{base}_rhs_n", label_visibility="collapsed")
+                    cond["rhs"]["n"] = int(n2)
+                else:
+                    cond["rhs"]["n"] = None
+
+    with cols[5]:
+        if st.button("✕", key=f"{base}_del", help="Remove condition"):
+            st.session_state[panel_key]["conditions"].pop(idx)
+            st.rerun()
+
+
+def _render_panel(panel_key, label):
+    st.markdown(f"##### {label}")
+    panel = st.session_state[panel_key]
+    if len(panel["conditions"]) > 1:
+        c1, _ = st.columns([1, 4])
+        with c1:
+            panel["combinator"] = st.radio(
+                "Combine with", ["AND", "OR"],
+                index=0 if panel["combinator"] == "AND" else 1,
+                horizontal=True, key=f"{panel_key}_comb",
+            )
+    head = st.columns([2.4, 1.0, 1.4, 1.6, 1.4, 0.6])
+    head[0].caption("Indicator")
+    head[1].caption("N")
+    head[2].caption("Operator")
+    head[3].caption("RHS type")
+    head[4].caption("Value / Indicator")
+    head[5].caption("")
+    for i in range(len(panel["conditions"])):
+        _render_condition_row(panel_key, i)
+    if st.button(f"➕ Add condition", key=f"{panel_key}_add"):
+        panel["conditions"].append(_default_condition())
+        st.rerun()
+
+
+def _custom_strategy_tab():
+    st.markdown("#### Custom Strategy Builder")
+    st.caption(
+        "Compose your own entry/exit rules from the indicator library. "
+        "Each rule is a list of conditions combined with AND or OR. "
+        "Common stop loss / take profit / max-hold guards apply on top of the exit rule."
+    )
+    _init_cs_state()
+
+    # Save/Load row
+    saved = load_all_strategies()
+    sl1, sl2, sl3, sl4 = st.columns([2, 2, 1, 1])
+    with sl1:
+        new_name = st.text_input("Save strategy as", placeholder="e.g. VIX < 15 long",
+                                  key="cs_save_name")
+    with sl2:
+        load_choice = st.selectbox("Load saved strategy",
+                                    ["—"] + sorted(saved.keys()), key="cs_load_pick")
+    with sl3:
+        if st.button("💾 Save", use_container_width=True, key="cs_save_btn"):
+            if not new_name.strip():
+                st.warning("Provide a name first.")
+            else:
+                save_strategy(new_name.strip(), {
+                    "entry": st.session_state.cs_entry,
+                    "exit": st.session_state.cs_exit,
+                    "controls": st.session_state.cs_controls,
+                })
+                st.success(f"Saved '{new_name.strip()}'.")
+                st.rerun()
+    with sl4:
+        if st.button("📂 Load", use_container_width=True, key="cs_load_btn"):
+            if load_choice and load_choice != "—":
+                entry = saved[load_choice]
+                cfg = entry["config"]
+                saved_ver = entry.get("signal_version", "unknown")
+                st.session_state.cs_entry = cfg.get("entry", _default_panel())
+                st.session_state.cs_exit = cfg.get("exit", {"combinator": "AND", "conditions": []})
+                st.session_state.cs_controls = cfg.get("controls", st.session_state.cs_controls)
+                if (saved_ver != SIGNAL_VERSION and strategy_uses_app_signals(cfg)):
+                    st.warning(
+                        f"This strategy was built against an earlier version of the "
+                        f"app-generated signals (saved v{saved_ver}, current v{SIGNAL_VERSION}). "
+                        f"Results may differ from the original backtest."
+                    )
+                else:
+                    st.success(f"Loaded '{load_choice}' (signal v{saved_ver}).")
+    if load_choice and load_choice != "—":
+        if st.button(f"🗑 Delete '{load_choice}'", key="cs_del_btn"):
+            delete_strategy(load_choice)
+            st.success(f"Deleted '{load_choice}'.")
+            st.rerun()
+
+    st.divider()
+    _render_panel("cs_entry", "📈 Entry Rule")
+    st.divider()
+    _render_panel("cs_exit", "📉 Exit Rule (optional — may rely solely on stop/TP/max-hold)")
+
+    st.divider()
+    st.markdown("##### Controls")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.session_state.cs_controls["max_hold"] = st.number_input(
+            "Max holding period (days)", 1, 504,
+            value=int(st.session_state.cs_controls.get("max_hold") or 60),
+            key="cs_maxhold",
+        )
+    with c2:
+        st.session_state.cs_controls["stop_pct"] = st.number_input(
+            "Stop loss (%)", 0.0, 100.0,
+            value=float(st.session_state.cs_controls.get("stop_pct") or 0.0),
+            step=1.0, key="cs_stop",
+        )
+    with c3:
+        st.session_state.cs_controls["tp_pct"] = st.number_input(
+            "Take profit (%)", 0.0, 500.0,
+            value=float(st.session_state.cs_controls.get("tp_pct") or 0.0),
+            step=1.0, key="cs_tp",
+        )
+    with c4:
+        st.session_state.cs_controls["direction"] = st.selectbox(
+            "Position direction", ["Long", "Short", "Both"],
+            index=["Long", "Short", "Both"].index(st.session_state.cs_controls.get("direction", "Long")),
+            key="cs_dir",
+            help="'Both' currently behaves as Long when entry rule fires; bidirectional rule pairs are a future extension.",
+        )
+
+    st.divider()
+    # Auto-restrict date range if any panel uses options-data signals
+    uses_options = (panel_uses_options_signals(st.session_state.cs_entry)
+                    or panel_uses_options_signals(st.session_state.cs_exit))
+    if uses_options:
+        st.warning(
+            "⚠️ Strategy uses Vol Surface signals; backtest limited to "
+            f"{OPTIONS_WINDOW_START}–present due to options data availability."
+        )
+        max_yrs = max(1, (datetime.now().date()
+                          - datetime.strptime(OPTIONS_WINDOW_START, "%Y-%m-%d").date()).days // 365)
+        start, end = _date_range_picker("cs", max_years=max_yrs)
+        # Hard-clamp the start
+        opt_start = datetime.strptime(OPTIONS_WINDOW_START, "%Y-%m-%d").date()
+        if start < opt_start:
+            start = opt_start
+    else:
+        start, end = _date_range_picker("cs", max_years=EQUITY_MAX_YEARS)
+
+    if st.button("Run custom backtest", type="primary", key="cs_run"):
+        with st.spinner("Loading data and computing indicators..."):
+            soxl_full = get_equity_history("SOXL")
+            qqq_full = get_equity_history("QQQ")
+            try:
+                vix_full = get_equity_history("VIX", suffix=".INDX")
+            except Exception:
+                vix_full = pd.DataFrame()
+        soxl = _slice(soxl_full, start, end)
+        qqq = _slice(qqq_full, start, end)
+        vix = _slice(vix_full, start, end) if not vix_full.empty else pd.DataFrame()
+        if soxl.empty:
+            st.error("No SOXL data in this range.")
+            return
+
+        equity, trade_returns, trade_log = simulate_custom_strategy(
+            soxl, qqq, vix, st.session_state.cs_entry, st.session_state.cs_exit,
+            st.session_state.cs_controls,
+        )
+
+        if not trade_returns:
+            st.warning("This rule produced no trades in the selected period. "
+                        "Try loosening conditions.")
+            return
+
+        avg_hold = max(int(np.mean([d for d in trade_log["days_held"]]) if not trade_log.empty else 1), 1)
+        title = f"Custom Strategy — {st.session_state.cs_controls['direction']}"
+        params = {
+            "direction": st.session_state.cs_controls["direction"],
+            "max_hold_days": st.session_state.cs_controls["max_hold"],
+            "stop_loss_%": st.session_state.cs_controls["stop_pct"],
+            "take_profit_%": st.session_state.cs_controls["tp_pct"],
+            "entry_combinator": st.session_state.cs_entry["combinator"],
+            "exit_combinator": st.session_state.cs_exit["combinator"],
+            "start": start, "end": end,
+        }
+        methodology = (
+            "Custom user-defined rule.\n"
+            f"  Entry: {describe_panel(st.session_state.cs_entry)}\n"
+            f"  Exit:  {describe_panel(st.session_state.cs_exit) if st.session_state.cs_exit['conditions'] else '(none — uses stop/TP/max-hold only)'}\n"
+            "Indicators are computed on EODHD adjusted-close data. VIX is sourced from "
+            "EODHD ticker VIX.INDX. Returns are compounded multiplicatively across each "
+            "trade's holding window. Random Entry Baseline draws the same number of entries "
+            "at random dates with the same average holding period."
+        )
+        _render_results(equity, soxl, qqq, trade_returns, avg_hold, title,
+                        params=params, methodology=methodology)
+
+        st.markdown("##### Trade log")
+        st.dataframe(trade_log, use_container_width=True, hide_index=True)
+
+
+# ----------------------------------------------------------------------------
 # Main render
 # ----------------------------------------------------------------------------
 def render_backtest_tab():
@@ -600,6 +930,7 @@ def render_backtest_tab():
     sub = st.tabs([
         "Period Analysis", "Probability Engine", "Vol Regime",
         "SOXL-QQQ Dislocation", "Strategy Builder", "Vol Surface (limited)",
+        "🛠 Custom Strategy",
     ])
     with sub[0]: _period_analysis_tab()
     with sub[1]: _probability_engine_tab()
@@ -607,3 +938,4 @@ def render_backtest_tab():
     with sub[3]: _dislocation_tab()
     with sub[4]: _strategy_builder_tab()
     with sub[5]: _vol_surface_tab()
+    with sub[6]: _custom_strategy_tab()

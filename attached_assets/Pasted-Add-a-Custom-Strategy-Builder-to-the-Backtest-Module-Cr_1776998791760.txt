@@ -1,0 +1,44 @@
+Add a Custom Strategy Builder to the Backtest Module.
+Create a new tab "Custom Strategy" in the Backtest section. Allow the user to construct their own entry and exit rules from a library of indicators, then backtest against the same benchmarks as the preset strategies (SOXL B&H, QQQ B&H, random entry).
+UI requirements:
+
+Two rule-builder panels: "Entry Rule" and "Exit Rule." Each panel lets the user add one or more conditions combined with AND/OR logic.
+Each condition is three dropdowns + a value field:
+
+Dropdown 1 — Indicator (see list below)
+Dropdown 2 — Operator (>, <, =, crosses above, crosses below)
+Field 3 — Value (number) OR a second indicator
+
+
+Indicator library (compute all of these from EODHD price data; VIX from EODHD ticker ^VIX.INDX):
+
+SOXL price, QQQ price, VIX level
+SMA(N), EMA(N) — user specifies N
+RSI(N), MACD, Bollinger Band %B
+N-day high, N-day low, N-day % change
+Realized volatility (N-day), ATR(N)
+Drawdown from peak (%)
+SOXL/QQQ ratio, SOXL z-score vs QQQ (N-day)
+Days held in current position
+
+
+Additional controls:
+
+Max holding period (days) — forces exit after N days regardless of exit rule
+Stop loss (%) — forces exit if position drops by X%
+Take profit (%) — forces exit if position gains X%
+Position direction — Long / Short / Both
+
+
+Save/Load: user can name and save custom strategies to revisit or compare.
+Output: same equity curve and stats table as preset backtests, with same benchmarks (SOXL B&H, QQQ B&H, random entry matched to trade count).
+
+Example strategies the interface must be capable of expressing:
+
+"Buy SOXL when VIX < 15, exit when VIX > 25"
+"Buy SOXL when price crosses above 50-day SMA AND RSI(14) > 50, exit when price crosses below 50-day SMA"
+"Buy SOXL when 30-day drawdown > 20%, hold 60 days"
+"Short SOXL when SOXL/QQQ z-score > 2, cover when z-score < 0"
+
+If the user can build those four, the interface is flexible enough to cover the vast majority of retail strategy ideas.
+Error handling: if a user builds a rule that never triggers (zero trades), display "This rule produced no trades in the selected period. Try loosening conditions."

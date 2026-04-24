@@ -13,10 +13,10 @@ OPTIONS_MAX_YEARS = 4
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def get_equity_history(symbol="SOXL", years=EQUITY_MAX_YEARS):
+def get_equity_history(symbol="SOXL", years=EQUITY_MAX_YEARS, suffix=".US"):
     end = datetime.now().date()
     start = end - timedelta(days=int(years * 365 + 30))
-    url = (f"https://eodhd.com/api/eod/{symbol}.US"
+    url = (f"https://eodhd.com/api/eod/{symbol}{suffix}"
            f"?api_token={EODHD_KEY}&fmt=json"
            f"&from={start.isoformat()}&to={end.isoformat()}")
     r = requests.get(url, timeout=30)
