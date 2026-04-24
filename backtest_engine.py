@@ -153,3 +153,179 @@ DISCLAIMER = (
     "*Past performance does not guarantee future results. Backtests are subject to "
     "lookahead bias, survivorship bias, and overfitting.*"
 )
+
+# ---------------------------------------------------------------------------
+# Report builders (TXT / CSV / DOCX / PDF) for downloadable backtest results
+# ---------------------------------------------------------------------------
+import io
+from datetime import datetime as _dt
+
+
+def _stats_rows_to_table(stats_rows):
+    """Normalize list-of-dicts to (headers, rows) preserving Series order."""
+    if not stats_rows:
+        return [], []
+    headers = ["Series"] + [k for k in stats_rows[0].keys() if k != "Series"]
+    rows = [[str(r.get(h, "")) for h in headers] for r in stats_rows]
+    return headers, rows
+
+
+def build_report_text(title, params, methodology, stats_rows, date_range=None):
+    lines = []
+    lines.append("=" * 78)
+    lines.append(f"BACKTEST REPORT: {title}")
+    lines.append("=" * 78)
+    lines.append(f"Generated: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if date_range:
+        lines.append(f"Date range: {date_range[0]} → {date_range[1]}")
+    lines.append("")
+    lines.append("PARAMETERS")
+    lines.append("-" * 78)
+    for k, v in (params or {}).items():
+        lines.append(f"  {k}: {v}")
+    lines.append("")
+    lines.append("METHODOLOGY")
+    lines.append("-" * 78)
+    lines.append(methodology or "(not specified)")
+    lines.append("")
+    lines.append("RESULTS")
+    lines.append("-" * 78)
+    headers, rows = _stats_rows_to_table(stats_rows)
+    if headers:
+        widths = [max(len(h), max((len(r[i]) for r in rows), default=0)) for i, h in enumerate(headers)]
+        fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
+        lines.append(fmt.format(*headers))
+        lines.append("  ".join("-" * w for w in widths))
+        for r in rows:
+            lines.append(fmt.format(*r))
+    lines.append("")
+    lines.append("DISCLAIMER")
+    lines.append("-" * 78)
+    lines.append("Past performance does not guarantee future results. Backtests are subject")
+    lines.append("to lookahead bias, survivorship bias, and overfitting.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def build_report_csv(stats_rows):
+    import csv
+    buf = io.StringIO()
+    headers, rows = _stats_rows_to_table(stats_rows)
+    if not headers:
+        return ""
+    w = csv.writer(buf)
+    w.writerow(headers)
+    w.writerows(rows)
+    return buf.getvalue()
+
+
+def build_report_docx(title, params, methodology, stats_rows, date_range=None):
+    from docx import Document
+    from docx.shared import Pt
+    doc = Document()
+    h = doc.add_heading(f"Backtest Report: {title}", level=1)
+    doc.add_paragraph(f"Generated: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if date_range:
+        doc.add_paragraph(f"Date range: {date_range[0]} → {date_range[1]}")
+
+    doc.add_heading("Parameters", level=2)
+    for k, v in (params or {}).items():
+        p = doc.add_paragraph()
+        run = p.add_run(f"{k}: ")
+        run.bold = True
+        p.add_run(str(v))
+
+    doc.add_heading("Methodology", level=2)
+    doc.add_paragraph(methodology or "(not specified)")
+
+    doc.add_heading("Results", level=2)
+    headers, rows = _stats_rows_to_table(stats_rows)
+    if headers:
+        table = doc.add_table(rows=1 + len(rows), cols=len(headers))
+        table.style = "Light Grid Accent 1"
+        for i, hdr in enumerate(headers):
+            cell = table.rows[0].cells[i]
+            cell.text = hdr
+            for run in cell.paragraphs[0].runs:
+                run.bold = True
+        for ri, row in enumerate(rows, start=1):
+            for ci, val in enumerate(row):
+                table.rows[ri].cells[ci].text = val
+
+    doc.add_heading("Disclaimer", level=2)
+    p = doc.add_paragraph(
+        "Past performance does not guarantee future results. Backtests are subject "
+        "to lookahead bias, survivorship bias, and overfitting."
+    )
+    for run in p.runs:
+        run.italic = True
+        run.font.size = Pt(9)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def build_report_pdf(title, params, methodology, stats_rows, date_range=None):
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                     Table, TableStyle, PageBreak)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER,
+                             leftMargin=0.6 * inch, rightMargin=0.6 * inch,
+                             topMargin=0.6 * inch, bottomMargin=0.6 * inch)
+    styles = getSampleStyleSheet()
+    small = ParagraphStyle("small", parent=styles["BodyText"], fontSize=9, leading=12)
+    italic_small = ParagraphStyle("ital", parent=small, fontName="Helvetica-Oblique",
+                                   textColor=colors.grey)
+    elements = []
+    elements.append(Paragraph(f"Backtest Report: {title}", styles["Title"]))
+    elements.append(Paragraph(_dt.now().strftime("Generated: %Y-%m-%d %H:%M:%S"), small))
+    if date_range:
+        elements.append(Paragraph(f"Date range: {date_range[0]} &rarr; {date_range[1]}", small))
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph("Parameters", styles["Heading2"]))
+    for k, v in (params or {}).items():
+        elements.append(Paragraph(f"<b>{k}:</b> {v}", small))
+    elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph("Methodology", styles["Heading2"]))
+    elements.append(Paragraph((methodology or "(not specified)").replace("\n", "<br/>"), small))
+    elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph("Results", styles["Heading2"]))
+    headers, rows = _stats_rows_to_table(stats_rows)
+    if headers:
+        data = [headers] + rows
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1976D2")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elements.append(table)
+    elements.append(Spacer(1, 14))
+
+    elements.append(Paragraph("Disclaimer", styles["Heading2"]))
+    elements.append(Paragraph(
+        "Past performance does not guarantee future results. Backtests are "
+        "subject to lookahead bias, survivorship bias, and overfitting.",
+        italic_small,
+    ))
+    doc.build(elements)
+    return buf.getvalue()
+
+
+def safe_filename(title):
+    keep = [c if c.isalnum() or c in "-_" else "_" for c in title]
+    return "".join(keep).strip("_") or "backtest"
+

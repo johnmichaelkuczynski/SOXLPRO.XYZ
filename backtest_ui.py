@@ -12,7 +12,10 @@ from backtest_engine import (
     equity_curve_from_returns, buy_and_hold_curve, compute_stats,
     random_entry_baseline, render_equity_chart, render_calibration_chart,
     DISCLAIMER, TRADING_DAYS,
+    build_report_text, build_report_csv, build_report_docx, build_report_pdf,
+    safe_filename,
 )
+from datetime import datetime as _dt2
 
 
 def _date_range_picker(key_prefix, max_years=EQUITY_MAX_YEARS):
@@ -44,7 +47,8 @@ def _load_equities(start, end):
     return _slice(soxl, start, end), _slice(qqq, start, end)
 
 
-def _render_results(strategy_eq, soxl_df, qqq_df, trade_returns, holding_days, title):
+def _render_results(strategy_eq, soxl_df, qqq_df, trade_returns, holding_days, title,
+                    params=None, methodology=None):
     soxl_bh = buy_and_hold_curve(soxl_df["adj_close"])
     qqq_bh = buy_and_hold_curve(qqq_df["adj_close"])
     rand_eq, rand_trades = random_entry_baseline(
@@ -67,6 +71,33 @@ def _render_results(strategy_eq, soxl_df, qqq_df, trade_returns, holding_days, t
     ]
     st.dataframe(pd.DataFrame(stats_rows), use_container_width=True, hide_index=True)
     st.caption(DISCLAIMER)
+    _render_download_buttons(title, params, methodology, stats_rows,
+                              date_range=(soxl_df.index.min().date(), soxl_df.index.max().date()))
+
+
+def _render_download_buttons(title, params, methodology, stats_rows, date_range=None, key_suffix=""):
+    st.markdown("**Download report**")
+    fname = safe_filename(title)
+    stamp = _dt2.now().strftime("%Y%m%d_%H%M%S")
+    base = f"{fname}_{stamp}"
+    txt = build_report_text(title, params, methodology, stats_rows, date_range)
+    csv = build_report_csv(stats_rows)
+    docx_bytes = build_report_docx(title, params, methodology, stats_rows, date_range)
+    pdf_bytes = build_report_pdf(title, params, methodology, stats_rows, date_range)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.download_button("📄 TXT", txt, file_name=f"{base}.txt",
+                           mime="text/plain", key=f"dl_txt_{base}{key_suffix}")
+    with c2:
+        st.download_button("📊 CSV (stats)", csv, file_name=f"{base}.csv",
+                           mime="text/csv", key=f"dl_csv_{base}{key_suffix}")
+    with c3:
+        st.download_button("📝 Word (.docx)", docx_bytes, file_name=f"{base}.docx",
+                           mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                           key=f"dl_docx_{base}{key_suffix}")
+    with c4:
+        st.download_button("📕 PDF", pdf_bytes, file_name=f"{base}.pdf",
+                           mime="application/pdf", key=f"dl_pdf_{base}{key_suffix}")
 
 
 # ----------------------------------------------------------------------------
@@ -116,7 +147,18 @@ def _period_analysis_tab():
             return
         eq = (1 + timeline).cumprod()
         _render_results(eq, soxl_df, qqq_df, trade_returns, horizon,
-                        f"Period Analysis — buy after −{threshold}% in {lookback}d, hold {horizon}d")
+                        f"Period Analysis — buy after −{threshold}% in {lookback}d, hold {horizon}d",
+                        params={"lookback_days": lookback, "drawdown_trigger_%": threshold,
+                                "holding_days": horizon, "start": start, "end": end},
+                        methodology=(
+                            "At every trading day, look at SOXL's trailing-window return over "
+                            f"the last {lookback} days. If the trailing return is at or below "
+                            f"−{threshold}%, enter long at that day's adjusted close and hold "
+                            f"for {horizon} trading days. Returns are compounded multiplicatively "
+                            "to preserve the path-dependent behavior of the leveraged ETF. "
+                            "Random Entry Baseline draws the same number of entries at random "
+                            "from the same date range with identical holding period."
+                        ))
 
 
 # ----------------------------------------------------------------------------
@@ -171,13 +213,42 @@ def _probability_engine_tab():
                   help="Brier score of always predicting the historical base rate. Beat this to add value.")
         st.markdown(f"**Mean predicted probability:** {np.mean(preds):.2%} · "
                     f"**Realized base rate:** {np.mean(outcomes):.2%}")
+        forecast_df = pd.DataFrame({
+            "date": dates,
+            "predicted_prob": np.round(preds, 4),
+            "realized": np.array(outcomes, dtype=int),
+        })
         with st.expander("Show forecast log"):
-            st.dataframe(pd.DataFrame({
-                "date": dates,
-                "predicted_prob": np.round(preds, 4),
-                "realized": np.array(outcomes, dtype=int),
-            }).tail(200), use_container_width=True, hide_index=True)
+            st.dataframe(forecast_df.tail(200), use_container_width=True, hide_index=True)
         st.caption(DISCLAIMER)
+
+        title = f"Probability Engine — {magnitude}% move within {horizon}d"
+        stats_rows = [
+            {"Series": "Engine forecast",       "forecasts": len(preds),
+             "Brier_score": round(brier, 4),    "mean_predicted_%": round(np.mean(preds) * 100, 2),
+             "realized_base_rate_%": round(np.mean(outcomes) * 100, 2)},
+            {"Series": "Climatology baseline",  "forecasts": len(preds),
+             "Brier_score": round(naive_brier, 4), "mean_predicted_%": round(np.mean(outcomes) * 100, 2),
+             "realized_base_rate_%": round(np.mean(outcomes) * 100, 2)},
+        ]
+        _render_download_buttons(
+            title,
+            params={"magnitude_%": magnitude, "horizon_days": horizon,
+                    "rolling_train_window_days": train_window, "start": start, "end": end,
+                    "n_bins": 10},
+            methodology=(
+                "Forecast accuracy test (NOT a P&L test). At every historical date t, the "
+                f"engine uses only the prior {train_window} days of SOXL data to estimate "
+                f"P(|return_{horizon}d| ≥ {magnitude}%) by counting empirical exceedances. "
+                "We then observe the actual outcome over the next "
+                f"{horizon} days. Calibration plot bins predicted probabilities and compares "
+                "to observed frequencies. Brier score = mean((predicted − realized)²); "
+                "lower is better. The climatology baseline always predicts the historical "
+                "base rate of the same outcome — beat it to demonstrate skill."
+            ),
+            stats_rows=stats_rows,
+            date_range=(start, end),
+        )
 
 
 # ----------------------------------------------------------------------------
@@ -228,7 +299,16 @@ def _vol_regime_tab():
                 trade_returns.append(float((1 + grp).prod() - 1))
         avg_holding = max(int(in_pos.sum() / max(len(set(runs)), 1)), 1) if len(runs) else 1
         _render_results(eq, soxl_df, qqq_df, trade_returns, avg_holding,
-                        f"Vol Regime — long SOXL when 30d realized vol ≤ {lo_pct}th pct (1y)")
+                        f"Vol Regime — long SOXL when 30d realized vol ≤ {lo_pct}th pct (1y)",
+                        params={"low_threshold_pctile": lo_pct, "high_threshold_pctile": hi_pct,
+                                "realized_vol_window_days": 30, "lookback_for_pctile_days": 252,
+                                "start": start, "end": end},
+                        methodology=(
+                            "Compute SOXL's 30-day realized volatility (annualized). At each "
+                            "day, classify it against the trailing 252-day distribution. Hold "
+                            f"long SOXL on days where current RV ≤ {lo_pct}th percentile; "
+                            "cash otherwise. Uses prior-day signal (lag 1) to avoid lookahead."
+                        ))
 
 
 # ----------------------------------------------------------------------------
@@ -294,7 +374,19 @@ def _dislocation_tab():
             return
         eq = (1 + timeline).cumprod()
         _render_results(eq, soxl_df.loc[common], qqq_df.loc[common], trade_returns, max_days,
-                        f"Dislocation — long when z < −{z_entry}, exit |z| < {z_exit} or {max_days}d")
+                        f"Dislocation — long when z < −{z_entry}, exit |z| < {z_exit} or {max_days}d",
+                        params={"entry_z": z_entry, "exit_z": z_exit,
+                                "max_holding_days": max_days, "beta_window_days": 20,
+                                "residual_window_days": 20, "z_lookback_days": 252,
+                                "start": start, "end": end},
+                        methodology=(
+                            "Estimate SOXL's rolling 20-day beta to QQQ. Compute the daily "
+                            "log-return residual = SOXL_logret − β × QQQ_logret. Sum residuals "
+                            "over a 20-day rolling window and z-score against the 252-day "
+                            f"history. Enter long SOXL when z < −{z_entry} (SOXL has "
+                            f"underperformed its beta-adjusted expectation). Exit when |z| < "
+                            f"{z_exit} or after {max_days} days, whichever comes first."
+                        ))
 
 
 # ----------------------------------------------------------------------------
@@ -371,7 +463,21 @@ def _strategy_builder_tab():
         eq = (1 + timeline).cumprod()
         _render_results(eq, test_df, qqq_df.loc[test_df.index[0]:], trade_returns, max_hold,
                         f"Strategy Builder — entry {entry_pct}% below {high_window}d high, "
-                        f"target +{target_pct}%, stop −{stop_pct}%, max {max_hold}d")
+                        f"target +{target_pct}%, stop −{stop_pct}%, max {max_hold}d",
+                        params={"entry_pct_below_high": entry_pct, "target_pct": target_pct,
+                                "stop_pct": stop_pct, "max_holding_days": max_hold,
+                                "high_window_days": high_window, "walk_forward": walk_fwd,
+                                "start": start, "end": end},
+                        methodology=(
+                            "Level-based entry/exit grader for the Strategy Builder skeleton. "
+                            f"At each day, find the highest close over the trailing "
+                            f"{high_window} days. If today's close has retraced ≥{entry_pct}% "
+                            f"from that high, enter long. Exit when price reaches +{target_pct}% "
+                            f"(target), or falls −{stop_pct}% (stop), or after {max_hold} days. "
+                            + ("Walk-forward: 70% of date range used as training (excluded); "
+                               "results shown only for the held-out 30% test window."
+                               if walk_fwd else "Full-period in-sample evaluation (no walk-forward).")
+                        ))
 
 
 # ----------------------------------------------------------------------------
@@ -448,6 +554,36 @@ def _vol_surface_tab():
                                   "pnl_pct"] if c in rdf.columns]
         st.dataframe(rdf[show_cols], use_container_width=True, hide_index=True)
         st.caption(DISCLAIMER)
+
+        title = f"Vol Surface signals — {int(max_contracts)} contracts, {int(holding_days)}d hold"
+        valid = rdf.dropna(subset=["pnl_pct"]) if "pnl_pct" in rdf.columns else pd.DataFrame()
+        stats_rows = [{
+            "Series": "Vol Surface signals (proxy)",
+            "contracts_evaluated": int(len(valid)),
+            "mean_pnl_%": round(float(valid["pnl_pct"].mean()), 2) if len(valid) else 0.0,
+            "median_pnl_%": round(float(valid["pnl_pct"].median()), 2) if len(valid) else 0.0,
+            "win_rate_%": round(float((valid["pnl_pct"] > 0).mean() * 100), 1) if len(valid) else 0.0,
+            "best_%": round(float(valid["pnl_pct"].max()), 2) if len(valid) else 0.0,
+            "worst_%": round(float(valid["pnl_pct"].min()), 2) if len(valid) else 0.0,
+        }]
+        _render_download_buttons(
+            title,
+            params={"max_contracts": int(max_contracts), "holding_days_calendar": int(holding_days),
+                    "evaluation_cutoff": eval_end,
+                    "filters": "OI ≥ 50, volume ≥ 1, bid > 0, ask > 0",
+                    "ranking": "by trade volume (desc)"},
+            methodology=(
+                "Approximation backtest. Pulls the current SOXL options snapshot, filters to "
+                "liquid contracts (OI ≥ 50, volume ≥ 1, valid bid/ask), ranks by volume, and "
+                f"takes the top {int(max_contracts)}. For each, fetches Polygon's daily aggregates "
+                "between (cutoff − holding − 30d) and the cutoff, and measures close-to-close "
+                f"P&L over a {int(holding_days)}-calendar-day window. Note: this grades CURRENT "
+                "signals against past data; a true walk-forward of historical IV-surface fits "
+                "would require rebuilding the surface at every past date, which is out of scope."
+            ),
+            stats_rows=stats_rows,
+            date_range=(eval_end, eval_end),
+        )
 
 
 # ----------------------------------------------------------------------------
