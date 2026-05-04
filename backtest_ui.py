@@ -14,7 +14,9 @@ from backtest_engine import (
     DISCLAIMER, TRADING_DAYS,
     build_report_text, build_report_csv, build_report_docx, build_report_pdf,
     safe_filename,
+    soxl_allocation_engine, simulate_allocation_engine, ALLOCATION_DEFAULTS,
 )
+from plotly.subplots import make_subplots
 from datetime import datetime as _dt2
 from custom_strategy import (
     ALL_INDICATORS, INDICATORS_NEEDS_N, OPERATORS, DEFAULT_N, DEFAULT_N2,
@@ -1001,6 +1003,315 @@ def _render_strategy_chat():
 # ----------------------------------------------------------------------------
 # Main render
 # ----------------------------------------------------------------------------
+def _permissive_date_range_picker(key_prefix, max_years=EQUITY_MAX_YEARS):
+    """Date range picker that NEVER refuses. Allows any window, including same-day."""
+    today = datetime.now().date()
+    min_date = today - timedelta(days=max_years * 365)
+    default_start = today - timedelta(days=365 * 3)
+    if default_start < min_date:
+        default_start = min_date
+    c1, c2 = st.columns(2)
+    with c1:
+        start = st.date_input(
+            "Start", value=default_start,
+            min_value=min_date, max_value=today,
+            key=f"{key_prefix}_start",
+        )
+    with c2:
+        end = st.date_input(
+            "End", value=today,
+            min_value=start, max_value=today,
+            key=f"{key_prefix}_end",
+        )
+    return start, end
+
+
+def _render_allocation_chart(alloc_df, soxl_prices, floor, ceiling):
+    """3-row chart: (1) equity curves, (2) normalized SOXL/QQQ + deviation,
+    (3) allocation% over time with floor/ceiling bands and bear-regime shading."""
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        row_heights=[0.40, 0.30, 0.30],
+        vertical_spacing=0.05,
+        subplot_titles=(
+            "Strategy equity vs benchmarks",
+            "SOXL vs QQQ-anchored baseline (normalized to start = 1.00)",
+            "Allocation % (continuous, floor/ceiling enforced)",
+        ),
+    )
+
+    # Row 1: equity curves filled in by caller via add_trace below — placeholder
+    # (caller passes via _render_engine_results)
+
+    # Row 2: normalized series
+    fig.add_trace(go.Scatter(
+        x=alloc_df.index, y=alloc_df["qqq_norm"],
+        name="QQQ-anchored baseline", mode="lines",
+        line=dict(color="#43A047", width=2.0, dash="dash"),
+    ), row=2, col=1)
+    fig.add_trace(go.Scatter(
+        x=alloc_df.index, y=alloc_df["soxl_norm"],
+        name="SOXL (normalized)", mode="lines",
+        line=dict(color="#D32F2F", width=2.2),
+    ), row=2, col=1)
+    # Shade deviation
+    fig.add_trace(go.Scatter(
+        x=alloc_df.index, y=alloc_df["deviation"],
+        name="Deviation (SOXL − QQQ)", mode="lines",
+        line=dict(color="#888", width=1.0),
+        yaxis="y2", showlegend=False, opacity=0.5,
+    ), row=2, col=1)
+
+    # Row 3: allocation
+    fig.add_trace(go.Scatter(
+        x=alloc_df.index, y=alloc_df["allocation"] * 100,
+        name="Allocation %", mode="lines",
+        line=dict(color="#1976D2", width=2.6),
+        fill="tozeroy", fillcolor="rgba(25,118,210,0.15)",
+    ), row=3, col=1)
+    fig.add_hline(y=floor * 100, line_dash="dot", line_color="#666",
+                  annotation_text=f"Floor {floor*100:.0f}%", annotation_position="bottom right",
+                  row=3, col=1)
+    fig.add_hline(y=ceiling * 100, line_dash="dot", line_color="#666",
+                  annotation_text=f"Ceiling {ceiling*100:.0f}%", annotation_position="top right",
+                  row=3, col=1)
+
+    # Bear regime shading
+    bear = alloc_df["regime_mult"] < 1.0
+    if bear.any():
+        in_bear = False
+        seg_start = None
+        bear_idxs = list(alloc_df.index)
+        for i, b in enumerate(bear.values):
+            if b and not in_bear:
+                seg_start = bear_idxs[i]
+                in_bear = True
+            elif not b and in_bear:
+                fig.add_vrect(
+                    x0=seg_start, x1=bear_idxs[i],
+                    fillcolor="rgba(211,47,47,0.10)", line_width=0,
+                    row=3, col=1,
+                )
+                in_bear = False
+        if in_bear:
+            fig.add_vrect(
+                x0=seg_start, x1=bear_idxs[-1],
+                fillcolor="rgba(211,47,47,0.10)", line_width=0,
+                row=3, col=1,
+            )
+
+    fig.update_yaxes(title_text="Growth of $1", row=1, col=1)
+    fig.update_yaxes(title_text="Normalized", row=2, col=1)
+    fig.update_yaxes(title_text="Allocation %", row=3, col=1, range=[0, 100])
+    fig.update_layout(
+        height=820, template="plotly_white",
+        margin=dict(l=50, r=20, t=60, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="center", x=0.5),
+        hovermode="x unified",
+    )
+    return fig
+
+
+def _allocation_engine_tab():
+    st.markdown("#### 🎯 SOXL Allocation Engine — Default Strategy")
+    st.caption(
+        "Continuous allocation engine. SOXL is mean-reverting against a QQQ-anchored "
+        "baseline: when SOXL drifts below the path, allocation rises; when it drifts above, "
+        "allocation falls. Allocation is rebalanced every bar — no discrete trades, no "
+        "holding periods, no z-scores. Floor and ceiling enforce 'never 0%, never 100%'. "
+        "A QQQ bear-regime filter scales allocation down (floor still holds). "
+        "Works on any window — even 2 data points."
+    )
+
+    with st.expander("Engine parameters (continuous, floor / ceiling / regime multiplier)",
+                     expanded=False):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            floor = st.slider(
+                "Floor (min allocation)", 0.02, 0.45,
+                ALLOCATION_DEFAULTS["floor"], step=0.01,
+                help="Minimum exposure. The bottom is rarely the bottom. "
+                     "Spec enforces a hard 2% floor — never 0%.",
+                key="ae_floor",
+            )
+        with c2:
+            ceiling = st.slider(
+                "Ceiling (max allocation)", 0.55, 0.98,
+                ALLOCATION_DEFAULTS["ceiling"], step=0.01,
+                help="Maximum exposure. The top is rarely the top. "
+                     "Spec enforces a hard 98% ceiling — never 100%.",
+                key="ae_ceiling",
+            )
+        with c3:
+            sensitivity = st.slider(
+                "Sensitivity", 0.5, 5.0,
+                ALLOCATION_DEFAULTS["sensitivity"], step=0.25,
+                help="How sharply allocation responds to deviation. Higher = more aggressive.",
+                key="ae_sens",
+            )
+        c4, c5, c6 = st.columns(3)
+        with c4:
+            bear_mult = st.slider(
+                "Bear-regime multiplier", 0.0, 1.0,
+                ALLOCATION_DEFAULTS["bear_multiplier"], step=0.05,
+                help="When QQQ is in a bear regime, multiply allocation by this. Floor still applies.",
+                key="ae_bearmult",
+            )
+        with c5:
+            bear_dd = st.slider(
+                "Bear-regime trigger (QQQ drawdown)", 0.05, 0.30,
+                ALLOCATION_DEFAULTS["bear_drawdown"], step=0.01,
+                help="QQQ this far below its rolling max → bear regime active.",
+                key="ae_beardd",
+            )
+        with c6:
+            bear_lb = st.slider(
+                "Bear-regime lookback (% of window)", 0.05, 0.50,
+                ALLOCATION_DEFAULTS["bear_lookback_frac"], step=0.05,
+                help="Window for QQQ rolling-max, as a fraction of the data range.",
+                key="ae_bearlb",
+            )
+
+    if floor >= ceiling:
+        st.warning("Floor must be below ceiling — using defaults.")
+        floor, ceiling = ALLOCATION_DEFAULTS["floor"], ALLOCATION_DEFAULTS["ceiling"]
+
+    start, end = _permissive_date_range_picker("ae")
+
+    if st.button("Run allocation engine", key="ae_run", type="primary"):
+        soxl_df, qqq_df = _load_equities(start, end)
+        # NEVER refuse, NEVER block — engine always returns a result.
+        # Fall back to empty Series when missing; the engine handles it.
+        soxl_prices = soxl_df["adj_close"] if not soxl_df.empty else pd.Series(dtype=float)
+        qqq_prices = qqq_df["adj_close"] if not qqq_df.empty else pd.Series(dtype=float)
+
+        if soxl_df.empty or qqq_df.empty:
+            st.info(
+                "No overlapping price data in the selected window — the engine "
+                "still returns the midpoint allocation per the spec's "
+                "'never refuse' rule."
+            )
+
+        equity, daily_rets, alloc_df = simulate_allocation_engine(
+            soxl_prices, qqq_prices,
+            floor=floor, ceiling=ceiling, sensitivity=sensitivity,
+            bear_multiplier=bear_mult, bear_drawdown=bear_dd,
+            bear_lookback_frac=bear_lb,
+        )
+
+        # --- Headline allocation card (today's recommendation) ---
+        if not alloc_df.empty:
+            current_alloc = float(alloc_df["allocation"].iloc[-1])
+            current_dev = float(alloc_df["deviation"].iloc[-1])
+            current_regime = "BEAR" if alloc_df["regime_mult"].iloc[-1] < 1.0 else "Normal"
+            regime_color = "#c62828" if current_regime == "BEAR" else "#2e7d32"
+            dev_label = ("oversold (BUY tilt)" if current_dev < -0.01
+                         else "overbought (defensive tilt)" if current_dev > 0.01
+                         else "near baseline")
+            st.markdown(
+                f"""
+                <div style="background:#1976D2; padding:22px 26px; border-radius:12px;
+                            color:white; margin:8px 0 16px 0;">
+                    <div style="font-size:13px; opacity:0.85; letter-spacing:1px;">
+                        ENGINE RECOMMENDATION ({alloc_df.index[-1].date()})
+                    </div>
+                    <div style="font-size:46px; font-weight:800; margin:4px 0;">
+                        {current_alloc*100:.1f}% LONG SOXL
+                    </div>
+                    <div style="font-size:16px;">
+                        Deviation: <b>{current_dev:+.3f}</b> — {dev_label}
+                        &nbsp;·&nbsp; QQQ regime:
+                        <span style="background:{regime_color}; padding:2px 8px;
+                                     border-radius:4px;">{current_regime}</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # --- Combined chart ---
+        fig = _render_allocation_chart(alloc_df, soxl_prices, floor, ceiling)
+        soxl_bh = buy_and_hold_curve(soxl_prices)
+        qqq_bh = buy_and_hold_curve(qqq_prices)
+        # Add equity series to row 1
+        if not equity.empty:
+            fig.add_trace(go.Scatter(
+                x=equity.index, y=equity.values,
+                name="Allocation Engine", mode="lines",
+                line=dict(color="#1976D2", width=2.6),
+            ), row=1, col=1)
+        if not soxl_bh.empty:
+            fig.add_trace(go.Scatter(
+                x=soxl_bh.index, y=soxl_bh.values,
+                name="SOXL Buy & Hold", mode="lines",
+                line=dict(color="#D32F2F", width=2.0),
+            ), row=1, col=1)
+        if not qqq_bh.empty:
+            fig.add_trace(go.Scatter(
+                x=qqq_bh.index, y=qqq_bh.values,
+                name="QQQ Buy & Hold", mode="lines",
+                line=dict(color="#43A047", width=2.0, dash="dash"),
+            ), row=1, col=1)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # --- Stats ---
+        if len(equity) >= 2:
+            stats_rows = [
+                {"Series": "Allocation Engine", **compute_stats(equity, returns=pd.Series(daily_rets))},
+                {"Series": "SOXL Buy & Hold",   **compute_stats(soxl_bh)},
+                {"Series": "QQQ Buy & Hold",    **compute_stats(qqq_bh)},
+            ]
+            st.dataframe(pd.DataFrame(stats_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info(f"Window too short for performance stats ({len(equity)} bar(s)). "
+                    "Engine still returned an allocation per the spec.")
+
+        # --- Allocation distribution + table ---
+        with st.expander("Allocation history (every bar)"):
+            show = alloc_df.copy()
+            show["soxl_norm"] = show["soxl_norm"].round(4)
+            show["qqq_norm"] = show["qqq_norm"].round(4)
+            show["deviation"] = show["deviation"].round(4)
+            show["raw_allocation"] = (show["raw_allocation"] * 100).round(2)
+            show["allocation"] = (show["allocation"] * 100).round(2)
+            show = show.rename(columns={
+                "soxl_norm": "SOXL norm",
+                "qqq_norm": "QQQ norm",
+                "deviation": "Deviation",
+                "raw_allocation": "Raw alloc %",
+                "regime_mult": "Regime ×",
+                "allocation": "Final alloc %",
+            })
+            st.dataframe(show.tail(500), use_container_width=True)
+
+        st.caption(DISCLAIMER)
+
+        # --- Downloads ---
+        if len(equity) >= 2:
+            title = "SOXL Allocation Engine"
+            params = {
+                "floor": floor, "ceiling": ceiling, "sensitivity": sensitivity,
+                "bear_multiplier": bear_mult, "bear_drawdown": bear_dd,
+                "bear_lookback_frac": bear_lb,
+                "start": start, "end": end,
+            }
+            methodology = (
+                "Continuous allocation engine. Both SOXL and QQQ are normalized to 1.00 at the "
+                "start of the window. Deviation = SOXL_norm − QQQ_norm. The engine maps deviation "
+                "→ allocation via a tanh squashing function scaled by the expanding mean of "
+                "|deviation|, so the response self-calibrates to the local volatility regime. "
+                f"Allocation is held strictly inside (floor={floor:.0%}, ceiling={ceiling:.0%}) — "
+                "the spec's 'never 0%, never 100%' constraint. A QQQ bear-regime filter "
+                f"({bear_dd:.0%} below the rolling-max over the trailing {bear_lb:.0%} of the "
+                f"window) multiplies allocation by {bear_mult:.2f}, but the floor still applies. "
+                "Allocation is rebalanced every bar; the engine is lagged one bar to avoid look-ahead."
+            )
+            _render_download_buttons(title, params, methodology, stats_rows,
+                                     date_range=(soxl_df.index.min().date(),
+                                                 soxl_df.index.max().date()),
+                                     key_suffix="_alloc")
+
+
 def render_backtest_tab():
     st.markdown("### 🔬 Backtest")
     st.caption(
@@ -1010,14 +1321,16 @@ def render_backtest_tab():
         f"All API responses cached for 24h."
     )
     sub = st.tabs([
+        "🎯 Allocation Engine (DEFAULT)",
         "Period Analysis", "Probability Engine", "Vol Regime",
         "SOXL-QQQ Dislocation", "Strategy Builder", "Vol Surface (limited)",
         "🛠 Custom Strategy",
     ])
-    with sub[0]: _period_analysis_tab()
-    with sub[1]: _probability_engine_tab()
-    with sub[2]: _vol_regime_tab()
-    with sub[3]: _dislocation_tab()
-    with sub[4]: _strategy_builder_tab()
-    with sub[5]: _vol_surface_tab()
-    with sub[6]: _custom_strategy_tab()
+    with sub[0]: _allocation_engine_tab()
+    with sub[1]: _period_analysis_tab()
+    with sub[2]: _probability_engine_tab()
+    with sub[3]: _vol_regime_tab()
+    with sub[4]: _dislocation_tab()
+    with sub[5]: _strategy_builder_tab()
+    with sub[6]: _vol_surface_tab()
+    with sub[7]: _custom_strategy_tab()

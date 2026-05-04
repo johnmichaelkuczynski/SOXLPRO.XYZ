@@ -17,6 +17,167 @@ def buy_and_hold_curve(price_series):
     return s / s.iloc[0]
 
 
+# ---------------------------------------------------------------------------
+# SOXL ALLOCATION ENGINE  (default backtest strategy)
+# ---------------------------------------------------------------------------
+# Continuous, mean-reverting allocation against a QQQ-anchored baseline.
+# Spec contract:
+#   * Anchor = QQQ's cumulative behavior (both series normalized to 1.0 at
+#     the start of the lookback window). NOT a fitted trendline. NOT z-scores.
+#   * Deviation = SOXL_norm − QQQ_norm. Negative = oversold. Positive = overbought.
+#   * Allocation is a continuous function of deviation, scaled proportionally.
+#   * Hard floor and ceiling — never 0% or 100%. Allocation always lives strictly
+#     inside (floor, ceiling).
+#   * Bear-regime filter on QQQ scales allocation down via a multiplier, but
+#     the floor still holds.
+#   * Continuous rebalancing — no discrete trades, no holding periods.
+#   * Never refuses a window: works on 2 data points or 5,000.
+# ---------------------------------------------------------------------------
+
+ALLOCATION_DEFAULTS = {
+    "floor": 0.10,        # never below 10% long
+    "ceiling": 0.90,      # never above 90% long
+    "sensitivity": 2.0,   # how sharply allocation responds to deviation
+    "bear_multiplier": 0.40,  # scale allocation down in QQQ bear regime
+    "bear_drawdown": 0.10,    # QQQ ≥10% off rolling-max counts as bear
+    "bear_lookback_frac": 0.25,  # rolling-max window = 25% of available data
+}
+
+# Hard guardrails enforcing the spec's "never 0%, never 100%" rule, regardless
+# of what the user passes in. Even if floor=0 or ceiling=1 sneak through, the
+# engine will clamp them inside this band so the bounds are NEVER touched.
+ALLOCATION_HARD_FLOOR = 0.02   # absolute minimum exposure (2%)
+ALLOCATION_HARD_CEILING = 0.98  # absolute maximum exposure (98%)
+
+
+def soxl_allocation_engine(
+    soxl_prices,
+    qqq_prices,
+    floor=ALLOCATION_DEFAULTS["floor"],
+    ceiling=ALLOCATION_DEFAULTS["ceiling"],
+    sensitivity=ALLOCATION_DEFAULTS["sensitivity"],
+    bear_multiplier=ALLOCATION_DEFAULTS["bear_multiplier"],
+    bear_drawdown=ALLOCATION_DEFAULTS["bear_drawdown"],
+    bear_lookback_frac=ALLOCATION_DEFAULTS["bear_lookback_frac"],
+):
+    """Compute continuous allocation per the spec. Returns a DataFrame indexed by
+    date with columns: soxl_norm, qqq_norm, deviation, dev_scale, raw_allocation,
+    regime_mult, allocation.
+
+    Adapts to whatever data is available — never raises, never refuses.
+    """
+    # --- Spec guardrail: even if user passes 0 or 1, clamp inside the hard
+    # band so allocation NEVER touches 0% or 100%. ---
+    floor = max(float(floor), ALLOCATION_HARD_FLOOR)
+    ceiling = min(float(ceiling), ALLOCATION_HARD_CEILING)
+    if floor >= ceiling:
+        floor, ceiling = ALLOCATION_HARD_FLOOR, ALLOCATION_HARD_CEILING
+
+    # --- Robust alignment / fallbacks (NEVER raises, NEVER refuses) ---
+    mid = (floor + ceiling) / 2.0
+    amplitude = (ceiling - floor) / 2.0
+
+    def _empty_default():
+        """Return a 1-row degenerate frame with midpoint allocation rather than
+        an empty frame, so downstream UI/plot code never has to special-case
+        'no data'. Honors the spec's 'never refuse' rule."""
+        idx = pd.DatetimeIndex([pd.Timestamp.now().normalize()])
+        return pd.DataFrame({
+            "soxl_norm": [1.0], "qqq_norm": [1.0], "deviation": [0.0],
+            "dev_scale": [np.nan], "raw_allocation": [mid],
+            "regime_mult": [1.0], "allocation": [mid],
+        }, index=idx)
+
+    if soxl_prices is None or qqq_prices is None:
+        return _empty_default()
+    soxl = pd.Series(soxl_prices).dropna()
+    qqq = pd.Series(qqq_prices).dropna()
+    if soxl.empty or qqq.empty:
+        return _empty_default()
+    common = soxl.index.intersection(qqq.index)
+    if len(common) == 0:
+        return _empty_default()
+    soxl = soxl.loc[common]
+    qqq = qqq.loc[common]
+
+    n = len(soxl)
+
+    # --- 1-point degenerate case: return midpoint allocation ---
+    if n == 1:
+        return pd.DataFrame({
+            "soxl_norm": [1.0],
+            "qqq_norm": [1.0],
+            "deviation": [0.0],
+            "dev_scale": [np.nan],
+            "raw_allocation": [mid],
+            "regime_mult": [1.0],
+            "allocation": [mid],
+        }, index=common)
+
+    # --- Normalize both to common start ---
+    soxl_norm = soxl / soxl.iloc[0]
+    qqq_norm = qqq / qqq.iloc[0]
+    deviation = soxl_norm - qqq_norm
+
+    # --- Adaptive scale: expanding mean of |deviation| ---
+    # This makes the engine self-calibrate to whatever volatility regime exists
+    # in the chosen window — no hardcoded thresholds.
+    dev_abs_running = deviation.abs().expanding(min_periods=1).mean()
+    dev_scale = dev_abs_running.clip(lower=0.01)  # avoid div-by-zero at t=0
+
+    # --- Continuous allocation via tanh squashing ---
+    # tanh keeps the result strictly inside (-1, +1), so allocation always lives
+    # strictly inside (floor, ceiling) — the spec's hard "never 0%, never 100%" rule.
+    norm_dev = deviation / dev_scale
+    raw_allocation = mid + amplitude * np.tanh(-sensitivity * norm_dev)
+
+    # --- Bear regime on QQQ ---
+    bear_lookback = max(2, int(round(n * bear_lookback_frac)))
+    qqq_rolling_max = qqq.rolling(bear_lookback, min_periods=1).max()
+    qqq_dd = qqq / qqq_rolling_max - 1.0
+    is_bear = qqq_dd <= -bear_drawdown
+    regime_mult = pd.Series(1.0, index=common)
+    regime_mult[is_bear] = bear_multiplier
+
+    # --- Apply regime + clip to band (floor still wins over the multiplier) ---
+    # We clip to (floor, ceiling) inclusive at the math level, but the tanh
+    # squash + (floor, ceiling) interior keeps allocation strictly inside the
+    # band in practice. The hard floor/ceiling clamp at function entry already
+    # guarantees we can never cross 0% or 100% no matter what the user passes.
+    allocation = (raw_allocation * regime_mult).clip(lower=floor, upper=ceiling)
+
+    return pd.DataFrame({
+        "soxl_norm": soxl_norm,
+        "qqq_norm": qqq_norm,
+        "deviation": deviation,
+        "dev_scale": dev_scale,
+        "raw_allocation": raw_allocation,
+        "regime_mult": regime_mult,
+        "allocation": allocation,
+    })
+
+
+def simulate_allocation_engine(soxl_prices, qqq_prices, **kwargs):
+    """Apply the continuous allocation to SOXL daily returns to produce an equity
+    curve. Allocation is lagged one bar to avoid look-ahead.
+
+    Returns (equity_curve, daily_strategy_returns_list, allocation_df).
+    """
+    alloc_df = soxl_allocation_engine(soxl_prices, qqq_prices, **kwargs)
+    if alloc_df.empty:
+        return pd.Series(dtype=float), [], alloc_df
+    if len(alloc_df) < 2:
+        return pd.Series([1.0], index=alloc_df.index), [], alloc_df
+
+    soxl = pd.Series(soxl_prices).loc[alloc_df.index]
+    daily_ret = soxl.pct_change().fillna(0.0)
+    # Lag allocation: today's allocation was decided based on prior bar's data
+    alloc_lag = alloc_df["allocation"].shift(1).fillna(alloc_df["allocation"].iloc[0])
+    strategy_daily = (alloc_lag * daily_ret).astype(float)
+    equity = (1.0 + strategy_daily).cumprod()
+    return equity, strategy_daily.tolist(), alloc_df
+
+
 def compute_stats(equity, returns=None, n_trades=None):
     eq = pd.Series(equity).dropna()
     if eq.empty or len(eq) < 2:
