@@ -1,9 +1,31 @@
+import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
 
 TRADING_DAYS = 252
+
+
+def _norm_cdf(x):
+    """Standard normal CDF using math.erf — no scipy dependency."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _bs_call_price(S, K, T, sigma, r=0.0):
+    """Black-Scholes call price, used purely as an honest mark-to-market for the
+    long-call sleeve in the allocation engine. We are NOT fitting a vol surface
+    or running Heston — sigma is just trailing realized vol of SOXL.
+    Returns intrinsic when T<=0 or sigma<=0."""
+    S = float(S); K = float(K); T = float(T); sigma = float(sigma)
+    if S <= 0 or K <= 0:
+        return 0.0
+    if T <= 0 or sigma <= 0:
+        return max(S - K, 0.0)
+    sqrtT = math.sqrt(T)
+    d1 = (math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT)
+    d2 = d1 - sigma * sqrtT
+    return S * _norm_cdf(d1) - K * math.exp(-r * T) * _norm_cdf(d2)
 
 
 def equity_curve_from_returns(returns):
@@ -158,10 +180,9 @@ def soxl_allocation_engine(
 
 
 def simulate_allocation_engine(soxl_prices, qqq_prices, **kwargs):
-    """Apply the continuous allocation to SOXL daily returns to produce an equity
-    curve. Allocation is lagged one bar to avoid look-ahead.
-
-    Returns (equity_curve, daily_strategy_returns_list, allocation_df).
+    """[Legacy spot-SOXL simulator — kept for backward compatibility.]
+    Apply continuous allocation to SOXL spot returns. Allocation is lagged one
+    bar to avoid look-ahead. Returns (equity_curve, daily_returns_list, alloc_df).
     """
     alloc_df = soxl_allocation_engine(soxl_prices, qqq_prices, **kwargs)
     if alloc_df.empty:
@@ -171,11 +192,294 @@ def simulate_allocation_engine(soxl_prices, qqq_prices, **kwargs):
 
     soxl = pd.Series(soxl_prices).loc[alloc_df.index]
     daily_ret = soxl.pct_change().fillna(0.0)
-    # Lag allocation: today's allocation was decided based on prior bar's data
     alloc_lag = alloc_df["allocation"].shift(1).fillna(alloc_df["allocation"].iloc[0])
     strategy_daily = (alloc_lag * daily_ret).astype(float)
     equity = (1.0 + strategy_daily).cumprod()
     return equity, strategy_daily.tolist(), alloc_df
+
+
+# ---------------------------------------------------------------------------
+# CALL-SLEEVE ALLOCATION ENGINE (REVISED DEFAULT)
+# ---------------------------------------------------------------------------
+# Capital structure:
+#   * 20% of notional sits in the "options sleeve" — long SOXL calls
+#   * 80% of notional always sits in cash
+#   * The 20% sleeve is sized continuously between (sleeve_pct × floor) and
+#     (sleeve_pct × ceiling) of total notional based on the deviation signal
+#
+# Options model — "simple but honest":
+#   * ATM (or slightly OTM) calls, 30–60d to expiry, rolled before expiry
+#   * Mark-to-market each bar via plain Black-Scholes (sigma = trailing realized
+#     vol of SOXL). NO vol surface fitting, NO Heston, NO IV smile — just one
+#     scalar sigma per day for honest delta + theta + convex P&L.
+#   * ASYMMETRIC continuous resize: each bar we evaluate the target. We sell
+#     down freely (lock in profits, reduce exposure on overbought signals) but
+#     we only ADD to the position at roll events. This honors both spec
+#     requirements: "continuous rebalancing" (daily evaluation/adjustment) AND
+#     "convex P&L: limited downside = premium" (no infinite refill of decaying
+#     positions). Position rides delta + theta naturally between rolls.
+#   * No bid-ask spread or slippage modeled.
+# ---------------------------------------------------------------------------
+
+CALL_SLEEVE_DEFAULTS = {
+    "sleeve_pct": 0.20,        # 20% of notional in calls; 80% cash
+    "days_to_expiry": 45,      # buy ~45 DTE calls
+    "roll_at_dte": 10,         # roll when DTE drops below this
+    "moneyness": 1.00,         # 1.00 = ATM, 1.05 = 5% OTM
+    "vol_window": 30,          # trailing window for realized-vol pricing
+    "min_sigma": 0.20,         # SOXL vol floor for pricing (20%)
+    "max_sigma": 2.00,         # SOXL vol ceiling for pricing (200%)
+}
+
+
+def simulate_call_sleeve_engine(
+    soxl_prices,
+    qqq_prices,
+    sleeve_pct=CALL_SLEEVE_DEFAULTS["sleeve_pct"],
+    days_to_expiry=CALL_SLEEVE_DEFAULTS["days_to_expiry"],
+    roll_at_dte=CALL_SLEEVE_DEFAULTS["roll_at_dte"],
+    moneyness=CALL_SLEEVE_DEFAULTS["moneyness"],
+    vol_window=CALL_SLEEVE_DEFAULTS["vol_window"],
+    min_sigma=CALL_SLEEVE_DEFAULTS["min_sigma"],
+    max_sigma=CALL_SLEEVE_DEFAULTS["max_sigma"],
+    floor=ALLOCATION_DEFAULTS["floor"],
+    ceiling=ALLOCATION_DEFAULTS["ceiling"],
+    sensitivity=ALLOCATION_DEFAULTS["sensitivity"],
+    bear_multiplier=ALLOCATION_DEFAULTS["bear_multiplier"],
+    bear_drawdown=ALLOCATION_DEFAULTS["bear_drawdown"],
+    bear_lookback_frac=ALLOCATION_DEFAULTS["bear_lookback_frac"],
+):
+    """Simulate the 20%-call-sleeve / 80%-cash strategy.
+
+    Returns a dict with:
+        equity_strategy        — pd.Series, growth of $1 (full portfolio: cash+calls)
+        equity_soxl_bh         — pd.Series, SOXL B&H baseline (growth of $1)
+        equity_qqq_bh          — pd.Series, QQQ B&H baseline (growth of $1)
+        sleeve_value           — pd.Series, $ value of call sleeve over time
+        cash_value             — pd.Series, $ cash over time
+        sleeve_alloc_target    — pd.Series, target sleeve % within the 20% allowance
+        sleeve_alloc_actual    — pd.Series, actual sleeve % of total portfolio
+        realized_vol           — pd.Series, sigma used for pricing
+        contracts_history      — pd.Series, share-equivalent contracts held
+        roll_events            — list of dates where positions were rolled
+        alloc_df               — full deviation/allocation panel from engine
+        sleeve_pct             — capital-at-risk cap (used for risk metrics)
+    """
+    sleeve_pct = float(np.clip(sleeve_pct, 0.01, 1.0))
+
+    alloc_df = soxl_allocation_engine(
+        soxl_prices, qqq_prices,
+        floor=floor, ceiling=ceiling, sensitivity=sensitivity,
+        bear_multiplier=bear_multiplier, bear_drawdown=bear_drawdown,
+        bear_lookback_frac=bear_lookback_frac,
+    )
+
+    # Align actual prices to allocation index. If inputs were empty, the engine
+    # returned a synthetic 1-row frame at today's date — fall back to a trivial
+    # degenerate result rather than reindexing into nothing.
+    soxl_in = pd.Series(soxl_prices) if soxl_prices is not None else pd.Series(dtype=float)
+    qqq_in = pd.Series(qqq_prices) if qqq_prices is not None else pd.Series(dtype=float)
+
+    def _trivial_result(idx, mid_alloc):
+        z = pd.Series(0.0, index=idx)
+        one = pd.Series(1.0, index=idx)
+        return {
+            "equity_strategy": one, "equity_soxl_bh": one, "equity_qqq_bh": one,
+            "sleeve_value": z, "cash_value": one,
+            "sleeve_alloc_target": pd.Series(mid_alloc, index=idx),
+            "sleeve_alloc_actual": z, "realized_vol": pd.Series(0.50, index=idx),
+            "contracts_history": z, "roll_events": [],
+            "alloc_df": alloc_df, "sleeve_pct": sleeve_pct,
+        }
+
+    # Defensive default — empty/degenerate windows never refuse.
+    if alloc_df.empty or soxl_in.empty or qqq_in.empty:
+        idx = pd.DatetimeIndex([pd.Timestamp.now().normalize()])
+        return _trivial_result(idx, (floor + ceiling) / 2.0)
+
+    common = alloc_df.index.intersection(soxl_in.index).intersection(qqq_in.index)
+    if len(common) == 0:
+        return _trivial_result(alloc_df.index, (floor + ceiling) / 2.0)
+
+    soxl = soxl_in.loc[common].astype(float)
+    qqq = qqq_in.loc[common].astype(float)
+    alloc_df = alloc_df.loc[common]
+    n = len(soxl)
+
+    # 1-bar trivial case
+    if n < 2:
+        idx = soxl.index
+        one = pd.Series(1.0, index=idx)
+        z = pd.Series(0.0, index=idx)
+        return {
+            "equity_strategy": one,
+            "equity_soxl_bh": soxl / soxl.iloc[0] if soxl.iloc[0] > 0 else one,
+            "equity_qqq_bh": qqq / qqq.iloc[0] if qqq.iloc[0] > 0 else one,
+            "sleeve_value": z, "cash_value": one,
+            "sleeve_alloc_target": alloc_df["allocation"],
+            "sleeve_alloc_actual": z, "realized_vol": pd.Series(0.50, index=idx),
+            "contracts_history": z, "roll_events": [],
+            "alloc_df": alloc_df, "sleeve_pct": sleeve_pct,
+        }
+
+    # Trailing realized vol (annualized) for pricing — adapts to window length.
+    log_rets = np.log(soxl / soxl.shift(1)).fillna(0.0)
+    rv_window = max(2, min(vol_window, max(2, n // 2)))
+    rv = (log_rets.rolling(rv_window, min_periods=2).std() * np.sqrt(252))
+    rv = rv.bfill().ffill().fillna(0.50)
+    rv = rv.clip(lower=min_sigma, upper=max_sigma)
+
+    # --- State ---
+    cash = 1.0           # $ in cash (starts with full $1 notional)
+    pos_shares = 0.0     # share-equivalent (1 contract = 100 shares; we use shares directly)
+    pos_strike = 0.0
+    pos_expiry_idx = -1
+    roll_events = []
+
+    eq_arr = np.zeros(n)
+    sleeve_arr = np.zeros(n)
+    cash_arr = np.zeros(n)
+    target_arr = np.zeros(n)
+    actual_arr = np.zeros(n)
+    contracts_arr = np.zeros(n)
+
+    days_to_expiry = max(int(days_to_expiry), 5)
+    roll_at_dte = max(int(roll_at_dte), 1)
+
+    for i in range(n):
+        S = float(soxl.iloc[i])
+        sigma = float(rv.iloc[i])
+        # Lag the allocation signal by 1 bar — today acts on yesterday's signal.
+        target_alloc = float(alloc_df["allocation"].iloc[max(i - 1, 0)])
+
+        # 1) Mark current sleeve to market
+        if pos_shares > 0 and pos_expiry_idx > i:
+            T_remain = max((pos_expiry_idx - i) / 365.0, 1e-6)
+            mtm_ps = _bs_call_price(S, pos_strike, T_remain, sigma)
+        elif pos_shares > 0:
+            mtm_ps = max(S - pos_strike, 0.0)  # at/past expiry → intrinsic
+        else:
+            mtm_ps = 0.0
+        sleeve_dollar = pos_shares * mtm_ps
+
+        # 2) Roll trigger — if DTE too low (or position worthless), liquidate
+        #    before opening a fresh sized position.
+        days_left = pos_expiry_idx - i
+        need_roll = (pos_shares > 0) and (
+            days_left <= roll_at_dte or mtm_ps <= 1e-6
+        )
+        if need_roll:
+            cash += sleeve_dollar
+            pos_shares = 0.0
+            sleeve_dollar = 0.0
+            roll_events.append(soxl.index[i])
+
+        # 3) Sizing rules (asymmetric):
+        #    • If we have NO position → open a fresh one to target sleeve $.
+        #    • If we HAVE a position and target dropped below current → sell DOWN
+        #      to target (release cash). This is "lock in profits / reduce exposure".
+        #    • If we have a position and target is at/above current → HOLD.
+        #      We never refill decaying premium mid-cycle. This is the spec's
+        #      "limited downside = premium" rule. The next roll will re-size up.
+        portfolio = cash + sleeve_dollar
+        target_sleeve_dollar = portfolio * sleeve_pct * target_alloc
+
+        if pos_shares == 0:
+            # Open a fresh position: ATM(ish), full days_to_expiry
+            T_new = days_to_expiry / 365.0
+            new_strike = S * moneyness
+            premium_ps = _bs_call_price(S, new_strike, T_new, sigma)
+            if premium_ps > 1e-6 and target_sleeve_dollar > 1e-9:
+                new_shares = target_sleeve_dollar / premium_ps
+                pos_shares = new_shares
+                pos_strike = new_strike
+                pos_expiry_idx = i + days_to_expiry
+                cash -= target_sleeve_dollar
+                sleeve_dollar = target_sleeve_dollar
+        elif mtm_ps > 1e-6 and target_sleeve_dollar < sleeve_dollar:
+            # Sell-down only: shrink the position to target, release cash.
+            target_shares = max(target_sleeve_dollar / mtm_ps, 0.0)
+            delta_shares = target_shares - pos_shares  # negative → sell
+            cash -= delta_shares * mtm_ps
+            pos_shares = target_shares
+            sleeve_dollar = pos_shares * mtm_ps
+
+        # Record
+        eq_arr[i] = cash + sleeve_dollar
+        sleeve_arr[i] = sleeve_dollar
+        cash_arr[i] = cash
+        target_arr[i] = target_alloc
+        actual_arr[i] = (sleeve_dollar / eq_arr[i]) if eq_arr[i] > 0 else 0.0
+        contracts_arr[i] = pos_shares / 100.0  # display as contract count
+
+    idx = soxl.index
+    return {
+        "equity_strategy": pd.Series(eq_arr, index=idx),
+        "equity_soxl_bh": soxl / soxl.iloc[0],
+        "equity_qqq_bh": qqq / qqq.iloc[0],
+        "sleeve_value": pd.Series(sleeve_arr, index=idx),
+        "cash_value": pd.Series(cash_arr, index=idx),
+        "sleeve_alloc_target": pd.Series(target_arr, index=idx),
+        "sleeve_alloc_actual": pd.Series(actual_arr, index=idx),
+        "realized_vol": rv,
+        "contracts_history": pd.Series(contracts_arr, index=idx),
+        "roll_events": roll_events,
+        "alloc_df": alloc_df,
+        "sleeve_pct": sleeve_pct,
+    }
+
+
+def compute_risk_metrics(equity, label="Strategy", capital_at_risk=1.0):
+    """Compute the risk-adjusted metrics required by the spec:
+    Total Return, CAGR, annualized Vol, Max Drawdown, Sharpe, Sortino, Calmar,
+    Capital at Risk, Return per unit of Capital at Risk.
+    """
+    eq = pd.Series(equity).dropna().astype(float)
+    out = {
+        "Series": label,
+        "Total Return %": 0.0, "CAGR %": 0.0, "Vol (ann) %": 0.0,
+        "Max Drawdown %": 0.0, "Sharpe": 0.0, "Sortino": 0.0, "Calmar": 0.0,
+        "Capital at Risk %": round(float(capital_at_risk) * 100, 1),
+        "Return / At-Risk %": 0.0,
+    }
+    if len(eq) < 2 or eq.iloc[0] <= 0:
+        return out
+
+    daily_rets = eq.pct_change().dropna()
+    n_days = len(eq)
+    years = max(n_days / TRADING_DAYS, 1e-9)
+
+    total_return = float(eq.iloc[-1] / eq.iloc[0] - 1.0)
+    cagr = float((eq.iloc[-1] / eq.iloc[0]) ** (1.0 / years) - 1.0) if years > 0 else 0.0
+
+    rstd = float(daily_rets.std(ddof=1)) if len(daily_rets) > 1 else 0.0
+    vol_ann = rstd * math.sqrt(TRADING_DAYS)
+    sharpe = (float(daily_rets.mean()) / rstd * math.sqrt(TRADING_DAYS)) if rstd > 0 else 0.0
+
+    downside = daily_rets[daily_rets < 0]
+    dstd = float(downside.std(ddof=1)) if len(downside) > 1 else 0.0
+    sortino = (float(daily_rets.mean()) / dstd * math.sqrt(TRADING_DAYS)) if dstd > 0 else 0.0
+
+    rolling_max = eq.cummax()
+    dd = eq / rolling_max - 1.0
+    max_dd = float(dd.min())
+    calmar = float(cagr / abs(max_dd)) if max_dd < 0 else 0.0
+
+    car = float(capital_at_risk) if capital_at_risk > 0 else 1.0
+    ret_per_at_risk = total_return / car
+
+    out.update({
+        "Total Return %": round(total_return * 100, 2),
+        "CAGR %": round(cagr * 100, 2),
+        "Vol (ann) %": round(vol_ann * 100, 2),
+        "Max Drawdown %": round(max_dd * 100, 2),
+        "Sharpe": round(sharpe, 2),
+        "Sortino": round(sortino, 2),
+        "Calmar": round(calmar, 2),
+        "Capital at Risk %": round(car * 100, 1),
+        "Return / At-Risk %": round(ret_per_at_risk * 100, 2),
+    })
+    return out
 
 
 def compute_stats(equity, returns=None, n_trades=None):

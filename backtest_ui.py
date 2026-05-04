@@ -15,6 +15,7 @@ from backtest_engine import (
     build_report_text, build_report_csv, build_report_docx, build_report_pdf,
     safe_filename,
     soxl_allocation_engine, simulate_allocation_engine, ALLOCATION_DEFAULTS,
+    simulate_call_sleeve_engine, CALL_SLEEVE_DEFAULTS, compute_risk_metrics,
 )
 from plotly.subplots import make_subplots
 from datetime import datetime as _dt2
@@ -1113,40 +1114,78 @@ def _render_allocation_chart(alloc_df, soxl_prices, floor, ceiling):
 
 
 def _allocation_engine_tab():
-    st.markdown("#### 🎯 SOXL Allocation Engine — Default Strategy")
+    st.markdown("#### 🎯 SOXL Allocation Engine — Default Strategy (20% Call Sleeve / 80% Cash)")
     st.caption(
-        "Continuous allocation engine. SOXL is mean-reverting against a QQQ-anchored "
-        "baseline: when SOXL drifts below the path, allocation rises; when it drifts above, "
-        "allocation falls. Allocation is rebalanced every bar — no discrete trades, no "
-        "holding periods, no z-scores. Floor and ceiling enforce 'never 0%, never 100%'. "
-        "A QQQ bear-regime filter scales allocation down (floor still holds). "
+        "**Capital structure:** 20% of notional sits in a long-SOXL call-options sleeve "
+        "(convex equity-equivalent exposure); 80% always sits in cash. The 20% sleeve "
+        "is sized continuously — between (sleeve × floor) and (sleeve × ceiling) of "
+        "total notional — based on SOXL's deviation from a QQQ-anchored baseline. "
+        "Continuous rebalance, no discrete trades, no holding periods. "
+        "Calls modeled with honest mark-to-market (delta + theta + convex P&L). "
         "Works on any window — even 2 data points."
     )
 
-    with st.expander("Engine parameters (continuous, floor / ceiling / regime multiplier)",
+    with st.expander("Sleeve & options parameters", expanded=False):
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            sleeve_pct = st.slider(
+                "Sleeve % of notional (capital at risk)", 0.05, 0.50,
+                CALL_SLEEVE_DEFAULTS["sleeve_pct"], step=0.01,
+                help="Maximum % of notional ever deployed into the call sleeve. "
+                     "The remainder always sits in cash.",
+                key="ae_sleeve",
+            )
+        with s2:
+            dte = st.slider(
+                "Days to expiry (new positions)", 14, 90,
+                CALL_SLEEVE_DEFAULTS["days_to_expiry"], step=1,
+                help="DTE of newly opened call positions. 30–60 is typical.",
+                key="ae_dte",
+            )
+        with s3:
+            roll_dte = st.slider(
+                "Roll trigger (DTE)", 1, 30,
+                CALL_SLEEVE_DEFAULTS["roll_at_dte"], step=1,
+                help="When remaining DTE drops below this, roll the position.",
+                key="ae_rolldte",
+            )
+        s4, s5, s6 = st.columns(3)
+        with s4:
+            money = st.slider(
+                "Moneyness (1.00 = ATM, 1.05 = 5% OTM)", 0.95, 1.10,
+                CALL_SLEEVE_DEFAULTS["moneyness"], step=0.01,
+                key="ae_money",
+            )
+        with s5:
+            vol_w = st.slider(
+                "Realized-vol window (days)", 5, 90,
+                CALL_SLEEVE_DEFAULTS["vol_window"], step=1,
+                help="Trailing window for σ used in BS mark-to-market.",
+                key="ae_volw",
+            )
+
+    with st.expander("Sleeve sizing — deviation engine (floor / ceiling / regime)",
                      expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             floor = st.slider(
-                "Floor (min allocation)", 0.02, 0.45,
+                "Floor (min sleeve fill)", 0.02, 0.45,
                 ALLOCATION_DEFAULTS["floor"], step=0.01,
-                help="Minimum exposure. The bottom is rarely the bottom. "
-                     "Spec enforces a hard 2% floor — never 0%.",
+                help="Min fill of the sleeve. Spec enforces a hard 2% floor — never 0%.",
                 key="ae_floor",
             )
         with c2:
             ceiling = st.slider(
-                "Ceiling (max allocation)", 0.55, 0.98,
+                "Ceiling (max sleeve fill)", 0.55, 0.98,
                 ALLOCATION_DEFAULTS["ceiling"], step=0.01,
-                help="Maximum exposure. The top is rarely the top. "
-                     "Spec enforces a hard 98% ceiling — never 100%.",
+                help="Max fill of the sleeve. Spec enforces a hard 98% ceiling — never 100%.",
                 key="ae_ceiling",
             )
         with c3:
             sensitivity = st.slider(
                 "Sensitivity", 0.5, 5.0,
                 ALLOCATION_DEFAULTS["sensitivity"], step=0.25,
-                help="How sharply allocation responds to deviation. Higher = more aggressive.",
+                help="How sharply sleeve fill responds to deviation. Higher = more aggressive.",
                 key="ae_sens",
             )
         c4, c5, c6 = st.columns(3)
@@ -1154,21 +1193,19 @@ def _allocation_engine_tab():
             bear_mult = st.slider(
                 "Bear-regime multiplier", 0.0, 1.0,
                 ALLOCATION_DEFAULTS["bear_multiplier"], step=0.05,
-                help="When QQQ is in a bear regime, multiply allocation by this. Floor still applies.",
+                help="When QQQ is in a bear regime, multiply sleeve fill by this. Floor still applies.",
                 key="ae_bearmult",
             )
         with c5:
             bear_dd = st.slider(
                 "Bear-regime trigger (QQQ drawdown)", 0.05, 0.30,
                 ALLOCATION_DEFAULTS["bear_drawdown"], step=0.01,
-                help="QQQ this far below its rolling max → bear regime active.",
                 key="ae_beardd",
             )
         with c6:
             bear_lb = st.slider(
                 "Bear-regime lookback (% of window)", 0.05, 0.50,
                 ALLOCATION_DEFAULTS["bear_lookback_frac"], step=0.05,
-                help="Window for QQQ rolling-max, as a fraction of the data range.",
                 key="ae_bearlb",
             )
 
@@ -1181,32 +1218,40 @@ def _allocation_engine_tab():
     if st.button("Run allocation engine", key="ae_run", type="primary"):
         soxl_df, qqq_df = _load_equities(start, end)
         # NEVER refuse, NEVER block — engine always returns a result.
-        # Fall back to empty Series when missing; the engine handles it.
         soxl_prices = soxl_df["adj_close"] if not soxl_df.empty else pd.Series(dtype=float)
         qqq_prices = qqq_df["adj_close"] if not qqq_df.empty else pd.Series(dtype=float)
 
         if soxl_df.empty or qqq_df.empty:
             st.info(
                 "No overlapping price data in the selected window — the engine "
-                "still returns the midpoint allocation per the spec's "
-                "'never refuse' rule."
+                "still returns a result per the spec's 'never refuse' rule."
             )
 
-        equity, daily_rets, alloc_df = simulate_allocation_engine(
+        sim = simulate_call_sleeve_engine(
             soxl_prices, qqq_prices,
+            sleeve_pct=sleeve_pct, days_to_expiry=dte, roll_at_dte=roll_dte,
+            moneyness=money, vol_window=vol_w,
             floor=floor, ceiling=ceiling, sensitivity=sensitivity,
             bear_multiplier=bear_mult, bear_drawdown=bear_dd,
             bear_lookback_frac=bear_lb,
         )
 
-        # --- Headline allocation card (today's recommendation) ---
+        equity = sim["equity_strategy"]
+        soxl_bh = sim["equity_soxl_bh"]
+        qqq_bh = sim["equity_qqq_bh"]
+        alloc_df = sim["alloc_df"]
+        sleeve_actual = sim["sleeve_alloc_actual"]
+        sleeve_target = sim["sleeve_alloc_target"]
+
+        # --- Headline recommendation card ---
         if not alloc_df.empty:
             current_alloc = float(alloc_df["allocation"].iloc[-1])
             current_dev = float(alloc_df["deviation"].iloc[-1])
             current_regime = "BEAR" if alloc_df["regime_mult"].iloc[-1] < 1.0 else "Normal"
+            current_sleeve_dollar_pct = current_alloc * sleeve_pct
             regime_color = "#c62828" if current_regime == "BEAR" else "#2e7d32"
-            dev_label = ("oversold (BUY tilt)" if current_dev < -0.01
-                         else "overbought (defensive tilt)" if current_dev > 0.01
+            dev_label = ("oversold (LOAD UP calls)" if current_dev < -0.01
+                         else "overbought (LAY OFF calls)" if current_dev > 0.01
                          else "near baseline")
             st.markdown(
                 f"""
@@ -1215,29 +1260,28 @@ def _allocation_engine_tab():
                     <div style="font-size:13px; opacity:0.85; letter-spacing:1px;">
                         ENGINE RECOMMENDATION ({alloc_df.index[-1].date()})
                     </div>
-                    <div style="font-size:46px; font-weight:800; margin:4px 0;">
-                        {current_alloc*100:.1f}% LONG SOXL
+                    <div style="font-size:38px; font-weight:800; margin:4px 0;">
+                        Sleeve fill: {current_alloc*100:.1f}%
+                        &nbsp;·&nbsp; Calls: {current_sleeve_dollar_pct*100:.2f}% of notional
                     </div>
                     <div style="font-size:16px;">
                         Deviation: <b>{current_dev:+.3f}</b> — {dev_label}
                         &nbsp;·&nbsp; QQQ regime:
                         <span style="background:{regime_color}; padding:2px 8px;
                                      border-radius:4px;">{current_regime}</span>
+                        &nbsp;·&nbsp; Cash: {(1 - current_sleeve_dollar_pct)*100:.2f}% of notional
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-        # --- Combined chart ---
+        # --- Combined chart: equity / normalized / sleeve allocation ---
         fig = _render_allocation_chart(alloc_df, soxl_prices, floor, ceiling)
-        soxl_bh = buy_and_hold_curve(soxl_prices)
-        qqq_bh = buy_and_hold_curve(qqq_prices)
-        # Add equity series to row 1
         if not equity.empty:
             fig.add_trace(go.Scatter(
                 x=equity.index, y=equity.values,
-                name="Allocation Engine", mode="lines",
+                name="Allocation Engine (Calls + Cash)", mode="lines",
                 line=dict(color="#1976D2", width=2.6),
             ), row=1, col=1)
         if not soxl_bh.empty:
@@ -1252,22 +1296,68 @@ def _allocation_engine_tab():
                 name="QQQ Buy & Hold", mode="lines",
                 line=dict(color="#43A047", width=2.0, dash="dash"),
             ), row=1, col=1)
+        # Overlay actual sleeve % onto the bottom row (target line is already there)
+        if not sleeve_actual.empty:
+            fig.add_trace(go.Scatter(
+                x=sleeve_actual.index, y=(sleeve_actual / max(sleeve_pct, 1e-9)) * 100,
+                name="Actual sleeve fill (mtm)", mode="lines",
+                line=dict(color="#FF8F00", width=1.8, dash="dot"),
+            ), row=3, col=1)
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- Stats ---
+        # --- Risk-adjusted metrics panel (REQUIRED by spec — always rendered) ---
+        st.markdown("##### 📊 Risk-Adjusted Metrics — strategy vs SOXL B&H vs QQQ B&H")
+        metrics_rows = [
+            compute_risk_metrics(equity, "Allocation Engine", capital_at_risk=sleeve_pct),
+            compute_risk_metrics(soxl_bh, "SOXL Buy & Hold", capital_at_risk=1.0),
+            compute_risk_metrics(qqq_bh, "QQQ Buy & Hold", capital_at_risk=1.0),
+        ]
+        metrics_df = pd.DataFrame(metrics_rows)
+        st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+        if len(equity) < 2:
+            st.caption(f"Window too short for meaningful stats ({len(equity)} bar(s)) — "
+                       "metrics shown as zeros. Engine still returned a recommendation.")
+
+        # Capital efficiency callout (only meaningful with real returns)
         if len(equity) >= 2:
-            stats_rows = [
-                {"Series": "Allocation Engine", **compute_stats(equity, returns=pd.Series(daily_rets))},
-                {"Series": "SOXL Buy & Hold",   **compute_stats(soxl_bh)},
-                {"Series": "QQQ Buy & Hold",    **compute_stats(qqq_bh)},
-            ]
-            st.dataframe(pd.DataFrame(stats_rows), use_container_width=True, hide_index=True)
-        else:
-            st.info(f"Window too short for performance stats ({len(equity)} bar(s)). "
-                    "Engine still returned an allocation per the spec.")
+            strat_ret = metrics_rows[0]["Total Return %"]
+            soxl_ret = metrics_rows[1]["Total Return %"]
+            strat_per_risk = metrics_rows[0]["Return / At-Risk %"]
+            soxl_per_risk = metrics_rows[1]["Return / At-Risk %"]
+            efficiency = (strat_per_risk / soxl_per_risk) if soxl_per_risk != 0 else float("nan")
+            ec1, ec2, ec3, ec4 = st.columns(4)
+            ec1.metric("Strategy total return", f"{strat_ret:.1f}%")
+            ec2.metric("SOXL B&H total return", f"{soxl_ret:.1f}%")
+            ec3.metric(f"Strategy return / {sleeve_pct*100:.0f}% at-risk",
+                       f"{strat_per_risk:.1f}%")
+            ec4.metric("Capital efficiency vs SOXL",
+                       f"{efficiency:.2f}×" if np.isfinite(efficiency) else "n/a",
+                       help="Strategy's return-per-at-risk-dollar divided by SOXL B&H's. "
+                            ">1× means more bang per dollar of capital actually exposed.")
+
+        # --- Sleeve / position diagnostics ---
+        with st.expander("Sleeve & position diagnostics"):
+            d1, d2, d3 = st.columns(3)
+            d1.metric("Avg actual sleeve % of notional",
+                      f"{(sim['sleeve_value'] / sim['equity_strategy'].replace(0, np.nan)).mean()*100:.2f}%")
+            d2.metric("Roll events", f"{len(sim['roll_events'])}")
+            d3.metric("Avg σ used (annualized)",
+                      f"{sim['realized_vol'].mean()*100:.1f}%")
+
+            sleeve_history = pd.DataFrame({
+                "Cash $": sim["cash_value"].round(4),
+                "Sleeve $ (mtm)": sim["sleeve_value"].round(4),
+                "Total $": sim["equity_strategy"].round(4),
+                "Target sleeve fill %": (sleeve_target * 100).round(2),
+                "Actual sleeve fill %": ((sleeve_actual / max(sleeve_pct, 1e-9)) * 100).round(2),
+                "Calls % of notional": (sleeve_actual * 100).round(2),
+                "σ (ann) %": (sim["realized_vol"] * 100).round(1),
+                "Contracts (eq)": sim["contracts_history"].round(2),
+            })
+            st.dataframe(sleeve_history.tail(500), use_container_width=True)
 
         # --- Allocation distribution + table ---
-        with st.expander("Allocation history (every bar)"):
+        with st.expander("Deviation / allocation panel (every bar)"):
             show = alloc_df.copy()
             show["soxl_norm"] = show["soxl_norm"].round(4)
             show["qqq_norm"] = show["qqq_norm"].round(4)
@@ -1275,12 +1365,9 @@ def _allocation_engine_tab():
             show["raw_allocation"] = (show["raw_allocation"] * 100).round(2)
             show["allocation"] = (show["allocation"] * 100).round(2)
             show = show.rename(columns={
-                "soxl_norm": "SOXL norm",
-                "qqq_norm": "QQQ norm",
-                "deviation": "Deviation",
-                "raw_allocation": "Raw alloc %",
-                "regime_mult": "Regime ×",
-                "allocation": "Final alloc %",
+                "soxl_norm": "SOXL norm", "qqq_norm": "QQQ norm",
+                "deviation": "Deviation", "raw_allocation": "Raw fill %",
+                "regime_mult": "Regime ×", "allocation": "Final fill %",
             })
             st.dataframe(show.tail(500), use_container_width=True)
 
@@ -1288,23 +1375,37 @@ def _allocation_engine_tab():
 
         # --- Downloads ---
         if len(equity) >= 2:
-            title = "SOXL Allocation Engine"
+            title = "SOXL Allocation Engine (Call Sleeve)"
             params = {
+                "sleeve_pct": sleeve_pct, "days_to_expiry": dte, "roll_at_dte": roll_dte,
+                "moneyness": money, "vol_window": vol_w,
                 "floor": floor, "ceiling": ceiling, "sensitivity": sensitivity,
                 "bear_multiplier": bear_mult, "bear_drawdown": bear_dd,
                 "bear_lookback_frac": bear_lb,
                 "start": start, "end": end,
             }
+            stats_rows = metrics_rows
             methodology = (
-                "Continuous allocation engine. Both SOXL and QQQ are normalized to 1.00 at the "
-                "start of the window. Deviation = SOXL_norm − QQQ_norm. The engine maps deviation "
-                "→ allocation via a tanh squashing function scaled by the expanding mean of "
-                "|deviation|, so the response self-calibrates to the local volatility regime. "
-                f"Allocation is held strictly inside (floor={floor:.0%}, ceiling={ceiling:.0%}) — "
-                "the spec's 'never 0%, never 100%' constraint. A QQQ bear-regime filter "
-                f"({bear_dd:.0%} below the rolling-max over the trailing {bear_lb:.0%} of the "
-                f"window) multiplies allocation by {bear_mult:.2f}, but the floor still applies. "
-                "Allocation is rebalanced every bar; the engine is lagged one bar to avoid look-ahead."
+                f"Capital structure: {sleeve_pct:.0%} of notional in long SOXL calls "
+                f"(the 'sleeve'); {(1-sleeve_pct):.0%} in cash at all times. The sleeve is "
+                f"sized between (sleeve × floor={floor:.0%}) and (sleeve × ceiling={ceiling:.0%}) "
+                "of total notional based on a deviation signal. Both SOXL and QQQ are "
+                "normalized to 1.00 at the start of the window. Deviation = SOXL_norm − QQQ_norm. "
+                "The engine maps deviation → sleeve fill via a tanh squashing function scaled by "
+                "the expanding mean of |deviation|, so the response self-calibrates to the local "
+                f"volatility regime. A QQQ bear-regime filter ({bear_dd:.0%} below rolling-max "
+                f"over trailing {bear_lb:.0%} of the window) multiplies sleeve fill by "
+                f"{bear_mult:.2f}; the floor still wins. "
+                f"Calls modeled with honest BS mark-to-market (σ = trailing {vol_w}-day realized "
+                f"vol of SOXL, clipped 20–200%), {dte}-day expiries opened at "
+                f"{money:.2f}× spot moneyness and rolled at {roll_dte} DTE. "
+                "Sizing rule (asymmetric resize, daily evaluation): sell down freely when the "
+                "deviation signal weakens (lock in profits / shrink exposure), refill the sleeve "
+                "ONLY at roll events. This honors both 'continuous rebalancing' and 'limited "
+                "downside = premium' — never throws additional cash at decaying premium "
+                "mid-cycle. Sleeve target is lagged one bar to avoid look-ahead. No bid-ask "
+                "spread or slippage modeled. Risk metrics include Sharpe, Sortino, Calmar, "
+                "and return per dollar of capital actually at risk (sleeve_pct, vs 100% for B&H)."
             )
             _render_download_buttons(title, params, methodology, stats_rows,
                                      date_range=(soxl_df.index.min().date(),

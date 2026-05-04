@@ -1,0 +1,68 @@
+Instructions for Replit: SOXL Allocation Engine (Revised)
+Replace the prior allocation engine with the following. This is the default strategy for the backtest.
+Capital Structure
+The strategy never holds SOXL stock directly. Instead:
+
+20% of notional capital is deployed into SOXL call options (long calls, used for convex equity-equivalent exposure)
+80% remains in cash at all times
+The 20% options sleeve is what gets sized up and down based on the deviation signal — not the full notional
+
+The point: same directional exposure to SOXL upside, but with ~20% of the capital actually at risk. Options provide convex exposure (limited downside = premium paid, asymmetric upside).
+Allocation Rule (Applied to the 20% Options Sleeve)
+The 20% options sleeve is sized continuously based on SOXL's deviation from its QQQ-anchored baseline:
+
+As SOXL deviates further below the QQQ-anchored baseline (oversold) → load up: deploy more of the 20% sleeve into calls
+As SOXL deviates further above the QQQ-anchored baseline (overbought) → lay off: reduce the calls position, hold more cash within the sleeve
+Continuous, proportional to magnitude of deviation
+Never 100% of the sleeve deployed (bottom is almost never the bottom)
+Never 0% of the sleeve deployed (top is almost never the top)
+Floor and ceiling apply within the sleeve
+
+Anchor
+QQQ's cumulative behavior, normalized to a common starting point with SOXL at the beginning of the lookback window. Not a fitted trendline. Not QQQ price directly.
+Deviation
+Gap between SOXL's normalized position and QQQ's normalized position. Negative = oversold. Positive = overbought.
+Regime Filter
+When QQQ is in a sustained downtrend, scale the sleeve allocation down with a multiplier well below 1. When QQQ is not in a bear regime, allocation operates normally. Floor still maintained.
+Rebalancing
+Continuous. No discrete entries, no discrete exits, no holding periods. At each evaluation point, recompute deviation and resize the options sleeve accordingly.
+Options Modeling
+For backtest purposes, model the 20% sleeve as long SOXL calls with reasonable assumptions:
+
+Use ATM or slightly OTM calls
+Standard expiration (e.g., 30–60 days), rolled before expiry
+Premium decay and delta exposure modeled
+Convex P&L: limited downside (premium), asymmetric upside
+
+Keep the options model simple but honest — don't fake unrealistic returns. The goal is to show the real shape of convex exposure, not pretend options are free leverage.
+Time Frame Handling
+Backtest must work for any window the user selects, from one second to multi-year. Never return "not enough data." Adapt lookback, normalization, and regime detection to whatever data exists. Always return a result.
+Backtest Output (Required)
+The backtest must display both:
+1. Absolute return comparison:
+
+Strategy cumulative return
+SOXL buy-and-hold cumulative return
+QQQ buy-and-hold cumulative return (for reference)
+Plotted on the same chart over the selected window
+
+2. Risk-adjusted metrics (table or panel):
+
+Max drawdown (strategy vs SOXL B&H)
+Sharpe ratio (strategy vs SOXL B&H)
+Sortino ratio (strategy vs SOXL B&H)
+Volatility / annualized standard deviation (strategy vs SOXL B&H)
+Capital at risk (strategy: ~20% of notional; SOXL B&H: 100%)
+Return per unit of capital at risk (strategy return / 0.20 vs SOXL B&H return / 1.00) — this is the capital efficiency number
+Calmar ratio (return / max drawdown)
+
+Both views must be visible in the backtest output. The absolute return tells the surface story; the risk-adjusted metrics tell the actual story.
+What This Engine Is NOT
+
+Not buying SOXL stock
+Not a discrete trade signal generator
+Not based on z-scores, log-linear fits, fixed thresholds, or holding periods
+Not Heston, Black-Scholes pricing, or volatility surface fitting
+
+Default Strategy
+This is the default strategy that loads when the user runs the backtest. Other strategies remain selectable as alternatives. Do not break existing infrastructure — wire this in as the default.
