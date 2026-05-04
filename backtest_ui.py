@@ -483,10 +483,34 @@ def _mean_generator_tab():
         soxl_df = _slice(get_equity_history("SOXL"), start, end)
         qqq_df = _slice(get_equity_history("QQQ"), start, end)
 
-        rz = _expanding_relative_z(t_df["adj_close"], b_df["adj_close"], min_train=int(min_train))
+        # Auto-clamp warm-up so the selected range always works
+        common_bars = len(t_df.index.intersection(b_df.index))
+        requested_min_train = int(min_train)
+        if common_bars < requested_min_train + 30:
+            effective_min_train = max(60, common_bars - 30)
+            if effective_min_train < 60:
+                st.error(
+                    f"Selected range only has {common_bars} overlapping {target}/{benchmark} "
+                    f"bars — need at least 90 to run a meaningful backtest. Pick a longer range "
+                    f"(≥6 months recommended)."
+                )
+                return
+            st.info(
+                f"📏 Selected range has {common_bars} overlapping bars, but warm-up was set to "
+                f"{requested_min_train}. **Auto-reducing warm-up to {effective_min_train} bars** "
+                f"so the backtest can run on this range. For a longer warm-up, pick a longer "
+                f"date range (≥{(requested_min_train + 30) // 252 + 1} years recommended for "
+                f"warm-up={requested_min_train})."
+            )
+        else:
+            effective_min_train = requested_min_train
+
+        rz = _expanding_relative_z(t_df["adj_close"], b_df["adj_close"], min_train=effective_min_train)
         if rz.empty:
-            st.warning(f"Not enough overlapping history to backtest {target} vs {benchmark} "
-                       f"(need at least {min_train + 30} common bars).")
+            st.warning(
+                f"Couldn't compute relative-z for {target} vs {benchmark} on this range. "
+                f"Try a longer date range or different asset pair."
+            )
             return
 
         # Trade execution on the target asset
