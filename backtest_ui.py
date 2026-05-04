@@ -29,19 +29,59 @@ from custom_strategy import (
 def _date_range_picker(key_prefix, max_years=EQUITY_MAX_YEARS):
     today = datetime.now().date()
     min_date = today - timedelta(days=max_years * 365)
+    start_key = f"{key_prefix}_start"
+    end_key = f"{key_prefix}_end"
+
+    # Initialise session state once with a sensible default (5 years)
+    if start_key not in st.session_state:
+        st.session_state[start_key] = max(today - timedelta(days=5 * 365), min_date)
+    if end_key not in st.session_state:
+        st.session_state[end_key] = today
+
+    # Quick-preset buttons — INSTANT range set, bypasses the calendar popup
+    # entirely. Each button sets session state and triggers a rerun so the
+    # date_input widgets read the new values from session state.
+    preset_cols = st.columns(9)
+    presets = [
+        ("1M", 30), ("3M", 90), ("6M", 180), ("1Y", 365), ("2Y", 730),
+        ("3Y", 1095), ("5Y", 1825), ("10Y", 3650),
+        ("Max", max_years * 365),
+    ]
+    for col, (label, days) in zip(preset_cols, presets):
+        with col:
+            if st.button(label, key=f"{key_prefix}_preset_{label}",
+                         use_container_width=True,
+                         help=f"Set range to last {label}"):
+                st.session_state[start_key] = max(today - timedelta(days=days), min_date)
+                st.session_state[end_key] = today
+                st.rerun()
+
+    # Date inputs — each widget has FIXED, non-chained bounds covering the full
+    # allowed range. Chaining `end.min_value = start + N` causes Streamlit to
+    # reject edits when they'd temporarily violate the cross-constraint (picker
+    # feels "stuck"). We validate the start ≤ end relationship after both render.
     c1, c2 = st.columns(2)
     with c1:
         start = st.date_input(
-            "Backtest start", value=min_date,
-            min_value=min_date, max_value=today - timedelta(days=30),
-            key=f"{key_prefix}_start",
+            "Backtest start",
+            min_value=min_date, max_value=today,
+            key=start_key,
         )
     with c2:
         end = st.date_input(
-            "Backtest end", value=today,
-            min_value=start + timedelta(days=30), max_value=today,
-            key=f"{key_prefix}_end",
+            "Backtest end",
+            min_value=min_date, max_value=today,
+            key=end_key,
         )
+
+    # Auto-correct without forcing a rerun loop
+    if end <= start:
+        new_end = min(start + timedelta(days=30), today)
+        st.warning(f"End must be after start — using {new_end} as end date.")
+        end = new_end
+    elif (end - start).days < 30:
+        st.info(f"Window is only {(end - start).days} days — backtests need ≥30 days "
+                "of data to be meaningful.")
     return start, end
 
 
