@@ -370,46 +370,6 @@ with tab_chart:
         default=None,
     )
 
-    # === Mean Generator & Cross-Asset Deviation ===
-    from mean_deviation import render_mean_deviation_section
-    md_assets = {"SOXL": data["Close"]}
-    if st.session_state.show_qqq:
-        try:
-            _q = fetch_qqq_data()
-            if not _q.empty:
-                md_assets["QQQ"] = _q["Close"]
-        except Exception:
-            pass
-    if st.session_state.show_tqqq:
-        try:
-            _t = fetch_tqqq_data()
-            if not _t.empty:
-                md_assets["TQQQ"] = _t["Close"]
-        except Exception:
-            pass
-    if st.session_state.show_tlt:
-        try:
-            _tl = fetch_tlt_data()
-            if not _tl.empty:
-                md_assets["TLT"] = _tl["Close"]
-        except Exception:
-            pass
-    if st.session_state.show_xlu:
-        try:
-            _x = fetch_xlu_data()
-            if not _x.empty:
-                md_assets["XLU"] = _x["Close"]
-        except Exception:
-            pass
-    if st.session_state.show_vix:
-        try:
-            _v = fetch_vix_data()
-            if not _v.empty:
-                md_assets["VIX"] = _v["Close"]
-        except Exception:
-            pass
-    render_mean_deviation_section(md_assets)
-
     if result is not None:
         action = result.get("action")
         if action == "set_all":
