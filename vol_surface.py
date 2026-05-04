@@ -9,11 +9,21 @@ from scipy.spatial import cKDTree
 
 try:
     from py_vollib.black_scholes.implied_volatility import implied_volatility as bs_iv
+    from py_vollib.black_scholes import black_scholes as bs_price
     HAS_VOLLIB = True
 except Exception:
     HAS_VOLLIB = False
 
 RISK_FREE_RATE = 0.045
+
+# --- Signal-quality guardrails (eliminate fake 1000%+ edges) ---
+MIN_FITTED_IV = 0.05      # Spline can interpolate to absurdly tiny IVs at the wings.
+                          # Anything below 5% IV is unrealistic for SOXL → drop.
+MAX_RESIDUAL_CAP = 1.0    # Clamp model discrepancy to ±100%
+MIN_MID_PRICE = 1.00      # Sub-$1 options are dominated by tick noise, not edge
+DEEP_OTM_PUT_FLOOR = 0.50 # Exclude puts with strike < 50% of spot (tail-only contracts)
+MAX_PRICE_DISCREPANCY = 0.50  # Drop signals where BS(fitted_iv) and market mid disagree
+                              # by more than 50% — sanity check against IV-space noise
 
 
 def _compute_iv_fallback(mid, spot, strike, t_years, flag):
@@ -25,8 +35,18 @@ def _compute_iv_fallback(mid, spot, strike, t_years, flag):
         return np.nan
 
 
+def _bs_model_price(spot, strike, t_years, vol, flag):
+    """Black-Scholes price for sanity-checking model vs market."""
+    if not HAS_VOLLIB:
+        return np.nan
+    try:
+        return float(bs_price(flag, spot, strike, t_years, RISK_FREE_RATE, vol))
+    except Exception:
+        return np.nan
+
+
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.15, min_oi=50, min_vol=1):
+def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.25, min_oi=50, min_vol=1):
     ticker = yf.Ticker(ticker_symbol)
     expirations = ticker.options
     if not expirations:
@@ -39,7 +59,8 @@ def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.15, min_oi=50, min_vo
     rejection_log = {}
     today = datetime.now().date()
     for exp_str in expirations:
-        rej = {"spread": 0, "liquidity": 0, "iv_fail": 0, "no_quote": 0, "kept": 0}
+        rej = {"spread": 0, "liquidity": 0, "iv_fail": 0, "no_quote": 0,
+               "thin_price": 0, "deep_otm_put": 0, "kept": 0}
         try:
             exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
             dte = (exp_date - today).days
@@ -56,6 +77,7 @@ def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.15, min_oi=50, min_vo
                     yf_iv = float(row.get("impliedVolatility", 0) or 0)
                     vol = float(row.get("volume", 0) or 0)
                     oi = float(row.get("openInterest", 0) or 0)
+                    # Require live two-sided quote (no last-price fallback — too stale)
                     if bid <= 0 or ask <= 0 or strike <= 0:
                         rej["no_quote"] += 1
                         continue
@@ -63,10 +85,19 @@ def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.15, min_oi=50, min_vo
                     if mid <= 0:
                         rej["no_quote"] += 1
                         continue
+                    # Floor on price: sub-$1 options are dominated by tick noise
+                    if mid < MIN_MID_PRICE:
+                        rej["thin_price"] += 1
+                        continue
+                    # Drop deep OTM puts (tail-protection only, IV is unreliable)
+                    if kind == "p" and strike < DEEP_OTM_PUT_FLOOR * spot:
+                        rej["deep_otm_put"] += 1
+                        continue
                     spread_pct = (ask - bid) / mid
                     if spread_pct > spread_cap:
                         rej["spread"] += 1
                         continue
+                    # Liquidity: oi ≥ 50, volume ≥ 1 (volume == 0 stale)
                     if oi < min_oi or vol < min_vol:
                         rej["liquidity"] += 1
                         continue
@@ -164,11 +195,15 @@ def fit_per_expiry_spline(df):
             for idx in grp.index:
                 lm = df.loc[idx, "log_moneyness"]
                 fit_val = float(spline(lm))
-                if np.isfinite(fit_val) and fit_val > 0:
+                # Floor: spline can interpolate to nonsensically tiny IVs at the wings,
+                # producing huge spurious residuals. Reject anything below MIN_FITTED_IV.
+                if np.isfinite(fit_val) and fit_val >= MIN_FITTED_IV:
                     df.loc[idx, "fitted_iv"] = fit_val
         except Exception:
             continue
-    df["residual_pct"] = (df["iv"] - df["fitted_iv"]) / df["fitted_iv"]
+    raw_residual = (df["iv"] - df["fitted_iv"]) / df["fitted_iv"]
+    # Cap the discrepancy at ±100% so a single bad fit can't pollute the candidate list
+    df["residual_pct"] = raw_residual.clip(lower=-MAX_RESIDUAL_CAP, upper=MAX_RESIDUAL_CAP)
     return df
 
 
@@ -280,10 +315,34 @@ def skew_25d(df, target_dte=30, tol_dte=15):
     return float(puts["iv"].median() - calls["iv"].median())
 
 
-def detect_anomalies(df_fitted, residual_thresh=0.05):
+def detect_anomalies(df_fitted, residual_thresh=0.05, spot=None):
     if df_fitted.empty:
         return pd.DataFrame(), pd.DataFrame()
     df = df_fitted.dropna(subset=["fitted_iv", "residual_pct"]).copy()
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # --- Sanity check: BS(fitted_iv) vs market mid ---
+    # If model and market prices disagree by more than MAX_PRICE_DISCREPANCY,
+    # the IV-space residual is untrustworthy → discard.
+    if spot is not None and HAS_VOLLIB and not df.empty:
+        keep_mask = []
+        model_prices = []
+        for _, r in df.iterrows():
+            t_years = max(int(r["dte"]), 1) / 365.0
+            mp = _bs_model_price(spot, float(r["strike"]), t_years,
+                                 float(r["fitted_iv"]), str(r["kind"]))
+            mkt = float(r["mid"])
+            if not np.isfinite(mp) or mp <= 0:
+                keep_mask.append(False)
+                model_prices.append(np.nan)
+                continue
+            disc = abs(mp - mkt) / max(mkt, 1.0)
+            keep_mask.append(disc <= MAX_PRICE_DISCREPANCY)
+            model_prices.append(mp)
+        df["model_price"] = model_prices
+        df = df[pd.Series(keep_mask, index=df.index)].copy()
+
     if df.empty:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -310,12 +369,12 @@ def render_signals_table(df_signals, side):
         bg = "#FFEBEE"
         border = "#D32F2F"
         title_color = "#B71C1C"
-        title = "SELL CANDIDATES (overpriced — market IV > fitted)"
+        title = "SELL-side MODEL DISCREPANCY (market IV above model fit)"
     else:
         bg = "#E8F5E9"
         border = "#2E7D32"
         title_color = "#1B5E20"
-        title = "BUY CANDIDATES (underpriced — market IV < fitted)"
+        title = "BUY-side MODEL DISCREPANCY (market IV below model fit)"
 
     st.markdown(
         f"<div style='background:{bg}; border-left:5px solid {border}; padding:8px 14px; "
@@ -347,12 +406,16 @@ def render_signals_table(df_signals, side):
     show["Mid"] = show["mid"].round(2)
     show["Mkt IV %"] = (show["iv"] * 100).round(1)
     show["Fit IV %"] = (show["fitted_iv"] * 100).round(1)
-    show["Residual %"] = (show["residual_pct"] * 100).round(1)
+    show["Discrepancy %"] = (show["residual_pct"] * 100).round(1)
     show["Z"] = show["z"].round(2)
     show["OI"] = show["open_interest"].astype(int)
     show["Vol"] = show["volume"].astype(int)
     cols = ["Contract", "Expiry", "DTE", "Bid", "Ask", "Mid",
-            "Mkt IV %", "Fit IV %", "Residual %", "Z", "OI", "Vol"]
+            "Mkt IV %", "Fit IV %", "Discrepancy %", "Z", "OI", "Vol"]
+    if "model_price" in show.columns:
+        show["Model $"] = show["model_price"].round(2)
+        cols = ["Contract", "Expiry", "DTE", "Bid", "Ask", "Mid", "Model $",
+                "Mkt IV %", "Fit IV %", "Discrepancy %", "Z", "OI", "Vol"]
     st.dataframe(show[cols], use_container_width=True, hide_index=True)
 
 
@@ -624,8 +687,8 @@ def render_vol_surface_tab():
         fig = render_surface_figure(grid_money, grid_days, iv_grid, spot, title)
         st.plotly_chart(fig, use_container_width=True)
 
-    calls_buys, calls_sells = detect_anomalies(calls_fitted)
-    puts_buys, puts_sells = detect_anomalies(puts_fitted)
+    calls_buys, calls_sells = detect_anomalies(calls_fitted, spot=spot)
+    puts_buys, puts_sells = detect_anomalies(puts_fitted, spot=spot)
     all_buys = pd.concat([calls_buys, puts_buys], ignore_index=True) if not (calls_buys.empty and puts_buys.empty) else pd.DataFrame()
     all_sells = pd.concat([calls_sells, puts_sells], ignore_index=True) if not (calls_sells.empty and puts_sells.empty) else pd.DataFrame()
 
