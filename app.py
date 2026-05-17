@@ -9,6 +9,7 @@ from strategy_builder import generate_strategy, parse_strategy_json, render_stra
 from vol_surface import render_vol_surface_tab
 from dislocation import render_dislocation_tab
 from backtest_ui import render_backtest_tab
+from diagnostic import render_diagnostic_tab
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
@@ -242,7 +243,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
         else:
             st.metric(label=label, value="N/A")
 
-tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest"])
+tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
@@ -1371,3 +1372,6 @@ with tab_strategy:
                     st.warning("The strategy document had a formatting issue. Please try saying 'generate the strategy again' to retry.")
                 else:
                     st.markdown(response_text)
+
+with tab_diag:
+    render_diagnostic_tab()
