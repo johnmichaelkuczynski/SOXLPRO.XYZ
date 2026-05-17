@@ -1,0 +1,20 @@
+{
+  "name": "soxl-r1-harness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "R1 synthetic user-agent harness for end-to-end testing the SOXL Analysis Platform",
+  "main": "run.mjs",
+  "scripts": {
+    "start": "node run.mjs",
+    "smoke": "SKIP_FUNCTIONS=7,16,19 node run.mjs",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "playwright": "^1.48.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
