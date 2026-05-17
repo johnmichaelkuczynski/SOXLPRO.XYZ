@@ -1,0 +1,272 @@
+theory-transformer/
+│
+├── client/                                  # FRONTEND (React + Vite + TypeScript)
+│   ├── index.html                           # HTML shell, OG/Twitter meta tags, app title
+│   └── src/
+│       ├── main.tsx                         # App entry point, renders React root with QueryClientProvider
+│       ├── App.tsx                          # Router setup (wouter): "/" → Home, "/admin" → AdminPage,
+│       │                                    # plus TooltipProvider, Toaster, QueryClientProvider
+│       │                                    # (no auth wrapper - app is currently open-access)
+│       │
+│       ├── pages/
+│       │   ├── home.tsx                     # MAIN APP (~270 lines)
+│       │   │                                # - Renders 11 functions (F0–F10) via FunctionRow / DualInputRow
+│       │   │                                # - Model selector (Zhi 1–4) - provider names fully hidden
+│       │   │                                # - Tab system: Functions | Axiom Library | Axiom Builder | Formalizer
+│       │   │                                # - Presets sidebar integration (loads canned input + instructions)
+│       │   │                                # - Holds FunctionInputs state keyed by function id
+│       │   │                                # - Handles dual-input <<<SEPARATOR>>> parsing on preset load
+│       │   │
+│       │   ├── admin.tsx                    # ADMIN PANEL (~405 lines)
+│       │   │                                # - Lists all instruction_sets rows from PostgreSQL
+│       │   │                                # - In-place edit of instructions + examples per function_key
+│       │   │                                # - "Seed" and "Export" instruction-set buttons
+│       │   │                                # - Used to fine-tune DB prompts without redeploying
+│       │   │
+│       │   └── not-found.tsx                # 404 page
+│       │
+│       ├── components/
+│       │   ├── function-row.tsx             # SINGLE-INPUT FUNCTION CARD (~430 lines)
+│       │   │                                # - One textarea (input), one textarea (instructions)
+│       │   │                                # - "Process" button → POST /api/process
+│       │   │                                # - Output panel with streaming-style display
+│       │   │                                # - Subfunction dropdown (per function id)
+│       │   │                                # - F10 batch-mode toggle → POST /api/cc/batch
+│       │   │
+│       │   ├── dual-input-row.tsx           # TWO-INPUT FUNCTION CARD (~385 lines)
+│       │   │                                # - Used by F2, F3, F5, F6 (two-argument functions)
+│       │   │                                # - Two side-by-side textareas (System A / Base, System B / Extended)
+│       │   │                                # - Joins them with <<<SEPARATOR>>> before submitting
+│       │   │                                # - Custom labels per function (e.g. "Base Theory" / "Extended Theory")
+│       │   │
+│       │   ├── presets-sidebar.tsx          # CANNED PRESETS LIBRARY (~3600 lines)
+│       │   │                                # - Hundreds of pre-built input + instruction pairs
+│       │   │                                # - Organized by function id (F0–F10) and subfunction
+│       │   │                                # - Click a preset → loads into the matching function row
+│       │   │                                # - Includes paired presets using <<<SEPARATOR>>> for dual-input
+│       │   │
+│       │   ├── axiom-library.tsx            # AXIOM LIBRARY TAB (~1900 lines)
+│       │   │                                # - Browsable catalog of classical axiom systems
+│       │   │                                #   (group theory, lattices, orders, set theory, etc.)
+│       │   │                                # - Click → copies axioms into clipboard / function input
+│       │   │
+│       │   ├── axiom-builder.tsx            # AXIOM BUILDER TAB (~405 lines)
+│       │   │                                # - "BUILD SET" mode: produces single axiom system
+│       │   │                                # - "BUILD PAIR" mode: produces System A + System B
+│       │   │                                #   with independent "Copy A" / "Copy B" buttons
+│       │   │                                # - <<<SEPARATOR>>> auto-detection for pair output
+│       │   │
+│       │   ├── batch-execution-panel.tsx    # F10 BATCH MODE PANEL (~190 lines)
+│       │   │                                # - Domain checklist (23 F10 domains)
+│       │   │                                # - Submits batch job → POST /api/cc/batch
+│       │   │                                # - Polls GET /api/cc/job/:jobId for status
+│       │   │
+│       │   ├── batch-results-accordion.tsx  # BATCH RESULT VIEWER (~200 lines)
+│       │   │                                # - Renders mt_interpretations rows per domain
+│       │   │                                # - Each domain collapsible: universe, symbol mappings, verifications
+│       │   │
+│       │   ├── chat-interface.tsx           # AI CHAT SIDEBAR (~290 lines)
+│       │   │                                # - Conversational assistant for help / clarification
+│       │   │                                # - POST /api/chat with persistent message history
+│       │   │
+│       │   ├── formalizer-console.tsx       # FORMALIZER TAB (~250 lines)
+│       │   │                                # - Natural-language → first-order logic axiomatization
+│       │   │
+│       │   └── ui/                          # shadcn/ui components (Radix primitives, ~55 files)
+│       │       ├── button.tsx, dialog.tsx, tabs.tsx, scroll-area.tsx,
+│       │       ├── select.tsx, textarea.tsx, badge.tsx, card.tsx,
+│       │       ├── toast.tsx, accordion.tsx, dropdown-menu.tsx, ...
+│       │       └── (all standard shadcn primitives)
+│       │
+│       ├── lib/
+│       │   ├── api.ts                       # CLIENT API HELPERS (~55 lines)
+│       │   │                                # - LLM type ("Zhi 1" | "Zhi 2" | "Zhi 3" | "Zhi 4")
+│       │   │                                # - processRequest(), chatRequest() wrappers
+│       │   │
+│       │   ├── function-examples.ts         # EXAMPLE INPUT CATALOG (~385 lines)
+│       │   │                                # - Worked examples per function id (loadable into inputs)
+│       │   │
+│       │   ├── normalizer.ts                # PASTE NORMALIZATION (~90 lines)
+│       │   │                                # - Cleans malformed clipboard content (PDFs, Word)
+│       │   │                                # - Strips smart quotes, normalizes whitespace, fixes bullets
+│       │   │
+│       │   ├── mock-ai.ts                   # MOCK AI RESPONDER (~75 lines)
+│       │   │                                # - Offline fallback responses for dev/test
+│       │   │
+│       │   ├── queryClient.ts               # React Query setup
+│       │   ├── utils.ts                     # cn() class merger (tailwind-merge + clsx)
+│       │   └── (no Zustand - state is local React state in Home + React Query for server data)
+│       │
+│       └── hooks/
+│           ├── use-mobile.tsx               # Mobile breakpoint detection
+│           └── use-toast.ts                 # Toast notification hook
+│
+├── server/                                  # BACKEND (Express + Node.js + TypeScript)
+│   ├── index.ts                             # Server entry (~100 lines)
+│   │                                        # - Express setup, registers routes
+│   │                                        # - Vite middleware in dev, static serve in prod
+│   │                                        # - Listens on PORT (single port, frontend + backend)
+│   │
+│   ├── vite.ts                              # Vite dev-mode middleware integration
+│   ├── static.ts                            # Production static-file serving
+│   │
+│   ├── routes.ts                            # API ENDPOINTS (~430 lines)
+│   │                                        # ─────────────────────────────────────────────────────
+│   │                                        # INSTRUCTION SET MANAGEMENT (admin panel)
+│   │                                        #   GET    /api/instructions             - list all presets
+│   │                                        #   GET    /api/instructions/:functionKey - one preset
+│   │                                        #   PUT    /api/instructions/:functionKey - upsert preset
+│   │                                        #   GET    /api/export-instructions      - JSON dump
+│   │                                        #   POST   /api/seed-instructions        - reseed from seed-data.ts
+│   │                                        #
+│   │                                        # CORE PROCESSING
+│   │                                        #   POST   /api/process                  - main function dispatch
+│   │                                        #     - 5-layer fallback chain:
+│   │                                        #       (1) user-supplied instructions
+│   │                                        #       (2) subfunction DB lookup (e.g. f10-mathematical)
+│   │                                        #       (3) main-function DB lookup (e.g. find-an-interpretation)
+│   │                                        #       (4) hardcoded DEFAULT_INSTRUCTIONS map
+│   │                                        #       (5) generic fallback string
+│   │                                        #     - Splits <<<SEPARATOR>>> for dual-input functions
+│   │                                        #     - Calls ai-service.processWithAI()
+│   │                                        #
+│   │                                        #   POST   /api/chat                     - chat assistant
+│   │
+│   │                                        # CROSS-CHUNK COHERENCE (CC) - F10 BATCH MODE
+│   │                                        #   GET    /api/cc/domains               - list 23 F10 domains
+│   │                                        #   POST   /api/cc/batch                 - start F10 batch job (all 23 or selected)
+│   │                                        #   POST   /api/cc/process               - single-domain CC run
+│   │                                        #   GET    /api/cc/job/:jobId            - job status + final output
+│   │                                        #   GET    /api/cc/job/:jobId/chunks     - per-chunk progress
+│   │                                        #   GET    /api/cc/job/:jobId/interpretations - per-domain results
+│   │                                        #
+│   │                                        # HEALTH
+│   │                                        #   GET    /api/health                   - {ok: true}
+│   │
+│   ├── ai-service.ts                        # LLM PROVIDER ABSTRACTION (~1825 lines)
+│   │                                        # - Unified interface for 4 providers, branded as Zhi 1–4:
+│   │                                        #     Zhi 1 → xAI Grok (OpenAI-compatible at api.x.ai)
+│   │                                        #     Zhi 2 → OpenAI (gpt-4o family)
+│   │                                        #     Zhi 3 → Anthropic Claude
+│   │                                        #     Zhi 4 → DeepSeek (OpenAI-compatible at api.deepseek.com)
+│   │                                        # - getInstructionsFromDB(functionName) - DB lookup helper
+│   │                                        # - refineInstructions() - merges user + DB instructions
+│   │                                        # - buildPrompt(input, instructions, functionName, explain)
+│   │                                        # - callSingleProvider() - one-shot LLM call
+│   │                                        # - processWithFailover() - retries across providers on rate-limit/error
+│   │                                        # - processWithAI(request) - PUBLIC: main entry, returns AIResponse
+│   │                                        # - chatWithAI(message, model, history) - PUBLIC: chat endpoint
+│   │                                        # - callLLMDirect() - low-level escape hatch used by cc-engine
+│   │                                        # - Per-function specialized prompt blocks (F1–F10) embedded inline
+│   │                                        #   (this is why the file is large - each function has its own
+│   │                                        #    rigorous prompt with calibration examples)
+│   │
+│   ├── cc-engine.ts                         # CROSS-CHUNK COHERENCE ENGINE (~720 lines)
+│   │                                        # Three-pass architecture for F10 batch / long inputs:
+│   │                                        #
+│   │                                        # PASS 1 - SKELETON EXTRACTION
+│   │                                        #   extractSkeleton(input, model) → FormalSkeleton
+│   │                                        #   { primitives[], axioms[], definitions[], constants[] }
+│   │                                        #
+│   │                                        # PASS 2 - CHUNK PROCESSING
+│   │                                        #   processChunk(domain, skeleton, dbInstructions) → ChunkDelta
+│   │                                        #   - Each F10 domain processed independently
+│   │                                        #   - Uses domain-specific DB preset (f10-mathematical, f10-chemical, etc.)
+│   │                                        #   - MissingPresetError thrown if preset missing (fail-fast, no silent fallback)
+│   │                                        #
+│   │                                        # PASS 3 - STITCH VERIFICATION
+│   │                                        #   verifyCompleteness(skeleton, deltas) → CCViolation[]
+│   │                                        #   - Ensures every axiom + primitive was addressed
+│   │                                        #   - Reports missing-axiom, missing-primitive, contradiction violations
+│   │
+│   │                                        # KEY HELPERS:
+│   │                                        # - normalizeFunctionType(s) → canonical hyphen-separated DB key
+│   │                                        #   (handles "F10", "Function 10:", "Find an Interpretation", etc.)
+│   │                                        # - getDBInstructions(functionType, subfunction, required)
+│   │                                        #   throws MissingPresetError when required and not found
+│   │                                        # - getDBInstructionsForDomain(domain) - F10 domain-specific (NO fallback)
+│   │                                        # - needsCC(input, functionType) - triggers CC when axiom count
+│   │                                        #   or input length crosses CC_THRESHOLDS
+│   │                                        # - parseInterpretation(output, domain) - structured extraction
+│   │                                        #   for mt_interpretations rows
+│   │
+│   │                                        # CONSTANTS:
+│   │                                        # - F10_DOMAINS[] (23 domains, grouped A–E)
+│   │                                        # - DOMAIN_TO_DB_KEY{} (CC domain name → f10-* preset key)
+│   │                                        # - SHORT_FORM_MAP{0..10} (integer function id → DB key)
+│   │                                        # - CC_THRESHOLDS { minAxiomCount, minInputLength }
+│   │
+│   │                                        # PUBLIC ENTRYPOINTS:
+│   │                                        # - runWithCC(CCRequest) → CCResult
+│   │                                        # - runF10BatchMode(input, model, selectedDomains?) → jobId
+│   │                                        # - getJobStatus(jobId), getJobChunks(jobId)
+│   │
+│   ├── storage.ts                           # DATABASE INTERFACE (~150 lines)
+│   │                                        # - IStorage interface (CRUD contract)
+│   │                                        # - DbStorage implementation using Drizzle queries
+│   │                                        # - Methods: getUser, getUserByUsername, createUser,
+│   │                                        #   getInstructionSet, getAllInstructionSets, upsertInstructionSet,
+│   │                                        #   createMtJob, getMtJob, updateMtJob,
+│   │                                        #   createMtChunk, getChunksForJob,
+│   │                                        #   createMtInterpretation, getInterpretationsForJob
+│   │
+│   └── seed-data.ts                         # INSTRUCTION-SET SEED (~705 lines)
+│                                            # - 75 hyphen-keyed entries (function_key → instructions + examples):
+│                                            #   • 11 main functions (custom-analysis, axiom-set-theory-transformation, …)
+│                                            #   • 3 F0 subfunctions (f0-auto-analyze, f0-find-model, f0-check-consistency)
+│                                            #   • 5 F1 subfunctions (f1-primitive-swap, f1-signature-change, …)
+│                                            #   • 4 each for F2–F9 (e.g. f3-mutual-explicit-definability, …)
+│                                            #   • 24 F10 domain-specific subfunctions (f10-mathematical, f10-chemical, …)
+│                                            # - Imported by POST /api/seed-instructions to reseed DB
+│
+├── shared/                                  # SHARED TYPES (frontend + backend)
+│   ├── schema.ts                            # DATABASE SCHEMA (Drizzle + Zod, ~110 lines)
+│   │                                        # TABLES:
+│   │                                        # - users (id, username, password)
+│   │                                        #
+│   │                                        # - instruction_sets (CORE - drives every AI call)
+│   │                                        #     id, function_key (unique), instructions, examples,
+│   │                                        #     created_at, updated_at
+│   │                                        #
+│   │                                        # - mt_jobs (CC batch job tracking)
+│   │                                        #     id, user_id, function_type, subfunction,
+│   │                                        #     input_text, input_box_b, skeleton (jsonb),
+│   │                                        #     is_batch, batch_domains[], status,
+│   │                                        #     chunks_total, chunks_completed, final_output,
+│   │                                        #     violations_found (jsonb), created_at, updated_at
+│   │                                        #
+│   │                                        # - mt_chunks (per-chunk CC progress)
+│   │                                        #     id, job_id, chunk_index, domain,
+│   │                                        #     chunk_input, chunk_output,
+│   │                                        #     mappings_added (jsonb), axioms_addressed[],
+│   │                                        #     definitions_added (jsonb), warnings[],
+│   │                                        #     status, retry_count, created_at
+│   │                                        #
+│   │                                        # - mt_interpretations (F10 final per-domain results)
+│   │                                        #     id, job_id, domain,
+│   │                                        #     universe_description, symbol_mappings (jsonb),
+│   │                                        #     axiom_verifications (jsonb),
+│   │                                        #     interpretation_summary,
+│   │                                        #     all_primitives_mapped, all_axioms_verified,
+│   │                                        #     created_at
+│   │                                        #
+│   │                                        # Each table has matching createInsertSchema + Insert/Select types
+│   │
+│   └── function-keys.ts                     # FUNCTION KEY REGISTRY (~370 lines)
+│                                            # - FUNCTION_KEYS: maps every UI label variant to a canonical
+│                                            #   hyphen-separated DB key. Includes both "(One Argument)" and
+│                                            #   "(Two Arguments)" suffixed variants for paste safety.
+│                                            # - Covers main functions + all F0–F10 subfunctions
+│                                            # - Source of truth for client + server normalization
+│                                            # - getFunctionKey(label) helper used by cc-engine
+│
+├── drizzle.config.ts                        # Drizzle ORM config (PostgreSQL dialect, migrations path)
+├── vite.config.ts                           # Vite bundler config + @assets alias
+├── vite-plugin-meta-images.ts               # Custom plugin: inlines OG/Twitter meta image references
+├── tsconfig.json                            # TypeScript config (strict, paths: @/* @shared/* @assets/*)
+├── postcss.config.js                        # PostCSS + Tailwind CSS v4
+├── components.json                          # shadcn/ui config
+├── package.json                             # Dependencies + scripts (dev, build, db:push, start)
+├── replit.md                                # Project overview + architecture notes
+├── README.md                                # User-facing README (Overview / Core Capabilities / etc.)
+└── BLUEPRINT.md                             # THIS FILE - full file-tree blueprint for AI fine-tuning
