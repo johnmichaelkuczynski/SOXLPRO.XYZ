@@ -6,3 +6,9 @@ id = "TlDpIqhJzIuhWiniexdfB"
 uri = "file://README.md"
 type = "text"
 title = "SOXL Analysis Platform — README"
+
+[[outputs]]
+id = "fW7HflGJMMVcSBHADpug_"
+uri = "file://BLUEPRINT.md"
+type = "text"
+title = "SOXL Analysis Platform — BLUEPRINT.md"
