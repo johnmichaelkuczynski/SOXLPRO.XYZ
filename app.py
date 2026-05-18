@@ -10,6 +10,7 @@ from vol_surface import render_vol_surface_tab
 from dislocation import render_dislocation_tab
 from backtest_ui import render_backtest_tab
 from diagnostic import render_diagnostic_tab
+from backtest_sweep import render_backtest_sweep_tab
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
@@ -1453,4 +1454,8 @@ with tab_strategy:
                     st.markdown(response_text)
 
 with tab_diag:
-    render_diagnostic_tab()
+    diag_sub_system, diag_sub_sweep = st.tabs(["System Check", "Backtest Sweep"])
+    with diag_sub_system:
+        render_diagnostic_tab()
+    with diag_sub_sweep:
+        render_backtest_sweep_tab()
