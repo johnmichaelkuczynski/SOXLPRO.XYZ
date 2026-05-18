@@ -261,12 +261,34 @@ def _pct_color(pct, full_saturation_at=25.0):
     return f"rgb({text[0]},{text[1]},{text[2]})", f"rgb({bg[0]},{bg[1]},{bg[2]})"
 
 
-price_cols = st.columns([1.5] + [1] * len(period_data))
+def _fmt_pct(pct):
+    """Compact formatting so big moves don't blow out the column."""
+    a = abs(pct)
+    sign = "+" if pct >= 0 else "−"
+    if a >= 1000:
+        # show as multiplier e.g. 240×
+        mult = (a / 100) + 1 if pct >= 0 else 1 - (a / 100)
+        return f"{sign}{a / 100:.0f}×" if a >= 10000 else f"{sign}{a:,.0f}%"
+    if a >= 100:
+        return f"{sign}{a:.0f}%"
+    return f"{sign}{a:.1f}%"
+
+
+def _fmt_dollar(dollar):
+    a = abs(dollar)
+    sign = "+" if dollar >= 0 else "−"
+    if a >= 1000:
+        return f"{sign}${a:,.0f}"
+    return f"{sign}${a:,.2f}"
+
+
+price_cols = st.columns([1.4] + [1] * len(period_data))
 with price_cols[0]:
     st.markdown(
-        f"""<div style="padding:8px 4px;">
-            <div style="color:#6b7280;font-size:0.85rem;margin-bottom:4px;">SOXL ({latest_date})</div>
-            <div style="font-size:1.9rem;font-weight:600;color:#111827;line-height:1;">${current_price:,.2f}</div>
+        f"""<div style="padding:6px 2px;">
+            <div style="color:#6b7280;font-size:0.8rem;margin-bottom:4px;white-space:nowrap;">SOXL ({latest_date})</div>
+            <div style="font-size:1.6rem;font-weight:600;color:#111827;line-height:1;white-space:nowrap;
+                        font-variant-numeric:tabular-nums;">${current_price:,.2f}</div>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -275,26 +297,26 @@ for i, (label, pct, dollar) in enumerate(period_data):
     with price_cols[i + 1]:
         if pct is None:
             st.markdown(
-                f"""<div style="padding:8px 4px;">
-                    <div style="color:#6b7280;font-size:0.85rem;margin-bottom:4px;">{label}</div>
-                    <div style="font-size:1.4rem;color:#9ca3af;">N/A</div>
+                f"""<div style="padding:6px 2px;">
+                    <div style="color:#6b7280;font-size:0.8rem;margin-bottom:4px;">{label}</div>
+                    <div style="font-size:1.2rem;color:#9ca3af;">N/A</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
             continue
         text_color, bg_color = _pct_color(pct)
-        sign = "+" if dollar >= 0 else "−"
-        pct_sign = "+" if pct >= 0 else "−"
         arrow = "▲" if pct >= 0 else "▼"
         st.markdown(
-            f"""<div style="padding:8px 4px;">
-                <div style="color:#6b7280;font-size:0.85rem;margin-bottom:4px;">{label}</div>
-                <div style="font-size:1.7rem;font-weight:600;color:{text_color};line-height:1.1;">
-                    {pct_sign}{abs(pct):.1f}%
+            f"""<div style="padding:6px 2px;">
+                <div style="color:#6b7280;font-size:0.8rem;margin-bottom:4px;white-space:nowrap;">{label}</div>
+                <div style="font-size:1.25rem;font-weight:600;color:{text_color};line-height:1.1;
+                            white-space:nowrap;font-variant-numeric:tabular-nums;">
+                    {_fmt_pct(pct)}
                 </div>
-                <div style="display:inline-block;margin-top:6px;padding:2px 8px;border-radius:6px;
-                            background:{bg_color};color:{text_color};font-size:0.8rem;font-weight:500;">
-                    {arrow} {sign}${abs(dollar):,.2f}
+                <div style="display:inline-block;margin-top:5px;padding:1px 6px;border-radius:5px;
+                            background:{bg_color};color:{text_color};font-size:0.72rem;font-weight:500;
+                            white-space:nowrap;font-variant-numeric:tabular-nums;">
+                    {arrow} {_fmt_dollar(dollar)}
                 </div>
             </div>""",
             unsafe_allow_html=True,
