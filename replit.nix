@@ -1,5 +1,10 @@
 {pkgs}: {
   deps = [
+    pkgs.xorg.libXi
+    pkgs.xorg.libXtst
+    pkgs.xorg.libXrender
+    pkgs.freetype
+    pkgs.fontconfig
     pkgs.xorg.libxshmfence
     pkgs.xorg.libxcb
     pkgs.xorg.libXrandr
