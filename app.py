@@ -227,21 +227,78 @@ for label, days in periods:
     else:
         period_data.append((label, None, None))
 
+def _lerp(a, b, t):
+    return int(round(a + (b - a) * t))
+
+
+def _pct_color(pct, full_saturation_at=25.0):
+    """Return (text_color, background_color) for a % change.
+
+    pct=0  -> neutral grey.  +pct -> deeper green as |pct| -> full_saturation_at.
+    -pct -> deeper red.  Above full_saturation_at the color stays fully saturated.
+    """
+    if pct is None:
+        return "#6b7280", "#f3f4f6"
+    t = min(1.0, abs(float(pct)) / float(full_saturation_at))
+    # neutral grey baseline
+    n = (107, 114, 128)  # #6b7280
+    if pct >= 0:
+        target = (4, 120, 87)   # deep emerald #047857
+        bg_target = (209, 250, 229)  # emerald-100 #d1fae5
+    else:
+        target = (185, 28, 28)  # deep red #b91c1c
+        bg_target = (254, 226, 226)  # red-100 #fee2e2
+    text = (
+        _lerp(n[0], target[0], t),
+        _lerp(n[1], target[1], t),
+        _lerp(n[2], target[2], t),
+    )
+    bg = (
+        _lerp(245, bg_target[0], t),
+        _lerp(245, bg_target[1], t),
+        _lerp(245, bg_target[2], t),
+    )
+    return f"rgb({text[0]},{text[1]},{text[2]})", f"rgb({bg[0]},{bg[1]},{bg[2]})"
+
+
 price_cols = st.columns([1.5] + [1] * len(period_data))
 with price_cols[0]:
-    st.metric(label=f"SOXL ({latest_date})", value=f"${current_price:.2f}")
+    st.markdown(
+        f"""<div style="padding:8px 4px;">
+            <div style="color:#6b7280;font-size:0.85rem;margin-bottom:4px;">SOXL ({latest_date})</div>
+            <div style="font-size:1.9rem;font-weight:600;color:#111827;line-height:1;">${current_price:,.2f}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
 
 for i, (label, pct, dollar) in enumerate(period_data):
     with price_cols[i + 1]:
-        if pct is not None:
-            sign = "+" if dollar >= 0 else ""
-            st.metric(
-                label=label,
-                value=f"{sign}{pct:.1f}%",
-                delta=f"${sign}{dollar:.2f}",
+        if pct is None:
+            st.markdown(
+                f"""<div style="padding:8px 4px;">
+                    <div style="color:#6b7280;font-size:0.85rem;margin-bottom:4px;">{label}</div>
+                    <div style="font-size:1.4rem;color:#9ca3af;">N/A</div>
+                </div>""",
+                unsafe_allow_html=True,
             )
-        else:
-            st.metric(label=label, value="N/A")
+            continue
+        text_color, bg_color = _pct_color(pct)
+        sign = "+" if dollar >= 0 else "−"
+        pct_sign = "+" if pct >= 0 else "−"
+        arrow = "▲" if pct >= 0 else "▼"
+        st.markdown(
+            f"""<div style="padding:8px 4px;">
+                <div style="color:#6b7280;font-size:0.85rem;margin-bottom:4px;">{label}</div>
+                <div style="font-size:1.7rem;font-weight:600;color:{text_color};line-height:1.1;">
+                    {pct_sign}{abs(pct):.1f}%
+                </div>
+                <div style="display:inline-block;margin-top:6px;padding:2px 8px;border-radius:6px;
+                            background:{bg_color};color:{text_color};font-size:0.8rem;font-weight:500;">
+                    {arrow} {sign}${abs(dollar):,.2f}
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
 tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
