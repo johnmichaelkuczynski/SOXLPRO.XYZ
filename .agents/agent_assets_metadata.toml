@@ -24,3 +24,51 @@ id = "GqiS7a06TpzhKjerc15Ft"
 uri = "file://tools/demo_video/out/2026-05-18T23-36-29/soxl-demo.mp4"
 type = "video"
 title = "SOXL App Walkthrough (1:50, taller frame, visible cursor)"
+
+[[outputs]]
+id = "peM3a0WHQ48-B07kdXY62"
+uri = "file://attached_assets/demo_video/seg_01.mp3"
+type = "audio"
+title = "demo seg 1"
+
+[[outputs]]
+id = "eUsq-EMeY7nJeyIb7quII"
+uri = "file://attached_assets/demo_video/seg_02.mp3"
+type = "audio"
+title = "demo seg 2"
+
+[[outputs]]
+id = "QCcYkwR2_z4RifTQNMgAT"
+uri = "file://attached_assets/demo_video/seg_03.mp3"
+type = "audio"
+title = "demo seg 3"
+
+[[outputs]]
+id = "k_F4IwJcGuqrKyptcCQbT"
+uri = "file://attached_assets/demo_video/seg_04.mp3"
+type = "audio"
+title = "demo seg 4"
+
+[[outputs]]
+id = "F8tmuKlXrZp6YKQorNJhb"
+uri = "file://attached_assets/demo_video/seg_05.mp3"
+type = "audio"
+title = "demo seg 5"
+
+[[outputs]]
+id = "XmQWZCdNBktatcKVqnrrU"
+uri = "file://attached_assets/demo_video/seg_06.mp3"
+type = "audio"
+title = "demo seg 6"
+
+[[outputs]]
+id = "Khu0ombh2lTnPLtsTfj8i"
+uri = "file://attached_assets/demo_video/seg_07.mp3"
+type = "audio"
+title = "demo seg 7"
+
+[[outputs]]
+id = "zCmiR_tEt2rKN2TusaFt5"
+uri = "file://attached_assets/demo_video/music_bed.mp3"
+type = "audio"
+title = "demo music bed"

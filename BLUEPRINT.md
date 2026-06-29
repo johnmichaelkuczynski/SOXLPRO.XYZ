@@ -1,14 +1,22 @@
 soxl-analysis-platform/
 │
-├── app.py                                   # MAIN STREAMLIT ENTRY (~1373 lines)
-│                                            # Single-page app, 5 top-level tabs declared in one call:
-│                                            #   tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest
+├── app.py                                   # MAIN STREAMLIT ENTRY (~1525 lines)
+│                                            # Single-page app. ENTIRE APP IS GATED BY GOOGLE SIGN-IN:
+│                                            #   immediately after st.set_page_config, app.py calls
+│                                            #   auth.require_login() → returns the signed-in st.user or
+│                                            #   st.stop()s on the login screen. current_user_email is then
+│                                            #   threaded into the diagnostic renderers for row attribution.
+│                                            #   Header shows auth.render_user_badge() (identity + sign-out).
+│                                            #
+│                                            # 6 top-level tabs declared in one call:
+│                                            #   tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest, tab_diag
 │                                            #     = st.tabs([
 │                                            #         "📊 Chart & Probabilities",
 │                                            #         "🌊 Vol Surface",
 │                                            #         "⚖️ SOXL-QQQ Dislocation",
 │                                            #         "🎯 Strategy Builder",
 │                                            #         "🔬 Backtest",
+│                                            #         "🩺 Diagnostic",
 │                                            #       ])
 │                                            #
 │                                            # DATA-FETCH HELPERS (cached 24h via @st.cache_data):
@@ -45,6 +53,11 @@ soxl-analysis-platform/
 │                                            # tab_disloc      → calls dislocation.render_dislocation_tab()
 │                                            # tab_strategy    → AI Strategy Builder (chat UI; calls strategy_builder)
 │                                            # tab_backtest    → calls backtest_ui.render_backtest_tab()
+│                                            # tab_diag        → 4 sub-tabs:
+│                                            #   "System Check"     → diagnostic.render_diagnostic_tab(user_email)
+│                                            #   "Synthetic User"   → synthetic_user.render_synthetic_user_tab(user_email)
+│                                            #   "Quality Control"  → quality_control.render_quality_control_tab(user_email)
+│                                            #   "Backtest Sweep"   → backtest_sweep.render_backtest_sweep_tab()
 │                                            #
 │                                            # NOTE: Earlier prototype "Strategy Builder" UI block sits at top-level
 │                                            # tab_strategy AND a richer copy is also wired into the Backtest sub-tab.
@@ -363,6 +376,86 @@ soxl-analysis-platform/
 │                                            #   strategy_uses_app_signals(config) - bool gating
 │                                            #   describe_panel(panel)              - human-readable summary string
 │
+├── auth.py                                  # GOOGLE SIGN-IN GATE (Streamlit native OIDC)
+│                                            # Gates the ENTIRE app. No Streamlit UI renders until login.
+│                                            # ─────────────────────────────────────────────────────────────
+│                                            # _primary_domain()  - first of REPLIT_DOMAINS, else REPLIT_DEV_DOMAIN
+│                                            # _redirect_uri()    - https://{domain}/oauth2callback (must match the
+│                                            #                      Google Cloud OAuth client's authorized redirect)
+│                                            # write_auth_secrets() - writes [auth] + [auth.google] into
+│                                            #   .streamlit/secrets.toml at startup FROM ENV (gitignored). cookie_secret
+│                                            #   is derived sha256(GOOGLE_CLIENT_SECRET + salt) so it is stable across
+│                                            #   restarts without storing another secret. server_metadata_url =
+│                                            #   https://accounts.google.com/.well-known/openid-configuration
+│                                            # require_login() → st.user | st.stop()
+│                                            #   - writes secrets, then checks st.user.is_logged_in; renders the
+│                                            #     branded login screen (Sign in with Google → st.login("google"))
+│                                            # render_user_badge() - header popover: identity + sign-out (st.logout)
+│                                            # ENV: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+│
+├── openai_client.py                         # OPENAI CLIENT (Replit AI Integrations)
+│                                            # blueprint:python_openai_ai_integrations — no user key needed.
+│                                            # DEFAULT_MODEL = "gpt-5"  (do not change without explicit request)
+│                                            # get_openai_client() - fresh OpenAI() wired to
+│                                            #   AI_INTEGRATIONS_OPENAI_BASE_URL / AI_INTEGRATIONS_OPENAI_API_KEY
+│                                            #   (never cached — integration creds can rotate)
+│                                            # openai_available() - bool guard used by diagnostics
+│                                            # NOTE: gpt-5 takes no temperature; use max_completion_tokens (8192).
+│
+├── db.py                                     # NEON POSTGRES PERSISTENCE (psycopg2)
+│                                            # External Neon DB via DATABASE_URL (sslmode=require auto-appended).
+│                                            # ─────────────────────────────────────────────────────────────
+│                                            # db_available() / get_conn() / ping() (returns {version, ms})
+│                                            # init_db() - idempotent CREATE TABLE IF NOT EXISTS for:
+│                                            #   diagnostic_runs(id, run_at, kind, ok, totals jsonb, report jsonb, user_email)
+│                                            #   synthetic_user_sessions(id, run_at, persona, prompt, response,
+│                                            #                           transcript jsonb, outcome jsonb, user_email)
+│                                            #   qc_results(id, run_at, subject, source_text, openai_verdict jsonb,
+│                                            #              gptzero jsonb, legitimate, score, user_email)
+│                                            # save_diagnostic_run() / save_synthetic_session() / save_qc_result()
+│                                            #   - all swallow exceptions and return id|None so persistence never
+│                                            #     breaks the diagnostic UI ("never refuse" extends to logging).
+│                                            # recent_rows(table, limit) - RealDictCursor fetch for the known tables.
+│
+├── diagnostic.py                            # DIAGNOSTIC #1 — SYSTEM CHECK (~600 lines, Streamlit)
+│                                            # Entry: render_diagnostic_tab(user_email) — tab_diag sub[0].
+│                                            # ─────────────────────────────────────────────────────────────
+│                                            # _run(name, group, fn) wraps each check → {name, group, status,
+│                                            #   ms, info, evidence}. Groups: system / data / engine / ai / files.
+│                                            # CHECKS: env vars (incl. OPENAI/GPTZERO/DATABASE_URL/GOOGLE_CLIENT_ID),
+│                                            #   files, DSL registries; live yfinance (SOXL/QQQ/TQQQ/TLT/XLU/^VIX) +
+│                                            #   FINRA; Black-Scholes pricer, call-sleeve sim, risk metrics, prob
+│                                            #   engine; Anthropic ping, OpenAI ping (_check_openai_ping), GPTZero
+│                                            #   reachability (_check_gptzero); Neon connectivity (_check_database_ping).
+│                                            # run_diagnostic() → {ok, runAt, totals, checks}; on UI run the report
+│                                            #   is persisted via db.save_diagnostic_run(kind="system_check", ...).
+│                                            # Per-check timing + expandable evidence; full JSON download button.
+│
+├── synthetic_user.py                        # DIAGNOSTIC #2 — SYNTHETIC USER (Streamlit)
+│                                            # Entry: render_synthetic_user_tab(user_email) — tab_diag sub[1].
+│                                            # ─────────────────────────────────────────────────────────────
+│                                            # generate_persona() - OpenAI (gpt-5, JSON mode) invents a realistic
+│                                            #   investor persona + first message (with concrete numbers).
+│                                            # run_synthetic_session() - drives the REAL pipeline end-to-end:
+│                                            #   persona message → strategy_builder.generate_strategy(messages,
+│                                            #   SOXL close) → parse_strategy_json. Pass = a complete, parseable
+│                                            #   strategy was produced for an unseen user. Persists via
+│                                            #   db.save_synthetic_session; stashes the response in
+│                                            #   st.session_state["last_ai_answer"] so QC can grade it.
+│
+├── quality_control.py                       # DIAGNOSTIC #3 — QUALITY CONTROL (Streamlit)
+│                                            # Entry: render_quality_control_tab(user_email) — tab_diag sub[2].
+│                                            # ─────────────────────────────────────────────────────────────
+│                                            # grade_with_openai(subject, text) - OpenAI (gpt-5, JSON mode) returns
+│                                            #   {legitimate, score 0-100, issues[], summary} against a soundness rubric.
+│                                            # check_gptzero(text) - POST https://api.gptzero.me/v2/predict/text
+│                                            #   (header x-api-key, body {document}); parses completely_generated_prob
+│                                            #   + class_probabilities {human, ai, mixed}.
+│                                            # run_quality_control() - combines both signals into one legitimacy
+│                                            #   verdict, persists via db.save_qc_result. Defaults its text to the
+│                                            #   last synthetic-user / strategy answer, or accepts pasted text.
+│                                            # ENV: GPTZERO_API_KEY (skipped gracefully if absent).
+│
 ├── vol_surface.py                           # VOL SURFACE + IV-RANK ANALYTICS (~740 lines)
 │                                            # Entry: render_vol_surface_tab() — called from app.py tab_vol.
 │                                            # ─────────────────────────────────────────────────────────────
@@ -561,9 +654,16 @@ ARCHITECTURAL CONVENTIONS (READ BEFORE EDITING)
        AI_INTEGRATIONS_ANTHROPIC_BASE_URL
        AI_INTEGRATIONS_ANTHROPIC_API_KEY
      (auto-provisioned, no user API key needed; uses Replit credits).
+   - OpenAI (gpt-5) runs via Replit AI Integrations:
+       AI_INTEGRATIONS_OPENAI_BASE_URL
+       AI_INTEGRATIONS_OPENAI_API_KEY
+     (blueprint:python_openai_ai_integrations; no user key; uses Replit credits).
    - Market data:
        EODHD_API_KEY       (equity history)
        POLYGON_API_KEY     (options snapshot + history)
+   - AI authenticity: GPTZERO_API_KEY (quality-control text detection).
+   - Auth: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (Google OIDC).
+   - Persistence: DATABASE_URL (external Neon Postgres).
    - SESSION_SECRET is reserved for future server-side session use (not yet
      consumed in code).
 
@@ -590,3 +690,25 @@ ARCHITECTURAL CONVENTIONS (READ BEFORE EDITING)
    - Use restart_workflow after editing app.py / backtest_ui.py / any file
      imported at startup. Streamlit auto-reloads source on save but the
      module cache for heavy imports is not always invalidated cleanly.
+
+10. AUTH GATES THE WHOLE APP
+   - auth.require_login() runs immediately after st.set_page_config in app.py;
+     it st.stop()s on the login screen for anyone not signed in. Every tab,
+     fetch, and engine sits behind it.
+   - .streamlit/secrets.toml is GENERATED at startup from env (auth.py) and is
+     gitignored — never commit it. cookie_secret is derived from
+     GOOGLE_CLIENT_SECRET so sessions survive restarts.
+   - The Google Cloud OAuth client must list https://{domain}/oauth2callback as
+     an authorized redirect URI (dev domain AND any deployment domain).
+
+11. PERSISTENCE NEVER REFUSES
+   - All db.save_* helpers swallow exceptions and return id|None so a database
+     hiccup can never break a diagnostic run. db.py auto-appends sslmode=require
+     to DATABASE_URL and init_db() is idempotent (CREATE TABLE IF NOT EXISTS).
+   - The three diagnostics each persist to their own table; user_email is
+     threaded from the signed-in st.user for row attribution.
+
+12. OPENAI / GPT-5 RULES
+   - openai_client.DEFAULT_MODEL = "gpt-5". gpt-5 rejects the temperature
+     param — use max_completion_tokens (8192) and never pass temperature.
+   - get_openai_client() is never cached (integration creds can rotate).

@@ -6,7 +6,7 @@
 
 ## 🧩 Overview
 
-The SOXL Analysis Platform is a single-page quantitative research tool for SOXL (Direxion Daily Semiconductor Bull 3X Shares). It combines interactive log-scale charting, historical probability modeling, benchmark-anchored deviation analysis, vol-surface diagnostics, a full call-sleeve backtest engine, and an AI-powered strategy builder driven by Anthropic Claude.
+The SOXL Analysis Platform is a single-page quantitative research tool for SOXL (Direxion Daily Semiconductor Bull 3X Shares). It combines interactive log-scale charting, historical probability modeling, benchmark-anchored deviation analysis, vol-surface diagnostics, a full call-sleeve backtest engine, and an AI-powered strategy builder driven by Anthropic Claude. The entire app sits behind Google sign-in, and a three-part diagnostic suite (system check, synthetic user, AI quality control) continuously verifies that every subsystem is live — with every run persisted to a Neon Postgres database.
 
 Unlike generic charting dashboards that stop at price plots, this platform is built around an operating principle: every analysis is honest, every metric is auditable, and the engine never refuses to return a result — even on a two-data-point window. If you ask for a backtest, you get a backtest. If you ask for a probability, you get the actual historical frequency with its sample size attached. No padding, no hand-waving, no synthetic placeholders.
 
@@ -48,6 +48,15 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 
 - **Always-On Data Layer** -- Equity history up to ~20 years via EODHD, options snapshots and history via Polygon, all responses cached 24h. No external rate-limit surprises during a research session.
 
+- **Google Sign-In Gate** -- The entire app is gated behind Google authentication via Streamlit's native OIDC. Nothing renders — no chart, no engine, no AI — until the user signs in. A header badge shows the signed-in identity with a one-click sign-out.
+
+- **Three-Part Diagnostic Suite** -- Lives in the 🩺 Diagnostic tab. Every run is written to Neon Postgres for a durable audit trail:
+  - **System Check** -- One-click probe of environment variables, project files, the DSL registries, live yfinance + FINRA data, the Black-Scholes pricer / call-sleeve simulator / risk metrics / probability engine, round-trip pings to **both** Anthropic and OpenAI, GPTZero reachability, and Neon connectivity. Each check carries timing and expandable evidence.
+  - **Synthetic User** -- OpenAI invents a realistic investor persona and an opening message, then drives the **real** Strategy Builder (Anthropic) end-to-end. A pass means the app produced a complete, parseable strategy for a user it had never seen — proof the full pipeline works, not just its parts.
+  - **Quality Control** -- Verifies the legitimacy of an AI answer two ways: OpenAI (gpt-5) grades it against a soundness rubric (consistency, coherent use of numbers, no fabricated claims) and GPTZero scores how machine-generated the text looks. The two signals combine into a single legitimacy verdict.
+
+- **Neon Postgres Persistence** -- Diagnostic runs, synthetic-user sessions, and quality-control results are all persisted to an external Neon database (via `DATABASE_URL`), so the diagnostic history survives restarts and redeploys.
+
 ---
 
 ## 🚀 What Makes It Different
@@ -79,6 +88,10 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 - **EODHD** (equity history up to 20y) + **Polygon** (options history, capped at 2y)
 - **yfinance** for supplementary intraday/snapshot quotes
 - **Anthropic Claude** via Replit AI Integrations — no key needed, uses Replit credits
+- **OpenAI (gpt-5)** via Replit AI Integrations — powers the synthetic-user persona and the quality-control grader
+- **GPTZero** authenticity API for AI-generated-text detection in quality control
+- **Google OIDC** via Streamlit native authentication — gates the whole app
+- **Neon Postgres** (via `DATABASE_URL`, `psycopg2`) — durable persistence for diagnostic runs, synthetic-user sessions, and QC results
 - **dateutil** for trading-day math
 - **Black-Scholes pricing** implemented natively with `math.erf` — zero scipy dependency
 
@@ -94,6 +107,12 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 - `vol_surface.py` -- Options-chain BUY/SELL discrepancy analytics
 - `dislocation.py` -- SOXL-QQQ continuous deviation panel
 - `custom_strategy.py` -- User-composable indicator/operator strategy builder
+- `auth.py` -- Google sign-in gating via Streamlit native OIDC; writes the auth config from env at startup
+- `openai_client.py` -- OpenAI (gpt-5) client wired to Replit AI Integrations
+- `db.py` -- Neon Postgres persistence: schema init + save/fetch for diagnostic runs, synthetic-user sessions, QC results
+- `diagnostic.py` -- System Check diagnostic: environment, data, engines, AI pings, GPTZero, and Neon connectivity
+- `synthetic_user.py` -- Synthetic User diagnostic: OpenAI persona → real Strategy Builder run → persisted session
+- `quality_control.py` -- Quality Control diagnostic: OpenAI legitimacy grading + GPTZero authenticity check
 - `components/chart_draw/index.html` -- Custom Streamlit component for the drag-to-draw chart
 - `.streamlit/config.toml` -- Streamlit server configuration
 

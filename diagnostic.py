@@ -134,6 +134,101 @@ def _check_anthropic_ping() -> dict:
         }
 
 
+def _check_openai_ping() -> dict:
+    try:
+        from openai_client import get_openai_client, openai_available, DEFAULT_MODEL
+    except Exception as e:  # noqa: BLE001
+        return {"status": "fail", "info": f"import error: {e}", "evidence": []}
+
+    if not openai_available():
+        return {"status": "skip", "info": "no OpenAI integration key in environment", "evidence": []}
+
+    probe = "Reply with exactly the single word: OK"
+    t0 = time.perf_counter()
+    try:
+        client = get_openai_client()
+        resp = client.chat.completions.create(
+            model=DEFAULT_MODEL,
+            messages=[{"role": "user", "content": probe}],
+            max_completion_tokens=8192,
+        )
+        rtt = int((time.perf_counter() - t0) * 1000)
+        text = (resp.choices[0].message.content or "").strip()
+        return {
+            "status": "pass" if text else "fail",
+            "info": f"reply={text[:60]!r} rtt={rtt}ms",
+            "evidence": [
+                _ev("input", "prompt", probe),
+                _ev("output", "round-trip time (ms)", rtt),
+                _ev("output", "model", getattr(resp, "model", DEFAULT_MODEL)),
+                _ev("output", "reply text", text),
+            ],
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"status": "fail", "info": f"{type(e).__name__}: {e}",
+                "evidence": [_ev("error", "exception", str(e))]}
+
+
+def _check_database_ping() -> dict:
+    try:
+        import db
+    except Exception as e:  # noqa: BLE001
+        return {"status": "fail", "info": f"import error: {e}", "evidence": []}
+
+    if not db.db_available():
+        return {"status": "skip", "info": "DATABASE_URL not set", "evidence": []}
+    try:
+        db.init_db()
+        info = db.ping()
+        return {
+            "status": "pass",
+            "info": f"connected in {info['ms']}ms",
+            "evidence": [
+                _ev("output", "round-trip time (ms)", info["ms"]),
+                _ev("output", "server version", info["version"]),
+                _ev("assertion", "tables initialized", {"ok": True}),
+            ],
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"status": "fail", "info": f"{type(e).__name__}: {e}",
+                "evidence": [_ev("error", "exception", str(e))]}
+
+
+def _check_gptzero() -> dict:
+    api_key = os.environ.get("GPTZERO_API_KEY", "")
+    if not api_key:
+        return {"status": "skip", "info": "GPTZERO_API_KEY not set", "evidence": []}
+    probe = ("The semiconductor sector has historically shown elevated volatility "
+             "relative to broad market indices, and leveraged products amplify that.")
+    t0 = time.perf_counter()
+    try:
+        r = requests.post(
+            "https://api.gptzero.me/v2/predict/text",
+            headers={"x-api-key": api_key, "Content-Type": "application/json"},
+            json={"document": probe},
+            timeout=20,
+        )
+        rtt = int((time.perf_counter() - t0) * 1000)
+        if not r.ok:
+            return {"status": "fail", "info": f"HTTP {r.status_code}",
+                    "evidence": [_ev("output", "status", r.status_code),
+                                 _ev("error", "body", r.text[:300])]}
+        data = r.json()
+        doc = (data.get("documents") or [{}])[0]
+        return {
+            "status": "pass",
+            "info": f"reachable, rtt={rtt}ms",
+            "evidence": [
+                _ev("output", "round-trip time (ms)", rtt),
+                _ev("output", "predicted_class", doc.get("predicted_class")),
+                _ev("output", "completely_generated_prob", doc.get("completely_generated_prob")),
+            ],
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"status": "fail", "info": f"{type(e).__name__}: {e}",
+                "evidence": [_ev("error", "exception", str(e))]}
+
+
 def _check_yf_symbol(symbol: str) -> dict:
     import yfinance as yf
 
@@ -354,6 +449,14 @@ def run_diagnostic() -> dict:
                        lambda: _check_env("AI_INTEGRATIONS_ANTHROPIC_API_KEY")))
     checks.append(_run("Environment: AI_INTEGRATIONS_ANTHROPIC_BASE_URL present", "system",
                        lambda: _check_env("AI_INTEGRATIONS_ANTHROPIC_BASE_URL", required=False)))
+    checks.append(_run("Environment: AI_INTEGRATIONS_OPENAI_API_KEY present", "system",
+                       lambda: _check_env("AI_INTEGRATIONS_OPENAI_API_KEY", required=False)))
+    checks.append(_run("Environment: GPTZERO_API_KEY present", "system",
+                       lambda: _check_env("GPTZERO_API_KEY", required=False)))
+    checks.append(_run("Environment: DATABASE_URL present", "system",
+                       lambda: _check_env("DATABASE_URL", required=False)))
+    checks.append(_run("Environment: GOOGLE_CLIENT_ID present", "system",
+                       lambda: _check_env("GOOGLE_CLIENT_ID", required=False)))
     checks.append(_run("Files: project structure intact", "system", _check_files))
     checks.append(_run("Indicator registry: ALL_INDICATORS + OPERATORS", "system", _check_indicator_registry))
 
@@ -371,6 +474,11 @@ def run_diagnostic() -> dict:
 
     # AI
     checks.append(_run("AI: Anthropic round-trip ping", "ai", _check_anthropic_ping))
+    checks.append(_run("AI: OpenAI round-trip ping", "ai", _check_openai_ping))
+    checks.append(_run("AI: GPTZero authenticity API reachable", "ai", _check_gptzero))
+
+    # Persistence
+    checks.append(_run("Persistence: Neon Postgres connectivity", "data", _check_database_ping))
 
     totals = {
         "pass": sum(1 for c in checks if c["status"] == "pass"),
@@ -398,9 +506,9 @@ GROUP_TITLES = {
 
 GROUP_BLURBS = {
     "system": "Verifies environment variables, project files, and the strategy DSL registries.",
-    "data": "Live calls to yfinance and FINRA to confirm market-data sources are reachable.",
+    "data": "Live calls to yfinance, FINRA, and the Neon Postgres database to confirm data sources are reachable.",
     "engine": "Smoke-tests the Black-Scholes pricer, call-sleeve simulator, risk-metrics, and probability table.",
-    "ai": "Round-trip ping to Anthropic via Replit AI Integrations.",
+    "ai": "Round-trip pings to Anthropic and OpenAI via Replit AI Integrations, plus the GPTZero authenticity API.",
     "files": "Confirms expected source and documentation files exist on disk.",
 }
 
@@ -411,7 +519,7 @@ STATUS_BADGE = {
 }
 
 
-def render_diagnostic_tab() -> None:
+def render_diagnostic_tab(user_email: str | None = None) -> None:
     st.markdown("### 🩺 System & Functional Diagnostic")
     intro = st.container()
     with intro:
@@ -430,7 +538,21 @@ def render_diagnostic_tab() -> None:
 
     if run_clicked:
         with st.spinner("Running diagnostic — probing environment, data sources, engines, and AI…"):
-            st.session_state["diagnostic_report"] = run_diagnostic()
+            report = run_diagnostic()
+            st.session_state["diagnostic_report"] = report
+            try:
+                import db
+                if db.db_available():
+                    rid = db.save_diagnostic_run(
+                        kind="system_check",
+                        ok=report["ok"],
+                        totals=report["totals"],
+                        report=report,
+                        user_email=user_email,
+                    )
+                    st.session_state["diagnostic_saved_id"] = rid
+            except Exception:
+                st.session_state["diagnostic_saved_id"] = None
 
     report = st.session_state.get("diagnostic_report")
     if not report:
@@ -454,6 +576,9 @@ def render_diagnostic_tab() -> None:
                 f"{totals['pass']} passed · {totals['fail']} failed · {totals['skip']} skipped · "
                 f"run at {report['runAt']}"
             )
+        saved_id = st.session_state.get("diagnostic_saved_id")
+        if saved_id:
+            st.caption(f"Saved to Neon as diagnostic_runs row #{saved_id}.")
     with summary_cols[1]:
         json_blob = json.dumps(report, indent=2, default=str)
         ts = report["runAt"].replace(":", "-").replace(".", "-")
