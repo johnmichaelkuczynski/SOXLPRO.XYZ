@@ -79,6 +79,7 @@ def _is_logged_in() -> bool:
 
 
 def _render_login_screen() -> None:
+    app_url = f"https://{_primary_domain()}/"
     st.markdown(
         "<div style='max-width:520px;margin:8vh auto 0;text-align:center;'>"
         "<div style='font-size:2.2rem;font-weight:700;color:#111827;'>📈 SOXL Analysis</div>"
@@ -93,6 +94,14 @@ def _render_login_screen() -> None:
         st.write("")
         if st.button("Sign in with Google", type="primary", use_container_width=True):
             st.login("google")
+        st.markdown(
+            "<div style='text-align:center;margin-top:14px;font-size:0.85rem;color:#9ca3af;'>"
+            "Button does nothing? Google blocks sign-in inside an embedded preview.<br>"
+            f"<a href='{app_url}' target='_blank' rel='noopener' "
+            "style='color:#2563eb;font-weight:600;'>Open the app in a new tab</a> and sign in there."
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def require_login():
