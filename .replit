@@ -36,6 +36,6 @@ localPort = 5000
 externalPort = 80
 
 [agent]
-integrations = ["python_anthropic_ai_integrations:1.0.0"]
+integrations = ["python_anthropic_ai_integrations:1.0.0", "python_openai_ai_integrations:1.0.0"]
 stack = "STREAMLIT"
 expertMode = true
