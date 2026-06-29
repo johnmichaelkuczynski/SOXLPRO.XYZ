@@ -84,3 +84,9 @@ id = "BERszRq03XjF6i3M-VHvK"
 uri = "file://attached_assets/demo_video/VIDEO_DESCRIPTION.md"
 type = "text"
 title = "Demo Video — Written Description"
+
+[[outputs]]
+id = "n8ItUcTA7s4Dpx6-Wo-Rm"
+uri = "file://attached_assets/demo_video/YOUTUBE_DESCRIPTION.md"
+type = "text"
+title = "YouTube Video Description (ready to paste)"
