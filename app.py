@@ -1522,7 +1522,7 @@ with tab_diag:
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding-top:16px; "
     "border-top:1px solid rgba(0,0,0,0.06); font-size:12px; color:#9ca3af;'>"
-    "<a href='mailto:zhi@zhicourses.org' "
+    "<a href='mailto:zhi@zhisystems.org' "
     "style='color:#9ca3af; text-decoration:none;'>Contact us</a>"
     "</div>",
     unsafe_allow_html=True,
