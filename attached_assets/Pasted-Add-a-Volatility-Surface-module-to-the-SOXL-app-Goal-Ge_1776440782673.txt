@@ -1,0 +1,42 @@
+Add a Volatility Surface module to the SOXL app.
+Goal: Generate an interactive 3D volatility surface for SOXL options, rendered in the browser.
+Data source: Use the same options chain data source the app already uses for its probability engine. Pull the full SOXL option chain (all expirations, all strikes, calls and puts). If the current source doesn't return IV directly, compute it.
+IV computation (only if not provided by the data source):
+
+Use py_vollib (pip install py_vollib) — specifically py_vollib.black_scholes.implied_volatility.implied_volatility.
+Inputs per contract: mid-price ((bid+ask)/2), current SOXL spot, strike, time to expiration in years (calendar days / 365), risk-free rate (pull 3-month T-bill yield from FRED, or hardcode current rate as a config value), flag ('c' or 'p').
+Wrap in try/except — some contracts will fail to converge; skip them.
+
+Data hygiene (critical — bad data destroys the surface):
+
+Drop contracts with bid = 0 or ask = 0
+Drop contracts with bid/ask spread > 20% of mid-price
+Drop contracts with zero volume AND zero open interest
+Drop contracts expiring in less than 7 days (noisy)
+Drop contracts with IV > 500% or IV < 5% (junk)
+Use calls for strikes >= spot, puts for strikes < spot (OTM options have cleaner quotes than ITM)
+
+Surface construction:
+
+Build a DataFrame with columns: strike, days_to_expiry, iv
+Convert strike to moneyness (strike / spot) for the x-axis — this keeps the surface comparable across time
+Create a regular grid: moneyness from 0.5 to 1.5 in 0.02 steps, days from 7 to 730 in 30-day steps
+Interpolate the scattered (moneyness, days, IV) points onto the grid using scipy.interpolate.griddata with method='cubic', fallback to 'linear' for edge cases
+Clip interpolated IVs to [0.1, 3.0] to prevent visual blowouts
+
+Rendering:
+
+Use Plotly (plotly.graph_objects.Surface) — it's interactive (rotate, zoom, hover) and renders in the browser natively.
+Axes: x = moneyness, y = days to expiration, z = implied volatility
+Colorscale: 'Viridis' or 'RdYlBu_r' (red = high IV, blue = low IV)
+Add hover tooltips showing moneyness, days, IV at each point
+Title: "SOXL Implied Volatility Surface — [current date/time]"
+Add a button/checkbox to toggle between calls-only, puts-only, and the blended OTM surface
+
+Integration with existing app:
+
+Add a new route/tab called "Vol Surface" alongside the existing probability tools
+Cache the surface — regenerate on demand or every 15 minutes, not on every page load (option chain pulls are expensive)
+Add a small info panel showing: ATM IV for 30d, 90d, 365d; current skew (25-delta put IV minus 25-delta call IV, 30-day); term structure slope (90d ATM IV minus 30d ATM IV)
+
+Libraries needed: pandas, numpy, scipy, plotly, py_vollib, requests (if not already present).

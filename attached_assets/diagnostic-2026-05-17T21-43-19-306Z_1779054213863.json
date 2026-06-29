@@ -1,0 +1,720 @@
+{
+  "ok": false,
+  "runAt": "2026-05-17T21:43:19.306Z",
+  "totals": {
+    "pass": 16,
+    "fail": 1,
+    "skip": 0
+  },
+  "checks": [
+    {
+      "name": "Environment: SESSION_SECRET present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=88 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.SESSION_SECRET is non-empty",
+          "value": {
+            "present": true,
+            "length": 88
+          }
+        },
+        {
+          "kind": "output",
+          "label": "SESSION_SECRET (redacted)",
+          "value": "pm6o\u2026/w=="
+        }
+      ]
+    },
+    {
+      "name": "Environment: AI_INTEGRATIONS_ANTHROPIC_API_KEY present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=15 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY is non-empty",
+          "value": {
+            "present": true,
+            "length": 15
+          }
+        },
+        {
+          "kind": "output",
+          "label": "AI_INTEGRATIONS_ANTHROPIC_API_KEY (redacted)",
+          "value": "_DUM\u2026KEY_"
+        }
+      ]
+    },
+    {
+      "name": "Environment: AI_INTEGRATIONS_ANTHROPIC_BASE_URL present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=41 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL is non-empty",
+          "value": {
+            "present": true,
+            "length": 41
+          }
+        },
+        {
+          "kind": "output",
+          "label": "AI_INTEGRATIONS_ANTHROPIC_BASE_URL (redacted)",
+          "value": "http\u2026opic"
+        }
+      ]
+    },
+    {
+      "name": "Files: project structure intact",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "12/12 files present",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "files",
+          "value": [
+            {
+              "path": "app.py",
+              "bytes": 64696
+            },
+            {
+              "path": "backtest_engine.py",
+              "bytes": 33547
+            },
+            {
+              "path": "backtest_ui.py",
+              "bytes": 69890
+            },
+            {
+              "path": "strategy_builder.py",
+              "bytes": 16022
+            },
+            {
+              "path": "custom_strategy.py",
+              "bytes": 20062
+            },
+            {
+              "path": "data_providers.py",
+              "bytes": 3732
+            },
+            {
+              "path": "dislocation.py",
+              "bytes": 17693
+            },
+            {
+              "path": "vol_surface.py",
+              "bytes": 28036
+            },
+            {
+              "path": "replit.md",
+              "bytes": 4031
+            },
+            {
+              "path": "BLUEPRINT.md",
+              "bytes": 54685
+            },
+            {
+              "path": "README.md",
+              "bytes": 9535
+            },
+            {
+              "path": ".streamlit/config.toml",
+              "bytes": 312
+            }
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "no expected files missing",
+          "value": {
+            "missing": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Indicator registry: ALL_INDICATORS + OPERATORS",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "22 indicators, 5 operators",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "ALL_INDICATORS",
+          "value": [
+            "ATR(N)",
+            "Bollinger %B(N)",
+            "Days held in position",
+            "Drawdown from peak (%)",
+            "EMA(N)",
+            "MACD",
+            "N-day % change",
+            "N-day high",
+            "N-day low",
+            "Period Analysis Percentile(N)",
+            "Probability Engine P(M%, Hd)",
+            "QQQ price",
+            "RSI(N)",
+            "Realized vol(N)",
+            "SMA(N)",
+            "SOXL price",
+            "SOXL z-score vs QQQ(N)",
+            "SOXL/QQQ ratio",
+            "VIX level",
+            "Vol Regime Label",
+            "Vol Surface Signal (Calls)",
+            "Vol Surface Signal (Puts)"
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "OPERATORS",
+          "value": [
+            ">",
+            "<",
+            "=",
+            "crosses above",
+            "crosses below"
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "operators == expected set",
+          "value": {
+            "expected": [
+              "<",
+              "=",
+              ">",
+              "crosses above",
+              "crosses below"
+            ],
+            "actual": [
+              "<",
+              "=",
+              ">",
+              "crosses above",
+              "crosses below"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data: yfinance SOXL (last 10 days)",
+      "group": "data",
+      "status": "pass",
+      "ms": 85,
+      "info": "6 rows, last=2026-05-15 close=$164.18",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "yfinance.download",
+          "value": {
+            "symbol": "SOXL",
+            "start": "2026-05-07",
+            "end": "2026-05-17"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": 6
+        },
+        {
+          "kind": "output",
+          "label": "last bar",
+          "value": {
+            "date": "2026-05-15",
+            "close": 164.18
+          }
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 84
+        }
+      ]
+    },
+    {
+      "name": "Data: yfinance QQQ (last 10 days)",
+      "group": "data",
+      "status": "pass",
+      "ms": 107,
+      "info": "6 rows, last=2026-05-15 close=$708.93",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "yfinance.download",
+          "value": {
+            "symbol": "QQQ",
+            "start": "2026-05-07",
+            "end": "2026-05-17"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": 6
+        },
+        {
+          "kind": "output",
+          "label": "last bar",
+          "value": {
+            "date": "2026-05-15",
+            "close": 708.93
+          }
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 106
+        }
+      ]
+    },
+    {
+      "name": "Data: yfinance TQQQ (last 10 days)",
+      "group": "data",
+      "status": "pass",
+      "ms": 85,
+      "info": "6 rows, last=2026-05-15 close=$75.34",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "yfinance.download",
+          "value": {
+            "symbol": "TQQQ",
+            "start": "2026-05-07",
+            "end": "2026-05-17"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": 6
+        },
+        {
+          "kind": "output",
+          "label": "last bar",
+          "value": {
+            "date": "2026-05-15",
+            "close": 75.34
+          }
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 84
+        }
+      ]
+    },
+    {
+      "name": "Data: yfinance TLT (last 10 days)",
+      "group": "data",
+      "status": "pass",
+      "ms": 86,
+      "info": "6 rows, last=2026-05-15 close=$83.66",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "yfinance.download",
+          "value": {
+            "symbol": "TLT",
+            "start": "2026-05-07",
+            "end": "2026-05-17"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": 6
+        },
+        {
+          "kind": "output",
+          "label": "last bar",
+          "value": {
+            "date": "2026-05-15",
+            "close": 83.66
+          }
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 84
+        }
+      ]
+    },
+    {
+      "name": "Data: yfinance XLU (last 10 days)",
+      "group": "data",
+      "status": "pass",
+      "ms": 108,
+      "info": "6 rows, last=2026-05-15 close=$43.87",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "yfinance.download",
+          "value": {
+            "symbol": "XLU",
+            "start": "2026-05-07",
+            "end": "2026-05-17"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": 6
+        },
+        {
+          "kind": "output",
+          "label": "last bar",
+          "value": {
+            "date": "2026-05-15",
+            "close": 43.87
+          }
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 108
+        }
+      ]
+    },
+    {
+      "name": "Data: yfinance ^VIX (last 10 days)",
+      "group": "data",
+      "status": "pass",
+      "ms": 60,
+      "info": "6 rows, last=2026-05-15 close=$18.43",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "yfinance.download",
+          "value": {
+            "symbol": "^VIX",
+            "start": "2026-05-07",
+            "end": "2026-05-17"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": 6
+        },
+        {
+          "kind": "output",
+          "label": "last bar",
+          "value": {
+            "date": "2026-05-15",
+            "close": 18.43
+          }
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "Data: FINRA short-volume daily report reachable",
+      "group": "data",
+      "status": "pass",
+      "ms": 369,
+      "info": "FINRA reachable for 20260515, 1 SOXL row(s)",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "GET",
+          "value": "https://cdn.finra.org/equity/regsho/daily/CNMSshvol20260515.txt"
+        },
+        {
+          "kind": "output",
+          "label": "HTTP status",
+          "value": 200
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 75
+        },
+        {
+          "kind": "output",
+          "label": "SOXL row sample",
+          "value": "20260515|SOXL|12553944.575490|1529443.854520|22113373.554234|B,Q,N"
+        }
+      ]
+    },
+    {
+      "name": "Engine: Black-Scholes call pricer (ATM 30d, \u03c3=50%)",
+      "group": "engine",
+      "status": "pass",
+      "ms": 0,
+      "info": "ATM 30d 50% vol price=$5.7138",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "inputs",
+          "value": {
+            "S": 100.0,
+            "K": 100.0,
+            "T_years": 0.0821917808219178,
+            "sigma": 0.5,
+            "r": 0.0
+          }
+        },
+        {
+          "kind": "output",
+          "label": "call price",
+          "value": 5.713768
+        },
+        {
+          "kind": "assertion",
+          "label": "0 < price < S and in plausible band [3, 10]",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engine: simulate_call_sleeve_engine smoke test",
+      "group": "engine",
+      "status": "fail",
+      "ms": 8,
+      "info": "engine returned 12 keys/attrs",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "inputs",
+          "value": {
+            "n_days": 60,
+            "soxl_start": 99.75,
+            "qqq_start": 300.0
+          }
+        },
+        {
+          "kind": "output",
+          "label": "result keys",
+          "value": [
+            "equity_strategy",
+            "equity_soxl_bh",
+            "equity_qqq_bh",
+            "sleeve_value",
+            "cash_value",
+            "sleeve_alloc_target",
+            "sleeve_alloc_actual",
+            "realized_vol",
+            "contracts_history",
+            "roll_events",
+            "alloc_df",
+            "sleeve_pct"
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "result has 'equity' series",
+          "value": {
+            "ok": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engine: compute_risk_metrics (9 columns)",
+      "group": "engine",
+      "status": "pass",
+      "ms": 0,
+      "info": "9/9 expected risk columns recognized",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "equity series",
+          "value": [
+            1.0,
+            1.01,
+            0.99,
+            1.02,
+            1.05,
+            1.03,
+            1.06
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "metrics",
+          "value": {
+            "Series": "probe",
+            "Total Return %": 6.0,
+            "CAGR %": 714.73,
+            "Vol (ann) %": 38.14,
+            "Max Drawdown %": -1.98,
+            "Sharpe": 6.61,
+            "Sortino": 297.56,
+            "Calmar": 360.94,
+            "Capital at Risk %": 20.0,
+            "Return / At-Risk %": 30.0
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "\u22657 of 9 required columns present",
+          "value": {
+            "matched": [
+              "Total Return",
+              "CAGR",
+              "Vol",
+              "Max Drawdown",
+              "Sharpe",
+              "Sortino",
+              "Calmar",
+              "Capital at Risk",
+              "Return / At-Risk"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Engine: probability table generator",
+      "group": "engine",
+      "status": "pass",
+      "ms": 58,
+      "info": "9 rows \u00d7 5 cols",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "horizons_days",
+          "value": [
+            5,
+            20,
+            60
+          ]
+        },
+        {
+          "kind": "input",
+          "label": "magnitudes",
+          "value": [
+            0.05,
+            0.1,
+            0.2
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "table",
+          "value": [
+            {
+              "horizon_days": 5,
+              "magnitude_pct": 0.05,
+              "up_prob": 46.1,
+              "down_prob": 52.2,
+              "total_periods": 295
+            },
+            {
+              "horizon_days": 5,
+              "magnitude_pct": 0.1,
+              "up_prob": 44.7,
+              "down_prob": 50.8,
+              "total_periods": 295
+            },
+            {
+              "horizon_days": 5,
+              "magnitude_pct": 0.2,
+              "up_prob": 44.7,
+              "down_prob": 49.8,
+              "total_periods": 295
+            },
+            {
+              "horizon_days": 20,
+              "magnitude_pct": 0.05,
+              "up_prob": 41.4,
+              "down_prob": 58.2,
+              "total_periods": 280
+            },
+            {
+              "horizon_days": 20,
+              "magnitude_pct": 0.1,
+              "up_prob": 41.4,
+              "down_prob": 58.2,
+              "total_periods": 280
+            },
+            {
+              "horizon_days": 20,
+              "magnitude_pct": 0.2,
+              "up_prob": 41.1,
+              "down_prob": 58.2,
+              "total_periods": 280
+            },
+            {
+              "horizon_days": 60,
+              "magnitude_pct": 0.05,
+              "up_prob": 29.6,
+              "down_prob": 70.0,
+              "total_periods": 240
+            },
+            {
+              "horizon_days": 60,
+              "magnitude_pct": 0.1,
+              "up_prob": 29.2,
+              "down_prob": 69.6,
+              "total_periods": 240
+            },
+            {
+              "horizon_days": 60,
+              "magnitude_pct": 0.2,
+              "up_prob": 28.7,
+              "down_prob": 68.8,
+              "total_periods": 240
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AI: Anthropic round-trip ping",
+      "group": "ai",
+      "status": "pass",
+      "ms": 1039,
+      "info": "reply='OK' rtt=1004ms",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "prompt",
+          "value": "Reply with exactly the single word: OK"
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 1004
+        },
+        {
+          "kind": "output",
+          "label": "model",
+          "value": "claude-sonnet-4-5-20250929"
+        },
+        {
+          "kind": "output",
+          "label": "reply text",
+          "value": "OK"
+        },
+        {
+          "kind": "output",
+          "label": "stop_reason",
+          "value": "end_turn"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,492 @@
+Build a synthetic user agent ("R1") that beta-tests SOXL Analysis Platform end-to-end. R1 must produce raw, reviewable evidence of every interaction — not pass/fail summaries.
+NON-NEGOTIABLE REQUIREMENTS (read first)
+These are the parts a previous synthetic-user build for a different app failed on. If any are missing, the deliverable is rejected.
+
+No green-checkmark theater. R1 produces raw evidence, not "PASS." Exact controls R1 manipulated, exact numeric outputs the app produced, exact screenshots. Judge produces prose critique, not booleans. PASS/FAIL exists only as a filter for failures.md — never as a substitute for evidence.
+The HTML report must be reviewable in under 30 minutes. Every interaction shows step + R1's parameter choices + app's response (tables, chart screenshots, summary metrics) + judge critique. No collapsed sections.
+The live view must show R1's actual interactions and the app's actual outputs as they happen — not "Step 4 of N in progress." Spec below.
+All numeric outputs captured. For every backtest, probability engine query, allocation engine run, dislocation Z-score, R1 saves exact numbers to disk as structured JSON.
+Three screenshots per interactive step (before / after parameter change / after computation completes). Navigation-only steps get one.
+If R1 cannot complete a step, the failure is logged with the actual error message, screenshot, and Streamlit traceback if visible. No skipping and marking green.
+Per-step verification is mathematical, not just structural. R1 verifies allocations are within floor/ceiling bounds, asymmetric resize rule holds, no look-ahead in sims, probability outputs include sample size, dislocation classifications match Z thresholds, etc. Just rendering numbers is not sufficient.
+
+What's different about this app — SOXL Analysis Platform's defining features
+This is the second SOXL-focused quant app in your suite (the first was soxl-options-edge). They share a domain but differ in architecture and what's testable. Six things make this one distinct from previous R1 targets:
+It has a "never refuse" architectural commitment. Per blueprint, every simulator/engine returns valid (possibly trivial) results for empty/1-bar/non-overlapping windows. R1 must explicitly verify this — submit pathological inputs and confirm the app doesn't crash but produces sensible degraded output (zero-filled rows, captioned as such).
+It has a custom Streamlit JavaScript component (components/chart_draw/index.html) for drag-to-draw trend lines. R1 can't easily drag lines via Playwright but can verify the component loads and renders.
+Asymmetric resize is a core modeling commitment. The call-sleeve simulator sells DOWN freely but only refills at roll events. R1 verifies this empirically by inspecting the sleeve-value time series.
+Multiple LLM-driven features (AI Strategy Builder + Natural-Language Custom Strategy refiner). Both use Anthropic via Replit Integrations. Both produce structured JSON that downstream code must consume. R1 tests both as contracts.
+Custom Strategy has a SIGNAL_VERSION constant for cache invalidation. R1 verifies saved strategies survive a session but the system would gracefully handle version mismatches (this is documented behavior — R1 doesn't have to mutate the version, just verify the version is exposed).
+It uses both EODHD and Polygon. Polygon for options, EODHD for equity history, plus yfinance for benchmarks. R1 doesn't test the data providers directly but verifies that data loads — and gracefully handles when one is unavailable.
+The eight invariants that elevate to CRITICAL VIOLATION status:
+Invariant A — Allocation stays within floor/ceiling bounds. Per blueprint, soxl_allocation_engine clips allocation = clip(raw_allocation × regime_mult, floor, ceiling). R1 runs the Allocation Engine, inspects the deviation/allocation panel, and verifies every row's allocation value is in [floor, ceiling]. Hard floor 0.02 and ceiling 0.98 are documented. Any row outside that hard band even with custom floor/ceiling settings = CRITICAL VIOLATION (clipping broken).
+Invariant B — No look-ahead in call-sleeve sim. Per blueprint: target_alloc = alloc_df["allocation"].iloc[max(i - 1, 0)]. R1 verifies this by checking that the allocation panel and the realized strategy returns at any timestamp T use the signal computed from data ≤ T-1. R1 can't directly inspect the code path, but R1 can verify: when R1 runs a sim ending at date D, the equity at D should reflect a signal computed before D. R1 detects look-ahead violations by running the sim, then re-running with end_date = D-1, and verifying the equity at D-1 is the same in both runs (if it differs, the original run was peeking into data after D-1). If detected, CRITICAL VIOLATION.
+Invariant C — Asymmetric resize is observable in sleeve value series. Per blueprint: sleeve sells down freely, refills only at roll events. R1 inspects the sleeve_value time series + roll_events list + sleeve_alloc_target series. R1 verifies:
+
+Between consecutive roll events, when sleeve_alloc_target increases, sleeve_value does NOT increase proportionally (no mid-cycle refill).
+When sleeve_alloc_target decreases (e.g., signal shifts), sleeve_value decreases proportionally (sell-down works).
+At roll events, sleeve_value resets to match the new target.
+If R1 observes a non-roll-event sleeve_value increase tracking a target increase, the asymmetric rule is broken: CRITICAL VIOLATION.
+
+Invariant D — Probability Engine outputs include sample size. Per blueprint: "Reports n (sample size) alongside every probability." R1 runs the Probability Engine, captures the output. Every reported P(move ≥ M% within H days) row must include an n field. If absent, CRITICAL VIOLATION (the documented spec contract is broken; probabilities without sample sizes are unfalsifiable).
+Invariant E — Risk Metrics panel always renders. Per blueprint: "REQUIRED PANEL — always rendered by UI" + compute_risk_metrics returns valid zero-filled row when len(equity) < 2. R1 tests this by deliberately running a backtest with start == end (zero-day window). The Risk Metrics dataframe must still render with all required columns (Total Return %, CAGR %, Vol (ann) %, Max Drawdown %, Sharpe, Sortino, Calmar, Capital at Risk %, Return / At-Risk %), even if values are zeros. Missing dataframe or thrown exception = CRITICAL VIOLATION.
+Invariant F — Dislocation Z-score classification matches thresholds. Per blueprint _classify(z): 5 buckets (RICH, STRETCH-RICH, FAIR, STRETCH-CHEAP, CHEAP). The exact thresholds aren't in the blueprint, but the classification function is deterministic. R1 runs the dislocation tab, captures Z value + verdict. Re-runs with different windows. Verifies that the verdict bucketing is monotonic with Z (more positive Z → more RICH; more negative Z → more CHEAP). If the relationship is non-monotonic or randomly assigned, CRITICAL VIOLATION.
+Invariant G — AI Strategy Builder produces parseable JSON. R1 sends a substantive query to the AI Strategy Builder. Captures the response. Runs parse_strategy_json mentally: the JSON must include the documented schema (tranched buy ladder, operating rules, statistical basis, risk notes). If the response is unparseable, missing required sections, or contains invented indicators not in ALL_INDICATORS, CRITICAL VIOLATION.
+Invariant H — Natural-Language Custom Strategy produces valid spec. R1 enters plain-English in the Custom Strategy NL refiner. The returned JSON must normalize via strategy_nl.normalize_strategy() into something simulate_custom_strategy can consume. R1 verifies by:
+
+Receiving the JSON
+Checking for required top-level fields (entry_panel, exit_panel, controls)
+Checking that every indicator name in the rules is in the documented ALL_INDICATORS catalog
+Checking operators are in OPERATORS = [">", "<", "=", "crosses above", "crosses below"]
+If the LLM hallucinates an indicator name not in the catalog (which the blueprint warns about), CRITICAL VIOLATION.
+
+Architecture
+
+Browser automation: Playwright (Node, single-file tools/r1/run.mjs). Standalone Node project, not in any workspace.
+R1's brain: Anthropic API. Model: claude-opus-4-7. Key in ANTHROPIC_API_KEY.
+Judge: Separate Claude API call per interaction. Quant-aware prompt — judge evaluates allocation logic, mispricing claims, Sharpe ratios, statistical validity. Same framing as USD/HKD Edge and SOXL Options Edge.
+Live view: node:http server on port 7777. Zero extra deps.
+Target app: SOXL Analysis Platform running locally. Default APP_URL=http://localhost:5000. No authentication.
+
+Streamlit-specific considerations
+Same Streamlit conventions as USD/HKD Edge and SOXL Options Edge:
+
+[data-testid="stSpinner"] disappearance gates "complete."
+.fill() for text inputs.
+1920×1080 viewport.
+
+PLUS this app's specifics:
+
+Single page with 5 top-level tabs (Chart / Vol Surface / Dislocation / Strategy / Backtest). Backtest has 8 sub-tabs.
+The Allocation Engine is sub-tab[0] of Backtest (default). R1 focuses here for invariants A, B, C.
+The custom chart-draw component embeds via st.components.v1.html — R1 should verify it loads but not try to interact via drag.
+AI Strategy Builder uses streaming responses — R1 must wait for the full response, then parse.
+
+Live view
+Top panel: current step + R1's parameter choices + URL + latest screenshot.
+Middle panel: parsed numerics, recent Streamlit reruns, judge critique, plus a dedicated "SOXL Analysis State" panel showing:
+
+Active tab (Chart / Vol Surface / Dislocation / Strategy / Backtest)
+For Backtest: current sub-tab
+Date range in use
+Most recent allocation engine result: total return, sleeve %, regime
+Most recent dislocation Z + verdict
+Probability engine last query: P value + n
+Invariant check status
+
+For Allocation Engine runs, sub-panel shows the per-bar allocation values (first 10 and last 10) so R1 can visually scan for floor/ceiling violations.
+Bottom panel: reverse-chronological completed-interaction log.
+After exit: "RUN COMPLETE" with link to report.html. Kept open 60s.
+What R1 is testing — the functions
+Function 1 — App startup and Chart tab
+
+Navigate to APP_URL.
+Wait for app to load. Capture screenshot.
+Verify the 5 top-level tabs render.
+Confirm Chart & Probabilities tab is active.
+Verify the SOXL log-scale chart renders.
+Test benchmark toggles (QQQ, TQQQ, TLT, XLU, VIX) — click each, verify overlay appears/disappears.
+Test the custom chart-draw component:
+
+Verify it embeds (iframe element present)
+Click in chart area; verify no crash
+Don't try to actually drag a trend line — Playwright + custom JS is fragile
+
+
+
+Function 2 — Period Analysis sub-block
+
+In the Chart tab, navigate to Period Analysis.
+Run both modes: "SOXL Patterns" + "Benchmark-Based" (each benchmark).
+Capture analogue counts per horizon.
+Verify counts are non-negative integers.
+
+Function 3 — Short Interest sub-block
+
+Run the Short Interest panel.
+Verify both biweekly FINRA data and daily short-volume render.
+Capture the parallel-fetch ThreadPoolExecutor result (most recent N rows of daily short volume).
+If data fails to load (FINRA outage, etc.), verify graceful degradation per "never refuse."
+
+Function 4 — Probability Engine sub-block (Invariant D)
+
+Configure the Probability Engine:
+
+Magnitudes: 5%, 10%, 20%
+Horizons: 5, 21, 63 days
+Lookback window: 5 years
+
+
+Run.
+Capture the full table.
+Verify Invariant D: every probability row has an n value (sample size). If absent, CRITICAL VIOLATION.
+Run "Benchmark History" predictive mode. Verify it produces output.
+Save to outputs/probability-engine/.
+
+Function 5 — Vol Surface tab
+
+Switch to Vol Surface tab.
+Wait for fetch (Polygon options snapshot can be slow).
+Capture:
+
+IV Rank panel (rv_info, atm_iv30, regime classification)
+3D surface screenshot
+BUY/SELL signals tables (cheap/rich contracts)
+
+
+Verify IV regime classification (CHEAP / MID-RANGE / EXPENSIVE) is internally consistent with the IV rank percentile.
+Save to outputs/vol-surface/.
+
+Function 6 — Dislocation tab (Invariant F)
+
+Switch to SOXL-QQQ Dislocation tab.
+Wait for compute.
+Capture:
+
+Z-surface 3D chart screenshot
+Verdict card (RICH / STRETCH-RICH / FAIR / STRETCH-CHEAP / CHEAP)
+Z-score value
+Reversion table (for each Z bucket, average next-N-day SOXL move)
+
+
+Verify Invariant F:
+
+Run with current data. Capture Z + verdict.
+The verdict bucket should be consistent with Z: large positive Z → RICH/STRETCH-RICH; large negative Z → CHEAP/STRETCH-CHEAP; near zero → FAIR.
+If verdict says RICH but Z is negative, classification is broken: CRITICAL VIOLATION.
+
+
+Open the Data Layer expander (debug). Verify rolling betas, residuals, Z-matrix all render.
+
+Function 7 — Strategy Builder tab (AI, Invariant G)
+
+Switch to Strategy Builder tab.
+Enter a substantive prompt: "Generate a tranched buy strategy for SOXL that scales in over the next month based on dislocation Z-score."
+Submit. Wait for Claude to stream the response.
+Capture full response text.
+Verify Invariant G:
+
+Response contains a parseable JSON object (look for ```json fences or top-level {)
+Parsed JSON has documented schema fields (some variant of tranched buy ladder, operating rules, statistical basis, risk notes)
+Strategy doesn't reference indicators outside ALL_INDICATORS
+
+
+If parsing fails or schema is wrong, CRITICAL VIOLATION.
+Save response to outputs/strategy-builder/response.json.
+
+If AI_INTEGRATIONS_ANTHROPIC_API_KEY is not set, the function will fail to call Claude. Verify the failure is graceful (error message, not Python traceback), then skip with logged reason.
+Function 8 — Backtest tab navigation
+
+Switch to Backtest tab.
+Verify the 8 sub-tabs render: Allocation Engine / Period Analysis / Probability Engine / Vol Regime / SOXL-QQQ Dislocation / Strategy Builder / Vol Surface / Custom Strategy.
+Verify sub-tab[0] (Allocation Engine) is active by default.
+
+Function 9 — Allocation Engine (default, Invariants A, B, C, E — flagship)
+
+On sub-tab[0]:
+Use defaults: sleeve_pct=20%, dte=45, roll_dte=10, moneyness=1.00, vol_w=30.
+Date range: last 2 years.
+Click "Run allocation engine."
+Wait for completion (1-3 min).
+Capture:
+
+ENGINE RECOMMENDATION card (sleeve fill %, calls % of notional, deviation, regime badge, cash %)
+3-row Plotly chart screenshot
+Risk-Adjusted Metrics dataframe (3 rows: Engine, SOXL B&H, QQQ B&H)
+4 metric cards
+Sleeve & position diagnostics expander (full daily history)
+Deviation / allocation panel expander
+
+
+Save full output to outputs/backtest/allocation-engine-default.json.
+
+Verify Invariant A (floor/ceiling bounds):
+
+Inspect the deviation/allocation panel.
+For every row, allocation must be in [0.02, 0.98] (hard band) AND in [user_floor, user_ceiling] (custom band).
+Any row outside = CRITICAL VIOLATION.
+
+Verify Invariant C (asymmetric resize):
+
+Inspect the sleeve diagnostics.
+Identify roll events from roll_events list.
+Between consecutive roll events, find a period where sleeve_alloc_target increased.
+Verify sleeve_value did NOT proportionally increase in that period (no mid-cycle refill).
+Conversely, find a period where sleeve_alloc_target decreased.
+Verify sleeve_value did decrease proportionally (sell-down works).
+If asymmetric pattern not observed where expected, CRITICAL VIOLATION.
+
+Verify Invariant E (Risk Metrics always renders):
+
+After this happy-path run, save the rendered Risk Metrics table.
+Later (Function 10) verify it still renders on pathological inputs.
+
+Function 10 — Allocation Engine pathological inputs (Invariants B, E)
+Invariant E test (zero-day window):
+
+Set start_date == end_date.
+Click run.
+Verify the Risk Metrics dataframe still renders with all 9 columns (Total Return %, CAGR %, Vol (ann) %, Max Drawdown %, Sharpe, Sortino, Calmar, Capital at Risk %, Return / At-Risk %).
+Values can be zero-filled, but columns must be present and dataframe must not error.
+If table is missing or app throws, CRITICAL VIOLATION.
+
+Invariant B test (no look-ahead):
+
+Run allocation engine with end_date = 2024-12-31. Capture equity at 2024-12-30.
+Re-run with end_date = 2024-12-30. Capture equity at 2024-12-30.
+The two equity values for 2024-12-30 must be equal (or extremely close: < $0.01 difference per $1 capital, accounting for any path-dependent state).
+If they differ meaningfully, the first run was looking ahead: CRITICAL VIOLATION.
+
+Function 11 — Allocation Engine custom parameters
+
+Run with non-default parameters:
+
+sleeve_pct = 30%
+moneyness = 0.95 (slightly ITM)
+bear_multiplier = 0.5
+
+
+Verify it runs and produces different results from Function 9.
+Verify Invariant A still holds.
+
+Function 12 — Period Analysis sub-tab
+
+Switch to Backtest sub[1].
+Configure: window 1 year, holding horizon 21 days.
+Run.
+Verify per-horizon analogue count + outcome distribution renders.
+
+Function 13 — Probability Engine sub-tab
+
+Switch to Backtest sub[2].
+Configure: 10% move, 21 day horizon, 5-year lookback.
+Run.
+Verify the n (sample size) is reported alongside probability (Invariant D again).
+
+Function 14 — Vol Regime sub-tab
+
+Switch to Backtest sub[3].
+Run.
+Verify current vol regime classification (CHEAP / MID-RANGE / EXPENSIVE) is displayed with supporting IV percentile bands.
+
+Function 15 — Dislocation backtest sub-tab
+
+Switch to Backtest sub[4].
+Run.
+Verify backtest produces equity curve + summary table.
+Compare to live Dislocation tab from Function 6. Z-scores at the same dates should match.
+
+Function 16 — Strategy Builder sub-tab (Invariant G re-check)
+
+Switch to Backtest sub[5].
+Send a different prompt to the AI Strategy Builder.
+Verify parseable JSON returns (Invariant G).
+
+Function 17 — Vol Surface backtest sub-tab
+
+Switch to Backtest sub[6].
+Run.
+Verify backtest uses BUY/SELL signals from vol_surface.detect_anomalies.
+Note: blueprint says "limited" — verify graceful behavior on the constrained start date.
+
+Function 18 — Custom Strategy (form mode)
+
+Switch to Backtest sub[7].
+Use form builder to compose a simple strategy:
+
+Entry condition: SOXL RSI < 30
+Exit condition: SOXL RSI > 70
+Side: long
+
+
+Configure controls (starting cash, slippage, etc.).
+Run backtest.
+Verify equity curve + trade log render.
+Save strategy with name "R1 Test RSI Strategy."
+Verify saved strategy appears in list.
+Delete it. Verify it's gone.
+
+Function 19 — Custom Strategy (NL mode, Invariant H)
+
+Switch to NL mode.
+Enter: "Buy SOXL when its 14-day RSI drops below 30, sell when it rises above 70."
+Submit.
+Capture parsed JSON response.
+Verify Invariant H:
+
+JSON parses successfully
+Has entry_panel, exit_panel, controls
+All indicator names in rules are in ALL_INDICATORS
+All operators are in OPERATORS
+The normalized strategy is something simulate_custom_strategy can run
+
+
+Save to outputs/custom-strategy/nl-spec.json.
+
+If AI_INTEGRATIONS_ANTHROPIC_API_KEY not configured, skip with logged reason.
+Function 20 — Custom Strategy advanced indicators
+
+Build a strategy using less common indicators: "Vol Surface Signal (Calls) = BUY" + "Vol Regime Label = CHEAP."
+Run.
+Verify graceful behavior on date ranges before OPTIONS_WINDOW_START (2022-01-01) — blueprint says UI should warn about start-date limits.
+If R1 sets start_date before 2022, expect a warning or graceful no-op for options-dependent signals.
+
+Function 21 — Report downloads
+
+After Function 9's Allocation Engine run, click each of the 4 download buttons (TXT, CSV, Word, PDF).
+For each, verify file downloads successfully.
+For TXT and CSV, verify content includes methodology string + stats rows.
+For PDF, verify first bytes are %PDF-.
+For Word, verify first bytes are PK (ZIP signature).
+Save downloaded files to outputs/downloads/.
+
+Function 22 — Final state capture
+
+Navigate through all tabs once more.
+Verify app remains responsive.
+Capture final screenshots.
+
+R1's behavior
+For each interaction R1 picks one approach and logs the choice:
+
+Run with documented defaults (happy path)
+Probe an invariant (zero-day window for E, edge dates for B, custom parameters for A)
+Vary a parameter to verify it has effect
+Use both default and pathological inputs
+For AI features (Strategy Builder, NL Custom Strategy), use both clear and ambiguous prompts
+
+Streamlit interaction constraint: Same as previous Streamlit-app R1 builds. Sliders use keyboard or value injection. Text inputs use .fill(). Buttons clicked normally. Wait for spinner.
+Per-interaction flow
+
+Navigate / verify current state.
+Capture current control values.
+R1 brain picks approach + parameter values.
+"Before" screenshot.
+Manipulate controls.
+"After interaction" screenshot.
+Wait for spinner + result containers.
+"After completion" screenshot.
+Extract all numeric outputs (tables, metric cards, captions).
+Run invariant-specific verification:
+
+Allocation engine outputs → Invariant A (clipping bounds)
+Re-run with different end dates → Invariant B (no look-ahead)
+Sleeve diagnostics → Invariant C (asymmetric resize)
+Probability engine → Invariant D (sample size present)
+Zero-day window → Invariant E (Risk Metrics renders)
+Dislocation verdict → Invariant F (Z classification monotonic)
+AI Strategy Builder → Invariant G (parseable JSON)
+NL Custom Strategy → Invariant H (valid spec with catalog indicators)
+
+
+Send full interaction to judge with quant-aware prompt: "Critique as a quantitative options analyst. Are the allocation values reasonable? Is the asymmetric resize observable? Are probabilities reported with sample sizes? Does the dislocation classification make sense? Are the AI-generated strategies internally consistent?"
+Append to transcript, update live view.
+
+Artifacts (written to tools/r1/runs/<ISO-timestamp>/)
+transcript.jsonl
+One JSON per interaction with standard fields plus, where applicable:
+
+streamlit_state: control values
+numeric_outputs: full table extractions
+invariant_a_check: allocation panel scan for floor/ceiling violations
+invariant_b_check: cross-date determinism comparison
+invariant_c_check: sleeve resize pattern analysis
+invariant_d_check: presence of n in probability outputs
+invariant_e_check: Risk Metrics dataframe presence under degenerate input
+invariant_f_check: Z-score / verdict pair, monotonicity inspection
+invariant_g_check: AI Strategy Builder JSON parse + schema validation
+invariant_h_check: NL custom strategy spec validation
+
+report.html
+Self-contained, grouped by function. Sticky TOC. Standard fields plus invariant blocks. Function 9 (Allocation Engine flagship) gets a special block showing: allocation panel statistics (min, max, mean, % at bounds), sleeve resize pattern visualization, and the full Risk Metrics table inline.
+failures.md
+Opens with CRITICAL INVARIANT VIOLATIONS:
+
+Invariant A: allocation out of bounds (cite specific rows + bound values)
+Invariant B: look-ahead detected (cite the diverging equity at the same date)
+Invariant C: sleeve resize pattern broken (cite the periods + values)
+Invariant D: probability output missing n (cite the rows)
+Invariant E: Risk Metrics didn't render on zero-day input (cite the input + missing table)
+Invariant F: dislocation verdict inconsistent with Z (cite Z + verdict)
+Invariant G: AI Strategy Builder produced unparseable/malformed JSON (cite the response)
+Invariant H: NL Custom Strategy hallucinated indicator (cite the indicator + catalog)
+Any Python traceback visible in Streamlit UI
+Any 5xx response
+Any uncaught exception in R1's harness
+
+Below: judge concerns linking to report anchors, screenshots inline.
+network.log
+HTTP requests observed.
+outputs/
+
+backtest/allocation-engine-default.json — Function 9 full result
+backtest/allocation-engine-custom.json — Function 11 result
+backtest/look-ahead-test/ — Function 10 cross-date comparison
+backtest/zero-day-test/ — Function 10 degenerate input result
+probability-engine/ — Function 4 + 13 results
+vol-surface/ — Function 5 result
+dislocation/ — Function 6 result
+strategy-builder/response.json — Function 7 AI response + parsed JSON
+custom-strategy/form-spec.json — Function 18 form-built strategy
+custom-strategy/nl-spec.json — Function 19 NL-built strategy
+downloads/ — Function 21 exported reports
+
+console.log
+Full stdout.
+screenshots/
+Numbered PNGs.
+run-summary.txt
+INTERACTIONS: N
+JUDGE CONCERNS RAISED: M
+CRITICAL INVARIANT VIOLATIONS: K
+  Invariant A (allocation bounds): A
+  Invariant B (no look-ahead): B
+  Invariant C (asymmetric resize): C
+  Invariant D (probability n reported): D
+  Invariant E (Risk Metrics always renders): E
+  Invariant F (dislocation classification): F
+  Invariant G (AI Strategy Builder JSON): G
+  Invariant H (NL Custom Strategy catalog): H
+HARNESS SANITY FAILURES: J
+Anti-theater sanity checks
+For each interaction:
+
+R1 captured at least one numeric output (not just screenshots).
+Interactive: 3 screenshots, not byte-identical. Navigation-only: 1.
+judge_critique ≥ 30 words.
+For Function 9 (Allocation Engine): full allocation panel captured with row count > 0.
+For Function 10 (pathological): zero-day Risk Metrics dataframe presence explicitly verified.
+For Function 7 + 19 (AI features): full LLM response captured + JSON parse attempted.
+
+If any fail: HARNESS SANITY FAILURES: X, exit code 3.
+Configuration
+jsconst APP_URL = process.env.APP_URL || 'http://localhost:5000';
+const OUTPUT_DIR = `./runs/${new Date().toISOString().replace(/[:.]/g,'-')}`;
+const HEADLESS = process.env.HEADLESS === 'true' || false;
+const LIVE_VIEW_PORT = parseInt(process.env.LIVE_VIEW_PORT || '7777', 10);
+const SKIP_FUNCTIONS = (process.env.SKIP_FUNCTIONS || '').split(',').filter(Boolean);
+const ALLOCATION_ENGINE_TIMEOUT_MS = parseInt(process.env.ALLOCATION_ENGINE_TIMEOUT_MS || '300000', 10);
+const VOL_SURFACE_TIMEOUT_MS = parseInt(process.env.VOL_SURFACE_TIMEOUT_MS || '180000', 10);
+const AI_STRATEGY_TIMEOUT_MS = parseInt(process.env.AI_STRATEGY_TIMEOUT_MS || '120000', 10);
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-7';
+const VIEWPORT_WIDTH = 1920;
+const VIEWPORT_HEIGHT = 1080;
+Deliverable
+tools/r1/run.mjs + tools/r1/package.json + tools/r1/README.md. Standalone Node project.
+npm start runs full plan. Smoke test: SKIP_FUNCTIONS=7,16,19 npm start (skip AI features if AI_INTEGRATIONS_ANTHROPIC_API_KEY not set).
+Startup banner:
+R1 is running.
+Live view:    http://localhost:7777
+Output dir:   ./runs/<timestamp>/
+Watch the live view — especially the SOXL Analysis State panel.
+Do not trust summary output alone.
+Finish banner:
+R1 finished.
+Open the report:        ./runs/<...>/report.html
+Open the failures:      ./runs/<...>/failures.md
+Allocation engine:      ./runs/<...>/outputs/backtest/allocation-engine-*.json
+AI Strategy responses:  ./runs/<...>/outputs/strategy-builder/
+Custom strategy specs:  ./runs/<...>/outputs/custom-strategy/
+Raw transcript:         ./runs/<...>/transcript.jsonl
+Exit codes: 0 clean, 1 judge concerns raised, 2 critical invariant violations, 3 harness sanity failed.
+UI selectors identified by inspecting the actual rendered Streamlit app. Same Streamlit testid conventions. For tab navigation: Streamlit's st.tabs() renders as buttons with role="tab" — use Playwright's getByRole('tab', { name: '...' }) to switch tabs reliably.

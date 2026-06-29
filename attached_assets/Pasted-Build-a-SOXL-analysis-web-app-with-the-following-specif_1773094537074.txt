@@ -1,0 +1,48 @@
+Build a SOXL analysis web app with the following specifications:
+DATA
+
+Use yfinance to pull complete SOXL price history from inception (2010) to today, with auto_adjust=True to handle reverse splits
+Refresh data on page load
+
+CHART
+
+Display SOXL price as a line chart in LOG SCALE only (no linear option)
+Clean, minimal design — no cluttered indicators
+User can draw straight lines on the chart by clicking two points
+Lines persist until manually deleted
+Chart should be interactive (zoom, pan)
+Use Plotly for the chart (handles log scale and interactivity well)
+
+PROBABILITY ENGINE
+Two independent user-controlled inputs:
+Input 1 — Prediction horizon: How far ahead to predict
+
+User types any number + selects unit: days / weeks / months / years
+Examples: 1 day, 2 weeks, 6 months, 5 years
+
+Input 2 — Historical dataset window: Which historical data to base the prediction on
+
+User types any number + selects unit: days / weeks / months / years / "all available"
+Examples: 7 days, 3 months, 2 years, all data since 2010
+No recommended defaults — user chooses freely
+
+Input 3 — Magnitude: What move to predict
+
+User types a percentage (e.g. 20%)
+User selects direction: UP, DOWN, or EITHER
+
+Output: Given the selected historical dataset, what percentage of equivalent time periods showed a move of that magnitude or greater in the specified direction?
+Example: User sets dataset = last 6 months, horizon = 1 week, magnitude = 15% down → app scans all 1-week windows in the last 6 months of SOXL data and returns: "In X out of Y comparable periods, SOXL dropped 15% or more. Historical probability: Z%"
+TECHNICAL STACK
+
+Python backend (Flask or FastAPI)
+Plotly for charting
+Clean simple UI — this is a personal tool, not a consumer product
+Single page app
+
+ADDITIONAL REQUIREMENT — LINE DRAWING:
+When a user draws a line between two points, the line must automatically extend infinitely into the future beyond the current date — it does not stop at today.
+The X-axis must extend significantly beyond the current date (minimum 5 years into the future) so the user can see where their trend lines project to.
+The line is drawn through two user-selected points and then projected forward using the same slope indefinitely. The future portion of the line should be visually distinct — for example, dashed — so the user knows they are looking at a projection rather than historical price action.
+The user can also extend lines backward into the past beyond their starting point if desired.
+Lines should be deletable individually by clicking on them.

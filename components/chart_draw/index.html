@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; }
+  #toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 2px; flex-wrap: wrap; }
+  .tbtn {
+    padding: 7px 18px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;
+    font-size: 14px; background: #fff; color: #333; transition: all 0.15s;
+    user-select: none;
+  }
+  .tbtn:hover { background: #f0f0f0; }
+  .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
+  .tbtn.danger { color: #E53935; border-color: #E53935; }
+  .tbtn.danger:hover { background: #E53935; color: #fff; }
+  #status { font-size: 13px; color: #555; margin-left: 8px; }
+  #chart-container { position: relative; width: 100%; }
+  #chart { width: 100%; }
+  #select-overlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    cursor: crosshair;
+    z-index: 100;
+  }
+  #select-highlight {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(74, 144, 217, 0.25);
+    border-left: 3px solid #1565C0;
+    border-right: 3px solid #1565C0;
+    display: none;
+    pointer-events: none;
+  }
+  #analyze-bar {
+    display: none;
+    padding: 10px 12px; margin: 6px 2px;
+    background: #E3F2FD; border: 2px solid #1565C0; border-radius: 8px;
+    align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  #analyze-bar span { font-size: 14px; color: #1565C0; font-weight: 600; }
+  .analyze-btn {
+    padding: 8px 24px; border: none; border-radius: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 700; color: #fff; background: #43A047;
+  }
+  .analyze-btn:hover { background: #388E3C; }
+  .analyze-clear {
+    padding: 6px 12px; border: 1px solid #90CAF9; border-radius: 6px; cursor: pointer;
+    font-size: 13px; background: #fff; color: #1565C0;
+  }
+  .analyze-clear:hover { background: #BBDEFB; }
+  #line-list { padding: 4px 2px; }
+  .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
+  .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .ldel { cursor: pointer; color: #E53935; border: none; background: none; font-size: 15px; padding: 2px 6px; }
+  .ldel:hover { background: #fee; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button class="tbtn" id="drawBtn" onclick="toggleDraw()">&#9998; Draw Line</button>
+  <button class="tbtn" id="selectBtn" onclick="toggleSelect()">&#9634; Select Period</button>
+  <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
+  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
+  <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
+</div>
+<div id="chart-container">
+  <div id="chart"></div>
+  <div id="select-overlay"></div>
+  <div id="select-highlight"></div>
+</div>
+<div id="analyze-bar">
+  <span id="analyze-text"></span>
+  <button class="analyze-btn" onclick="analyzeSelection()">Analyze This Period</button>
+  <button class="analyze-clear" onclick="clearSelection()">&#10005; Clear</button>
+</div>
+<div id="line-list"></div>
+
+<script>
+var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
+var chartDiv = document.getElementById('chart');
+var selectOverlay = document.getElementById('select-overlay');
+var selectHighlight = document.getElementById('select-highlight');
+var currentMode = 'pan';
+var lines = [];
+var chartData = null;
+var rendered = false;
+var knownShapeCount = 0;
+
+var selecting = false;
+var selectStartX = 0;
+var selectedRange = null;
+
+function sendToStreamlit(type, data) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*");
+}
+function setComponentValue(value) {
+  sendToStreamlit("streamlit:setComponentValue", {value: value});
+}
+function setFrameHeight(h) {
+  sendToStreamlit("streamlit:setFrameHeight", {height: h});
+}
+
+window.addEventListener("message", function(event) {
+  if (event.data.type === "streamlit:render") {
+    var args = event.data.args;
+    chartData = {
+      dates: args.dates,
+      prices: args.prices,
+      qqq_dates: args.qqq_dates || [],
+      qqq_prices: args.qqq_prices || [],
+      tqqq_dates: args.tqqq_dates || [],
+      tqqq_prices: args.tqqq_prices || [],
+      tlt_dates: args.tlt_dates || [],
+      tlt_prices: args.tlt_prices || [],
+      xlu_dates: args.xlu_dates || [],
+      xlu_prices: args.xlu_prices || [],
+      vix_dates: args.vix_dates || [],
+      vix_prices: args.vix_prices || [],
+      future_end: args.future_end,
+      chart_height: args.chart_height || 900
+    };
+    if (!rendered) {
+      lines = (args.lines || []).slice();
+      rendered = true;
+    }
+    renderChart();
+    renderLineList();
+    setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 300);
+  }
+});
+
+sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
+
+function setMode(mode) {
+  currentMode = mode;
+  var drawBtn = document.getElementById('drawBtn');
+  var selectBtn = document.getElementById('selectBtn');
+  drawBtn.classList.toggle('active', mode === 'draw');
+  selectBtn.classList.toggle('active', mode === 'select');
+  drawBtn.textContent = mode === 'draw' ? '[ ] Stop Drawing' : '\u270E Draw Line';
+  selectBtn.textContent = mode === 'select' ? '[ ] Stop Selecting' : '\u25A2 Select Period';
+
+  selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
+
+  if (mode !== 'select' && selectedRange) {
+    clearSelection();
+  }
+
+  var statusText = 'Drag left/right to scroll \u2022 Scroll wheel to zoom \u2022 Double-click a line to delete it';
+  if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line \u2022 Double-click a line to delete it';
+  if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
+  document.getElementById('status').textContent = statusText;
+
+  Plotly.relayout(chartDiv, {
+    dragmode: mode === 'draw' ? 'drawline' : 'pan',
+    'newshape.line.color': '#888',
+    'newshape.line.width': 2
+  });
+}
+
+function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
+function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
+
+function resetView() {
+  if (!chartData) return;
+  var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
+  var priceMax = Math.max.apply(null, chartData.prices);
+  var yPad = 0.3;
+  Plotly.relayout(chartDiv, {
+    'xaxis.range': [chartData.dates[0], chartData.future_end],
+    'yaxis.range': [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad]
+  });
+}
+
+function clearAll() {
+  lines = [];
+  knownShapeCount = 0;
+  clearSelection();
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+}
+
+function deleteLine(idx) {
+  lines.splice(idx, 1);
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+}
+
+function clearSelection() {
+  selectedRange = null;
+  document.getElementById('analyze-bar').style.display = 'none';
+  renderChart();
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+
+function analyzeSelection() {
+  if (!selectedRange) return;
+  setComponentValue({
+    action: "analyze",
+    lines: lines,
+    analyze_start: selectedRange.start,
+    analyze_end: selectedRange.end
+  });
+}
+
+function msToDateStr(ms) {
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function pxToDate(px) {
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis) return null;
+  var plotArea = layout._size;
+  var containerRect = document.getElementById('chart-container').getBoundingClientRect();
+  var chartRect = chartDiv.getBoundingClientRect();
+  var relX = px - (chartRect.left - containerRect.left) - plotArea.l;
+  var xRange = layout.xaxis.range;
+  var frac = relX / plotArea.w;
+  if (frac < 0) frac = 0;
+  if (frac > 1) frac = 1;
+  var xMs;
+  if (typeof xRange[0] === 'string') {
+    var x0 = new Date(xRange[0]).getTime();
+    var x1 = new Date(xRange[1]).getTime();
+    xMs = x0 + frac * (x1 - x0);
+  } else {
+    xMs = xRange[0] + frac * (xRange[1] - xRange[0]);
+  }
+  return xMs;
+}
+
+function dateToPx(dateMs) {
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis) return 0;
+  var plotArea = layout._size;
+  var xRange = layout.xaxis.range;
+  var x0, x1;
+  if (typeof xRange[0] === 'string') {
+    x0 = new Date(xRange[0]).getTime();
+    x1 = new Date(xRange[1]).getTime();
+  } else {
+    x0 = xRange[0]; x1 = xRange[1];
+  }
+  var frac = (dateMs - x0) / (x1 - x0);
+  var chartRect = chartDiv.getBoundingClientRect();
+  var containerRect = document.getElementById('chart-container').getBoundingClientRect();
+  return (chartRect.left - containerRect.left) + plotArea.l + frac * plotArea.w;
+}
+
+selectOverlay.addEventListener('mousedown', function(e) {
+  if (currentMode !== 'select') return;
+  selecting = true;
+  selectStartX = e.offsetX;
+  e.preventDefault();
+});
+
+selectOverlay.addEventListener('mousemove', function(e) {
+  if (!selecting) return;
+  var currentX = e.offsetX;
+  var startMs = pxToDate(Math.min(selectStartX, currentX));
+  var endMs = pxToDate(Math.max(selectStartX, currentX));
+  if (startMs && endMs) {
+    selectedRange = { start: msToDateStr(startMs), end: msToDateStr(endMs), startMs: startMs, endMs: endMs };
+    renderChart();
+  }
+});
+
+selectOverlay.addEventListener('mouseup', function(e) {
+  if (!selecting) return;
+  selecting = false;
+  var endX = e.offsetX;
+  var leftPx = Math.min(selectStartX, endX);
+  var rightPx = Math.max(selectStartX, endX);
+
+  if (rightPx - leftPx < 10) {
+    selectedRange = null;
+    renderChart();
+    return;
+  }
+
+  var startMs = pxToDate(leftPx);
+  var endMs = pxToDate(rightPx);
+  if (!startMs || !endMs) return;
+
+  var startDate = msToDateStr(startMs);
+  var endDate = msToDateStr(endMs);
+  selectedRange = { start: startDate, end: endDate, startMs: startMs, endMs: endMs };
+
+  document.getElementById('analyze-text').textContent = 'Selected: ' + startDate + ' to ' + endDate;
+  document.getElementById('analyze-bar').style.display = 'flex';
+
+  renderChart();
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 100);
+});
+
+selectOverlay.addEventListener('mouseleave', function() {
+  if (selecting) {
+    selecting = false;
+  }
+});
+
+chartDiv.addEventListener('plotly_doubleclick', function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  return false;
+});
+
+chartDiv.addEventListener('dblclick', function(e) {
+  if (lines.length === 0) return;
+  if (currentMode === 'select') return;
+
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis || !layout.yaxis) return;
+
+  var plotArea = layout._size;
+  var chartRect = chartDiv.getBoundingClientRect();
+  var relX = e.clientX - chartRect.left - plotArea.l;
+  var relY = e.clientY - chartRect.top - plotArea.t;
+
+  if (relX < 0 || relX > plotArea.w || relY < 0 || relY > plotArea.h) return;
+
+  var xRange = layout.xaxis.range;
+  var yRange = layout.yaxis.range;
+  var xFrac = relX / plotArea.w;
+  var yFrac = 1 - (relY / plotArea.h);
+
+  var x0, x1;
+  if (typeof xRange[0] === 'string') {
+    x0 = new Date(xRange[0]).getTime();
+    x1 = new Date(xRange[1]).getTime();
+  } else {
+    x0 = xRange[0]; x1 = xRange[1];
+  }
+  var clickXms = x0 + xFrac * (x1 - x0);
+  var clickLogY = yRange[0] + yFrac * (yRange[1] - yRange[0]);
+
+  var xSpan = x1 - x0;
+  var ySpan = yRange[1] - yRange[0];
+
+  var bestIdx = -1;
+  var bestDist = Infinity;
+  var threshold = 0.05;
+
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    if (!ln.y1 || !ln.y2 || ln.y1 <= 0 || ln.y2 <= 0) continue;
+    var lx1 = ln.x1_ms, ly1 = Math.log10(ln.y1);
+    var lx2 = ln.x2_ms, ly2 = Math.log10(ln.y2);
+    var dt = lx2 - lx1;
+    if (dt === 0) continue;
+    var slope = (ly2 - ly1) / dt;
+    var projLogY = ly1 + slope * (clickXms - lx1);
+    var normDy = Math.abs(projLogY - clickLogY) / ySpan;
+    if (normDy < threshold && normDy < bestDist) {
+      bestDist = normDy;
+      bestIdx = i;
+    }
+  }
+
+  if (bestIdx >= 0) {
+    e.stopPropagation();
+    e.preventDefault();
+    lines.splice(bestIdx, 1);
+    renderChart();
+    renderLineList();
+    setComponentValue({action: "set_all", lines: lines});
+  }
+}, true);
+
+chartDiv.addEventListener('plotly_relayout', function(eventData) {
+  if (currentMode !== 'draw' || !eventData) return;
+
+  var hasShapeKey = false;
+  for (var key in eventData) {
+    if (key.indexOf('shapes') === 0) {
+      hasShapeKey = true;
+      break;
+    }
+  }
+  if (!hasShapeKey) return;
+
+  var shapes = (chartDiv.layout && chartDiv.layout.shapes) ? chartDiv.layout.shapes : [];
+  if (shapes.length <= knownShapeCount) return;
+
+  var lastShape = shapes[shapes.length - 1];
+  if (!lastShape || lastShape.type !== 'line') return;
+
+  var x0_ms = new Date(lastShape.x0).getTime();
+  var x1_ms = new Date(lastShape.x1).getTime();
+  var y0 = lastShape.y0;
+  var y1 = lastShape.y1;
+
+  if (chartDiv.layout.yaxis && chartDiv.layout.yaxis.type === 'log') {
+    y0 = Math.pow(10, y0);
+    y1 = Math.pow(10, y1);
+  }
+
+  if (Math.abs(x1_ms - x0_ms) < 86400000) return;
+  if (y0 <= 0 || y1 <= 0) return;
+
+  lines.push({
+    x1_ms: x0_ms, y1: y0,
+    x2_ms: x1_ms, y2: y1,
+    x1: msToDateStr(x0_ms),
+    x2: msToDateStr(x1_ms)
+  });
+
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+});
+
+function renderChart() {
+  if (!chartData) return;
+  var traces = [];
+
+  var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
+  var hasTQQQ = chartData.tqqq_dates && chartData.tqqq_dates.length > 0;
+  var hasTLT = chartData.tlt_dates && chartData.tlt_dates.length > 0;
+  var hasXLU = chartData.xlu_dates && chartData.xlu_dates.length > 0;
+  var hasVIX = chartData.vix_dates && chartData.vix_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX;
+
+  traces.push({
+    x: chartData.dates, y: chartData.prices,
+    mode: 'lines', name: 'SOXL',
+    line: {color: '#1E88E5', width: 1.5},
+    yaxis: 'y',
+    hovertemplate: 'SOXL: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+  });
+
+  if (hasQQQ) {
+    traces.push({
+      x: chartData.qqq_dates, y: chartData.qqq_prices,
+      mode: 'lines', name: 'QQQ',
+      line: {color: '#FF6F00', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'QQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasTQQQ) {
+    traces.push({
+      x: chartData.tqqq_dates, y: chartData.tqqq_prices,
+      mode: 'lines', name: 'TQQQ',
+      line: {color: '#AB47BC', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'TQQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasTLT) {
+    traces.push({
+      x: chartData.tlt_dates, y: chartData.tlt_prices,
+      mode: 'lines', name: 'TLT',
+      line: {color: '#26A69A', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'TLT: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasXLU) {
+    traces.push({
+      x: chartData.xlu_dates, y: chartData.xlu_prices,
+      mode: 'lines', name: 'XLU',
+      line: {color: '#EF5350', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'XLU: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasVIX) {
+    traces.push({
+      x: chartData.vix_dates, y: chartData.vix_prices,
+      mode: 'lines', name: 'VIX',
+      line: {color: '#FFB300', width: 1.5, dash: 'dot'},
+      yaxis: 'y',
+      hovertemplate: 'VIX: %{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>'
+    });
+  }
+
+  var futureMs = new Date(chartData.future_end).getTime();
+
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var x1 = ln.x1_ms, y1 = ln.y1, x2 = ln.x2_ms, y2 = ln.y2;
+    if (!y1 || !y2 || y1 <= 0 || y2 <= 0) continue;
+    var dt = x2 - x1;
+    if (dt === 0) continue;
+    var logSlope = (Math.log10(y2) - Math.log10(y1)) / dt;
+    var color = COLORS[i % COLORS.length];
+
+    traces.push({
+      x: [new Date(x1), new Date(x2)], y: [y1, y2],
+      mode: 'lines+markers', showlegend: false,
+      line: {color: color, width: 2.5},
+      marker: {size: 6, color: color},
+      hovertemplate: 'Line ' + (i+1) + '<br>%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    });
+
+    var fwdEnd = Math.max(x1, x2);
+    var fwdY0 = fwdEnd === x2 ? y2 : y1;
+    var fwdLogY = Math.log10(fwdY0) + logSlope * (futureMs - fwdEnd);
+    if (fwdLogY > -3 && fwdLogY < 6) {
+      traces.push({
+        x: [new Date(fwdEnd), new Date(futureMs)],
+        y: [fwdY0, Math.pow(10, fwdLogY)],
+        mode: 'lines', showlegend: false,
+        line: {color: color, width: 2, dash: 'dash'},
+        hoverinfo: 'skip'
+      });
+    }
+
+    var backEnd = Math.min(x1, x2);
+    var backY0 = backEnd === x1 ? y1 : y2;
+    var backMs = backEnd - 63072000000;
+    var backLogY = Math.log10(backY0) + logSlope * (backMs - backEnd);
+    if (backLogY > -3 && backLogY < 6) {
+      traces.push({
+        x: [new Date(backMs), new Date(backEnd)],
+        y: [Math.pow(10, backLogY), backY0],
+        mode: 'lines', showlegend: false,
+        line: {color: color, width: 2, dash: 'dash'},
+        hoverinfo: 'skip'
+      });
+    }
+  }
+
+  var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
+  var priceMax = Math.max.apply(null, chartData.prices);
+  var yPad = 0.3;
+
+  var shapes = [];
+  if (selectedRange) {
+    shapes.push({
+      type: 'rect',
+      xref: 'x', yref: 'paper',
+      x0: selectedRange.start, x1: selectedRange.end,
+      y0: 0, y1: 1,
+      fillcolor: 'rgba(21, 101, 192, 0.15)',
+      line: { color: '#1565C0', width: 2 }
+    });
+  }
+
+  if (hasQQQ) {
+    var qqqValidPrices = chartData.qqq_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, qqqValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, qqqValidPrices));
+  }
+  if (hasTQQQ) {
+    var tqqqValidPrices = chartData.tqqq_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, tqqqValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, tqqqValidPrices));
+  }
+  if (hasTLT) {
+    var tltValidPrices = chartData.tlt_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, tltValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, tltValidPrices));
+  }
+  if (hasXLU) {
+    var xluValidPrices = chartData.xlu_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, xluValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, xluValidPrices));
+  }
+  if (hasVIX) {
+    var vixValidPrices = chartData.vix_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, vixValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, vixValidPrices));
+  }
+
+  var layout = {
+    yaxis: {
+      type: 'log', tickprefix: '$', title: '',
+      gridcolor: '#eee',
+      range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad],
+      fixedrange: false
+    },
+    xaxis: {
+      range: [chartData.dates[0], chartData.future_end],
+      title: '', gridcolor: '#eee',
+      dtick: 'M12', tickformat: '%Y',
+      fixedrange: false
+    },
+    template: 'plotly_white',
+    height: chartData.chart_height,
+    margin: {l: 65, r: 20, t: 10, b: 40},
+    showlegend: hasOverlay,
+    legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
+    hovermode: 'x unified',
+    dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
+    newshape: {
+      line: { color: '#888', width: 2 }
+    },
+    shapes: shapes,
+    plot_bgcolor: 'white',
+    paper_bgcolor: 'white',
+    font: {color: '#333'}
+  };
+
+
+  var config = {
+    scrollZoom: currentMode !== 'select',
+    displayModeBar: currentMode !== 'select',
+    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape']
+  };
+
+  Plotly.react(chartDiv, traces, layout, config);
+  knownShapeCount = 0;
+  document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
+}
+
+function renderLineList() {
+  var el = document.getElementById('line-list');
+  if (lines.length === 0) { el.innerHTML = ''; return; }
+  var html = '';
+  for (var i = 0; i < lines.length; i++) {
+    var ln = lines[i];
+    var color = COLORS[i % COLORS.length];
+    html += '<div class="line-row">'
+      + '<span class="line-dot" style="background:' + color + '"></span>'
+      + '<span>Line ' + (i+1) + ': ' + ln.x1 + ' ($' + ln.y1.toFixed(2) + ') \u2192 ' + ln.x2 + ' ($' + ln.y2.toFixed(2) + ')</span>'
+      + '<button class="ldel" onclick="deleteLine(' + i + ')">\u2715</button>'
+      + '</div>';
+  }
+  el.innerHTML = html;
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+</script>
+</body>
+</html>

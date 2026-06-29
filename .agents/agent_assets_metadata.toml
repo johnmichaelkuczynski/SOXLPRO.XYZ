@@ -1,0 +1,26 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "TlDpIqhJzIuhWiniexdfB"
+uri = "file://README.md"
+type = "text"
+title = "SOXL Analysis Platform — README"
+
+[[outputs]]
+id = "fW7HflGJMMVcSBHADpug_"
+uri = "file://BLUEPRINT.md"
+type = "text"
+title = "SOXL Analysis Platform — BLUEPRINT.md"
+
+[[outputs]]
+id = "6Rf0o7tRIqXBgLMxz27OZ"
+uri = "file://tools/demo_video/out/2026-05-18T23-02-08/soxl-demo.mp4"
+type = "video"
+title = "SOXL App Walkthrough (3:05)"
+
+[[outputs]]
+id = "GqiS7a06TpzhKjerc15Ft"
+uri = "file://tools/demo_video/out/2026-05-18T23-36-29/soxl-demo.mp4"
+type = "video"
+title = "SOXL App Walkthrough (1:50, taller frame, visible cursor)"

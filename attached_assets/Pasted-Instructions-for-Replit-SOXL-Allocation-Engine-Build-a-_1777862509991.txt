@@ -1,0 +1,41 @@
+Instructions for Replit: SOXL Allocation Engine
+Build a continuous allocation engine based on the following model. Do not substitute statistical templates (log-linear regression, z-scores, fixed entry/exit thresholds, holding periods). Implement exactly what is specified.
+This is the default model for the backtest function. Wire this allocation engine in as the default strategy when the backtest runs. Other models may remain available as options, but this is what loads first and what the backtest evaluates by default.
+The backtest must work for every time frame the user selects, including extremely short windows (one second, one minute, one hour, one day, etc.). The user is never to receive a "not enough data" message under any circumstance. If the requested window is short, adapt the lookback and normalization to whatever data exists in that window. If only two data points exist, run on two data points. The engine always returns a result. Never refuse, never warn, never block.
+Core Premise
+SOXL is mean-reverting relative to QQQ. When SOXL is oversold relative to QQQ's path, increase allocation. When overbought relative to QQQ's path, decrease allocation. Allocation is continuous and proportional to the magnitude of deviation.
+Anchor
+The reference is QQQ's cumulative behavior, not a fitted trendline and not QQQ's price directly. Normalize both SOXL and QQQ to a common starting point at the beginning of the lookback window so they can be compared on the same scale.
+Deviation
+At each point in time, compute how far SOXL has departed from its QQQ-anchored expected path. The deviation is the gap between SOXL's normalized position and QQQ's normalized position. Negative deviation = SOXL oversold relative to QQQ. Positive deviation = SOXL overbought relative to QQQ.
+Allocation Rule
+Allocation is a continuous function of deviation:
+
+More negative deviation → larger long allocation
+More positive deviation → smaller long allocation
+Allocation scales proportionally with the size of the deviation, not in discrete steps
+
+Hard Constraints
+
+Never 100% allocated, regardless of how oversold SOXL appears. The bottom is almost never the bottom.
+Never 0% allocated, regardless of how overbought SOXL appears. The top is almost never the top.
+Set a floor (minimum exposure) and a ceiling (maximum exposure). Allocation always lives inside this band.
+
+Regime Filter
+Detect bear regime in QQQ. When QQQ is in a sustained downtrend, scale the entire allocation down (apply a multiplier well below 1). When QQQ is not in a bear regime, allocation operates normally. The regime filter does not override the floor — minimum exposure is still maintained.
+Rebalancing
+Continuous. No discrete entries, no discrete exits, no holding periods. At each evaluation point, recompute deviation and reset allocation to whatever the current deviation dictates, subject to floor, ceiling, and regime multiplier.
+Time Frame Handling
+The backtest accepts any window the user supplies — from one second to multi-year. The engine adapts: lookback length, normalization base, and regime detection all scale to the available data. No minimum data requirement. No error messages. No fallbacks that block the user. If data is sparse, run on what exists and return a result.
+What This Engine Is NOT
+
+Not a backtest of discrete trades
+Not a signal generator with binary buy/sell
+Not based on z-scores, log-linear fits, or volatility surfaces
+Not based on fixed thresholds (e.g., "enter at -2.5σ")
+Not based on holding periods
+
+Output
+For any date or time in the historical window, the engine returns the recommended allocation percentage (between floor and ceiling). Plot allocation over time alongside SOXL price and the QQQ-anchored baseline, so deviation and the resulting allocation are both visible.
+Build This as the Default Strategy in the Existing Backtest
+Do not break the existing backtest infrastructure. Wire this allocation engine in as the default strategy that runs when the user clicks backtest. Existing models, if any, remain selectable as alternatives but are not the default.

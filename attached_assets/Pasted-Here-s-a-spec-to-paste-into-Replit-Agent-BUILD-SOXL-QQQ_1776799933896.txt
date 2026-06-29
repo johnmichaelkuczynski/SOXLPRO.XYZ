@@ -1,0 +1,62 @@
+Here's a spec to paste into Replit Agent:
+
+---
+
+**BUILD SOXL-QQQ RELATIVE DISLOCATION SURFACE**
+
+A new app (separate from the IV surface tool) that identifies when SOXL shares are over- or under-responding to QQQ relative to their structural leverage relationship, and estimates mean-reversion timing.
+
+**1. DATA INGESTION**
+- Pull 3 years of daily OHLCV for SOXL and QQQ (use yfinance or Polygon).
+- Align on trading days. Drop any day with missing data on either.
+- Compute daily log returns for both.
+
+**2. ROLLING BETA CALCULATION**
+- Compute rolling beta of SOXL to QQQ over windows: 5d, 10d, 20d, 60d, 120d.
+- Beta = Cov(SOXL_ret, QQQ_ret) / Var(QQQ_ret) over the window.
+- Store all five beta series. Expected range: ~2.8 to ~3.5 (structural target is ~3.3).
+
+**3. RESIDUAL COMPUTATION**
+For each day and each lookback window:
+- `expected_SOXL_return = beta_window × QQQ_return`
+- `residual = actual_SOXL_return - expected_SOXL_return`
+- `cumulative_residual_Nd = sum of residuals over trailing N days` for N in [1, 5, 10, 20]
+
+**4. Z-SCORE NORMALIZATION**
+- For each (lookback, cumulative_window) pair, compute z-score of current cumulative residual vs. its own 1-year distribution.
+- Output: matrix of z-scores across (beta_lookback × residual_window).
+
+**5. MEAN-REVERSION ANALYSIS**
+Historical study (compute once, cache):
+- For every historical day where |cumulative_residual_20d z-score| > 1.5, measure:
+  - Days until residual returns to within ±0.5 z-score
+  - Magnitude of reversion move
+- Bin by starting z-score magnitude. Output lookup table: "z-score X → median Y days to revert, median Z% move."
+
+**6. SURFACE VISUALIZATION (Plotly 3D)**
+- X-axis: beta lookback window (5, 10, 20, 60, 120 days)
+- Y-axis: residual accumulation window (1, 5, 10, 20 days)
+- Z-axis: current z-score of residual
+- Color: red for positive (SOXL overshot, expect pullback), blue for negative (SOXL undershot, expect catch-up)
+- Overlay a flat reference plane at z = 0.
+
+**7. RECOMMENDATION PANEL**
+- If any cell shows |z| > 2.0: flag as "EXTREME DISLOCATION"
+- Show: current z-score, historical median days-to-revert for that magnitude, historical hit rate (% of times reversion occurred within 2× median), suggested direction (long SOXL if z < -2, short SOXL / long SOXS if z > +2).
+- Show realized vs. expected SOXL price: "SOXL trading at $98.25; structural model implies $X based on QQQ path."
+
+**8. DIAGNOSTIC PANEL**
+- Current SOXL beta to QQQ (20d rolling)
+- Current QQQ 20d realized vol
+- Current SOXL 20d realized vol
+- Ratio of actual SOXL vol to (3.3 × QQQ vol) — this quantifies volatility decay drag
+- Last 20 days: table of daily residuals
+
+**9. BACKTEST MODULE**
+- Simulate strategy: enter when |z| > 2.0 (20d residual, 20d beta), exit when z crosses 0 or 10 days elapse.
+- Report: win rate, avg return per trade, Sharpe, max drawdown over 3-year period.
+- Without a passing backtest, do not trust the signal.
+
+---
+
+Tell the agent to build sections 1-5 first and show you the raw data before proceeding to visualization. Validate the beta values are in the expected 2.8-3.5 range before trusting anything downstream.

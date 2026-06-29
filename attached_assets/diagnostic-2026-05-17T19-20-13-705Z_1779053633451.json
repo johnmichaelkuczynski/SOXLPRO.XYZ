@@ -1,0 +1,1271 @@
+{
+  "ok": true,
+  "runAt": "2026-05-17T19:20:13.705Z",
+  "totals": {
+    "pass": 20,
+    "fail": 0,
+    "skip": 1
+  },
+  "checks": [
+    {
+      "name": "Environment: SESSION_SECRET present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "length=88 chars (value redacted)",
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.SESSION_SECRET is non-empty",
+          "value": {
+            "present": true,
+            "length": 88
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment: DATABASE_URL present",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "evidence": [
+        {
+          "kind": "assertion",
+          "label": "process.env.DATABASE_URL is non-empty",
+          "value": {
+            "present": true
+          }
+        },
+        {
+          "kind": "output",
+          "label": "DATABASE_URL (credentials redacted)",
+          "value": "postgresql://***@ep-square-cloud-aq6ze6st-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+        }
+      ]
+    },
+    {
+      "name": "Database: connectivity (SELECT 1)",
+      "group": "system",
+      "status": "pass",
+      "ms": 760,
+      "info": "ok",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "SQL",
+          "value": "SELECT 1 as ok"
+        },
+        {
+          "kind": "output",
+          "label": "rows returned",
+          "value": [
+            {
+              "ok": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Database: tables reachable",
+      "group": "system",
+      "status": "pass",
+      "ms": 167,
+      "info": "students, submissions, drafts, canvas_sessions all queryable",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "SELECT id FROM <table> LIMIT 1 — for each",
+          "value": [
+            "students",
+            "submissions",
+            "assignment_drafts",
+            "canvas_sessions"
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "rows visible per table (capped at 1)",
+          "value": {
+            "students": 0,
+            "submissions": 0,
+            "assignment_drafts": 0,
+            "canvas_sessions": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "Curriculum: 13 modules loaded, 800 points total",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "13 modules, 800 pts",
+      "evidence": [
+        {
+          "kind": "output",
+          "label": "module count",
+          "value": 13
+        },
+        {
+          "kind": "output",
+          "label": "total points",
+          "value": 800
+        },
+        {
+          "kind": "output",
+          "label": "modules",
+          "value": [
+            {
+              "id": "d1",
+              "n": 1,
+              "pts": 50
+            },
+            {
+              "id": "e1",
+              "n": 2,
+              "pts": 50
+            },
+            {
+              "id": "d2",
+              "n": 3,
+              "pts": 50
+            },
+            {
+              "id": "e2",
+              "n": 4,
+              "pts": 50
+            },
+            {
+              "id": "d3",
+              "n": 5,
+              "pts": 50
+            },
+            {
+              "id": "e3",
+              "n": 6,
+              "pts": 50
+            },
+            {
+              "id": "d4",
+              "n": 7,
+              "pts": 50
+            },
+            {
+              "id": "e4",
+              "n": 8,
+              "pts": 50
+            },
+            {
+              "id": "d5",
+              "n": 9,
+              "pts": 50
+            },
+            {
+              "id": "e5",
+              "n": 10,
+              "pts": 50
+            },
+            {
+              "id": "d6",
+              "n": 11,
+              "pts": 50
+            },
+            {
+              "id": "d8",
+              "n": 12,
+              "pts": 50
+            },
+            {
+              "id": "tp",
+              "n": 13,
+              "pts": 200
+            }
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "modules.length === 13 && total points === 800 && numbering 1..13",
+          "value": {
+            "countOk": true,
+            "totalOk": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Curriculum: lookup by id works",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "moduleById argument",
+          "value": "d1"
+        },
+        {
+          "kind": "output",
+          "label": "moduleById('d1') result",
+          "value": {
+            "id": "d1",
+            "number": 1,
+            "title": "Discussion 1: Prompting as Engineering",
+            "points": 50,
+            "type": "discussion",
+            "objectives": [
+              "Distinguish casual prompting from engineered prompting and explain why the distinction matters at scale.",
+              "Apply specificity, format control, and failure-mode awareness to a real prompting task."
+            ],
+            "reading": "Prompting is what a user does when they type something into a language model. Prompt engineering is what someone does when they design a prompt the way an engineer designs a component: with the system's actual behavior in mind, with reproducible specifications, and with attention to how the prompt will perform across many inputs rather than just the one in front of them.\nThe shift from casual prompting to engineered prompting becomes necessary the moment the prompt is going to be reused. A one-off conversation can be sloppy. A prompt that will be invoked ten thousand times across an application cannot be. Three concerns dominate engineered prompting:\n- Specificity. The model produces what its inputs suggest. A vague prompt produces variable output; a specific prompt produces stable output. \"Summarize this\" is vague. \"Produce a three-sentence summary using only information explicitly stated in the text, without inference or interpretation\" is specific.\n- Format control. Models will produce whatever format the prompt suggests. If downstream code needs JSON, the prompt must establish JSON output with structure. If a particular header sequence is required, the prompt must show it. The model is not guessing what comes next; it is continuing the pattern the prompt establishes.\n- Failure mode awareness. Every prompt has inputs on which it fails. Engineered prompting includes thinking about what those inputs look like and either handling them in the prompt itself or recognizing that they need to be filtered out before the prompt is reached.\nThree techniques recur across professional prompting work:\n- Few-shot examples. Showing the model two or three examples of the input-output pattern often produces better results than describing the pattern in words. The model's pattern-completion behavior is exploited directly.\n- Explicit reasoning steps. Asking the model to think through the problem before producing an answer often improves accuracy on tasks that require multiple inference steps. This is sometimes called chain-of-thought prompting.\n- Role and audience specification. Telling the model who it is and who it is addressing changes the register and depth of its output. \"You are a senior tax attorney advising a client\" produces different output than \"explain this tax rule.\"\nKey insight: prompts are not commands. The model is not following instructions in the way code follows instructions. It is producing continuations that are statistically likely given the prompt. Engineered prompting is the practice of constructing prompts whose likely continuations match what the user actually needs.",
+            "assignment": "Assignment (50 points):\n1. Choose a real task that a language model could perform\n2. Write three versions of a prompt for that task:\n   - A naive version (what a casual user would type)\n   - An improved version (more specific and structured)\n   - An engineered version (with examples, format specification, and failure-mode handling)\n3. For each version, predict what the model will produce and identify the specific weakness or improvement\n4. Explain what the engineered version protects against that the naive version does not",
+            "modelResponse": "Model Response:\nTask: Extracting structured information from unstructured customer support emails.\nNaive version: \"Pull out the important information from this email.\"\nPredicted output: The model will produce a paragraph of free-form text identifying what it considers important. The output will vary substantially across runs and across different emails. There will be no way to feed the result into a database or downstream system without further processing. The model will sometimes editorialize (\"the customer seems frustrated\") in ways that may or may not be wanted.\nImproved version: \"Extract the customer's name, their account number if mentioned, the product they are asking about, the specific problem they are reporting, and the urgency level (low, medium, high) based on their tone. Return the information as a list with one field per line.\"\nPredicted output: Much more consistent. The model will produce a list with the specified fields. However, the format is still informal. If a field is missing from the email, the model may invent a value, leave it out entirely, or describe its absence in prose. Downstream parsing will be brittle.\nEngineered version:\n\"You will extract structured information from a customer support email. Return a JSON object with exactly these fields: customer_name (string or null), account_number (string or null), product (string or null), problem_summary (string), urgency (\"low\" | \"medium\" | \"high\"). If a field cannot be determined from the email, use null. Do not infer information that is not explicitly present. Do not include any text outside the JSON object.\nExamples:\nEmail: \"Hi, my account 4471 isn't letting me log in. This is urgent, I have a presentation tomorrow.\" Output: {\"customer_name\": null, \"account_number\": \"4471\", \"product\": null, \"problem_summary\": \"Cannot log in to account\", \"urgency\": \"high\"}\nEmail: \"Just wondering if the new dashboard has dark mode yet. Thanks, Sara.\" Output: {\"customer_name\": \"Sara\", \"account_number\": null, \"product\": \"dashboard\", \"problem_summary\": \"Asking about dark mode availability\", \"urgency\": \"low\"}\nNow process this email: [email text]\"\nPredicted output: Reliable JSON with the specified schema. The few-shot examples anchor the format. The instruction to use null for missing fields and not to infer addresses a specific failure mode (hallucinated data). The instruction to produce no text outside the JSON object addresses another failure mode (preamble like \"Here is the extracted information:\").\nWhat the engineered version protects against:\n- Format drift. The schema is fixed, the examples reinforce it, and downstream code can parse the output without writing brittle regex.\n- Hallucinated values. The explicit instruction to use null rather than guess prevents the model from filling in plausible-sounding fake account numbers.\n- Inconsistent urgency labels. By specifying the exact label set (\"low\" | \"medium\" | \"high\"), the prompt eliminates variants like \"Low\", \"low priority\", \"not urgent\", \"medium-high\", etc.\n- Wrapping text. By forbidding text outside the JSON, the prompt eliminates the preamble and postamble that would break a JSON parser.\nThe engineered version costs more tokens per call than the naive version. It is also reproducible, parseable, and suitable for inclusion in a real system. The cost difference is the price of reliability, and at scale it is the right trade.\nWhy This is a Model Response:\n1. Clear structure and organization:\n   - Presents three concrete versions\n   - Predicts behavior for each rather than just describing it\n   - Names specific failure modes addressed\n2. Demonstrates understanding of prompting as engineering:\n   - Treats prompts as specifications rather than wishes\n   - Uses few-shot examples deliberately\n   - Considers downstream consumers of the output\n3. Original thinking:\n   - Picks a task with real ambiguity and shows where the ambiguity bites\n   - Identifies the trade-off (tokens for reliability) explicitly\n4. Depth of analysis:\n   - Distinguishes format drift, hallucinated values, and wrapping text as separate failure modes\n   - Recognizes that what looks like a single improvement is several improvements packed together\n5. Clear writing:\n   - Concrete examples throughout\n   - Technical without unnecessary jargon\n6. Meets assignment requirements:\n   - Three versions, all distinct\n   - Specific predictions\n   - Explicit identification of what the engineered version protects against"
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "result.number === 1",
+          "value": {
+            "actual": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "AssemblyAI (voice): token mint",
+      "group": "system",
+      "status": "skip",
+      "ms": 0,
+      "info": "ASSEMBLYAI_API_KEY not set — voice dictation/commands will be unavailable",
+      "evidence": []
+    },
+    {
+      "name": "GPTZero API: live ping",
+      "group": "system",
+      "status": "pass",
+      "ms": 1459,
+      "info": "aiScore=1.000 class=ai",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "probe length (chars)",
+          "value": 325
+        },
+        {
+          "kind": "input",
+          "label": "text submitted to GPTZero",
+          "value": "This is a diagnostic ping issued by the AI 102 self-check to verify that the GPTZero scoring service is reachable from this server, that the API key is valid, and that responses parse into the expected shape. The contents of this paragraph are not graded and should not be interpreted as a real student submission. Thank you."
+        },
+        {
+          "kind": "query",
+          "label": "POST",
+          "value": "https://api.gptzero.me/v2/predict/text"
+        },
+        {
+          "kind": "output",
+          "label": "HTTP status",
+          "value": 200
+        },
+        {
+          "kind": "output",
+          "label": "round-trip time (ms)",
+          "value": 949
+        },
+        {
+          "kind": "output",
+          "label": "raw response body",
+          "value": {
+            "version": "2026-05-11-base",
+            "neatVersion": "4.6b",
+            "documents": [
+              {
+                "paragraphs": [
+                  {
+                    "start_sentence_index": 0,
+                    "num_sentences": 3,
+                    "completely_generated_prob": 0.850090677245877
+                  }
+                ],
+                "completely_generated_prob": 0.9998492670454155,
+                "average_generated_prob": 1,
+                "predicted_class": "ai",
+                "confidence_score": 1,
+                "confidence_category": "high",
+                "overall_burstiness": 0,
+                "writing_stats": {},
+                "confidence_thresholds_raw": {
+                  "identity": {
+                    "ai": {
+                      "reject": 0.33,
+                      "low": 0.6,
+                      "medium": 0.8
+                    },
+                    "human": {
+                      "reject": 0.33,
+                      "low": 0.6,
+                      "medium": 0.8
+                    },
+                    "mixed": {
+                      "reject": 0.33,
+                      "low": 0.6,
+                      "medium": 0.8
+                    }
+                  }
+                },
+                "sentences": [
+                  {
+                    "generated_prob": 0.9995739573131827,
+                    "sentence": "This is a diagnostic ping issued by the AI 102 self-check to verify that the GPTZero scoring service is reachable from this server, that the API key is valid, and that responses parse into the expected shape.",
+                    "perplexity": 0,
+                    "class_probabilities": {
+                      "human": 0.0004260426868173327,
+                      "ai": 0.9992135935618327,
+                      "paraphrased": 0.0003603637513499621
+                    },
+                    "interpretability_value": null,
+                    "interpretability_normalized_value": null,
+                    "interpretability_designation": null,
+                    "interpretability_alpha": null,
+                    "highlight_sentence_for_ai": true,
+                    "special_highlight_type": null
+                  },
+                  {
+                    "generated_prob": 0.9931138053091307,
+                    "sentence": "The contents of this paragraph are not graded and should not be interpreted as a real student submission.",
+                    "perplexity": 0,
+                    "class_probabilities": {
+                      "human": 0.006886194690869301,
+                      "ai": 0.992517020226516,
+                      "paraphrased": 0.0005967850826147444
+                    },
+                    "interpretability_value": null,
+                    "interpretability_normalized_value": null,
+                    "interpretability_designation": null,
+                    "interpretability_alpha": null,
+                    "highlight_sentence_for_ai": true,
+                    "special_highlight_type": null
+                  },
+                  {
+                    "generated_prob": 0.9937720502382006,
+                    "sentence": "Thank you.",
+                    "perplexity": 0,
+                    "class_probabilities": {
+                      "human": 0.006227949761799439,
+                      "ai": 0.9933091605573907,
+                      "paraphrased": 0.000462889680809875
+                    },
+                    "interpretability_value": null,
+                    "interpretability_normalized_value": null,
+                    "interpretability_designation": null,
+                    "interpretability_alpha": null,
+                    "highlight_sentence_for_ai": true,
+                    "special_highlight_type": null
+                  }
+                ],
+                "class_probabilities": {
+                  "human": 0,
+                  "ai": 1,
+                  "mixed": 0
+                },
+                "confidence_scores_raw": {
+                  "identity": {
+                    "ai": 1,
+                    "mixed": 0,
+                    "human": 0
+                  }
+                },
+                "subclass": {
+                  "ai": {
+                    "predicted_class": "pure_ai",
+                    "result_message": "",
+                    "confidence_score": 1,
+                    "confidence_category": "high",
+                    "class_probabilities": {
+                      "pure_ai": 1,
+                      "ai_paraphrased": 0
+                    },
+                    "confidence_scores_raw": {
+                      "identity": {
+                        "pure_ai": 1,
+                        "ai_paraphrased": 0
+                      }
+                    },
+                    "confidence_thresholds_raw": {
+                      "identity": {
+                        "ai_paraphrased": {
+                          "reject": 0.33,
+                          "low": 0.6,
+                          "medium": 0.8
+                        },
+                        "pure_ai": {
+                          "reject": 0.33,
+                          "low": 0.6,
+                          "medium": 0.8
+                        }
+                      }
+                    }
+                  }
+                },
+                "pageNumber": 0,
+                "neatVersion": "4.6b",
+                "version": "2026-05-11-base",
+                "language": "en",
+                "result_message": "Our detector is highly confident that the text is written by AI.",
+                "result_sub_message": null,
+                "document_classification": "AI_ONLY",
+                "inputText": "This is a diagnostic ping issued by the AI 102 self-check to verify that the GPTZero scoring service is reachable from this server, that the API key is valid, and that responses parse into the expected shape. The contents of this paragraph are not graded and should not be interpreted as a real student submission. Thank you.",
+                "document_id": null
+              }
+            ]
+          }
+        },
+        {
+          "kind": "output",
+          "label": "parsed via checkWithGPTZero()",
+          "value": {
+            "aiScore": 1,
+            "aiClass": "ai",
+            "sentences": [
+              {
+                "text": "This is a diagnostic ping issued by the AI 102 self-check to verify that the GPTZero scoring service is reachable from this server, that the API key is valid, and that responses parse into the expected shape.",
+                "generatedProb": 0.9995739573131827
+              },
+              {
+                "text": "The contents of this paragraph are not graded and should not be interpreted as a real student submission.",
+                "generatedProb": 0.9931138053091307
+              },
+              {
+                "text": "Thank you.",
+                "generatedProb": 0.9937720502382006
+              }
+            ],
+            "raw": {
+              "version": "2026-05-11-base",
+              "neatVersion": "4.6b",
+              "documents": [
+                {
+                  "paragraphs": [
+                    {
+                      "start_sentence_index": 0,
+                      "num_sentences": 3,
+                      "completely_generated_prob": 0.850090677245877
+                    }
+                  ],
+                  "completely_generated_prob": 0.9998492670454155,
+                  "average_generated_prob": 1,
+                  "predicted_class": "ai",
+                  "confidence_score": 1,
+                  "confidence_category": "high",
+                  "overall_burstiness": 0,
+                  "writing_stats": {},
+                  "confidence_thresholds_raw": {
+                    "identity": {
+                      "ai": {
+                        "reject": 0.33,
+                        "low": 0.6,
+                        "medium": 0.8
+                      },
+                      "human": {
+                        "reject": 0.33,
+                        "low": 0.6,
+                        "medium": 0.8
+                      },
+                      "mixed": {
+                        "reject": 0.33,
+                        "low": 0.6,
+                        "medium": 0.8
+                      }
+                    }
+                  },
+                  "sentences": [
+                    {
+                      "generated_prob": 0.9995739573131827,
+                      "sentence": "This is a diagnostic ping issued by the AI 102 self-check to verify that the GPTZero scoring service is reachable from this server, that the API key is valid, and that responses parse into the expected shape.",
+                      "perplexity": 0,
+                      "class_probabilities": {
+                        "human": 0.0004260426868173327,
+                        "ai": 0.9992135935618327,
+                        "paraphrased": 0.0003603637513499621
+                      },
+                      "interpretability_value": null,
+                      "interpretability_normalized_value": null,
+                      "interpretability_designation": null,
+                      "interpretability_alpha": null,
+                      "highlight_sentence_for_ai": true,
+                      "special_highlight_type": null
+                    },
+                    {
+                      "generated_prob": 0.9931138053091307,
+                      "sentence": "The contents of this paragraph are not graded and should not be interpreted as a real student submission.",
+                      "perplexity": 0,
+                      "class_probabilities": {
+                        "human": 0.006886194690869301,
+                        "ai": 0.992517020226516,
+                        "paraphrased": 0.0005967850826147444
+                      },
+                      "interpretability_value": null,
+                      "interpretability_normalized_value": null,
+                      "interpretability_designation": null,
+                      "interpretability_alpha": null,
+                      "highlight_sentence_for_ai": true,
+                      "special_highlight_type": null
+                    },
+                    {
+                      "generated_prob": 0.9937720502382006,
+                      "sentence": "Thank you.",
+                      "perplexity": 0,
+                      "class_probabilities": {
+                        "human": 0.006227949761799439,
+                        "ai": 0.9933091605573907,
+                        "paraphrased": 0.000462889680809875
+                      },
+                      "interpretability_value": null,
+                      "interpretability_normalized_value": null,
+                      "interpretability_designation": null,
+                      "interpretability_alpha": null,
+                      "highlight_sentence_for_ai": true,
+                      "special_highlight_type": null
+                    }
+                  ],
+                  "class_probabilities": {
+                    "human": 0,
+                    "ai": 1,
+                    "mixed": 0
+                  },
+                  "confidence_scores_raw": {
+                    "identity": {
+                      "ai": 1,
+                      "mixed": 0,
+                      "human": 0
+                    }
+                  },
+                  "subclass": {
+                    "ai": {
+                      "predicted_class": "pure_ai",
+                      "result_message": "",
+                      "confidence_score": 1,
+                      "confidence_category": "high",
+                      "class_probabilities": {
+                        "pure_ai": 1,
+                        "ai_paraphrased": 0
+                      },
+                      "confidence_scores_raw": {
+                        "identity": {
+                          "pure_ai": 1,
+                          "ai_paraphrased": 0
+                        }
+                      },
+                      "confidence_thresholds_raw": {
+                        "identity": {
+                          "ai_paraphrased": {
+                            "reject": 0.33,
+                            "low": 0.6,
+                            "medium": 0.8
+                          },
+                          "pure_ai": {
+                            "reject": 0.33,
+                            "low": 0.6,
+                            "medium": 0.8
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "pageNumber": 0,
+                  "neatVersion": "4.6b",
+                  "version": "2026-05-11-base",
+                  "language": "en",
+                  "result_message": "Our detector is highly confident that the text is written by AI.",
+                  "result_sub_message": null,
+                  "document_classification": "AI_ONLY",
+                  "inputText": "This is a diagnostic ping issued by the AI 102 self-check to verify that the GPTZero scoring service is reachable from this server, that the API key is valid, and that responses parse into the expected shape. The contents of this paragraph are not graded and should not be interpreted as a real student submission. Thank you.",
+                  "document_id": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "parsed result is non-null AND aiScore is a number in [0,1]",
+          "value": {
+            "nonNull": true,
+            "aiScore": 1,
+            "aiClass": "ai",
+            "sentenceCount": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "Anthropic API (grader/feedback): live ping",
+      "group": "system",
+      "status": "pass",
+      "ms": 1666,
+      "info": "model=claude-sonnet-4-5 reply=\"pong\"",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "model",
+          "value": "claude-sonnet-4-5"
+        },
+        {
+          "kind": "input",
+          "label": "prompt",
+          "value": "Reply with the single word: pong"
+        },
+        {
+          "kind": "output",
+          "label": "reply text",
+          "value": "pong"
+        },
+        {
+          "kind": "output",
+          "label": "stop_reason",
+          "value": "end_turn"
+        },
+        {
+          "kind": "output",
+          "label": "usage",
+          "value": {
+            "input_tokens": 15,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "Process forensics: synthetic transcription scores likelyAI (≥70)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "score=71 class=likelyAI flags=6",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "fixture description",
+          "value": "60 perfectly-uniform 4-char inserts every 180ms; no deletions/backtracks"
+        },
+        {
+          "kind": "input",
+          "label": "event count",
+          "value": 60
+        },
+        {
+          "kind": "input",
+          "label": "first 3 events",
+          "value": [
+            {
+              "t": 0,
+              "type": "insert",
+              "pos": 0,
+              "len": 4,
+              "charCount": 4,
+              "caretBefore": 0,
+              "caretAfter": 4,
+              "text": "abcd",
+              "k": "i",
+              "d": "abcd"
+            },
+            {
+              "t": 180,
+              "type": "insert",
+              "pos": 4,
+              "len": 4,
+              "charCount": 4,
+              "caretBefore": 4,
+              "caretAfter": 8,
+              "text": "abcd",
+              "k": "i",
+              "d": "abcd"
+            },
+            {
+              "t": 360,
+              "type": "insert",
+              "pos": 8,
+              "len": 4,
+              "charCount": 4,
+              "caretBefore": 8,
+              "caretAfter": 12,
+              "text": "abcd",
+              "k": "i",
+              "d": "abcd"
+            }
+          ]
+        },
+        {
+          "kind": "input",
+          "label": "final text length",
+          "value": 240
+        },
+        {
+          "kind": "output",
+          "label": "processScore (0–100)",
+          "value": 71
+        },
+        {
+          "kind": "output",
+          "label": "processClass",
+          "value": "likelyAI"
+        },
+        {
+          "kind": "output",
+          "label": "features",
+          "value": {
+            "burstUniformity": 0,
+            "pauseBeforeNewSentence": null,
+            "pauseBeforeNewParagraph": null,
+            "deletionRatio": 0,
+            "structuralEditCount": 0,
+            "caretBacktrackCount": 0,
+            "abandonedStartCount": 0,
+            "burstLengthCV": null,
+            "frontToBackLinearity": 1,
+            "totalActiveSeconds": 10.62,
+            "charsPerSecond": 22.598870056497177
+          }
+        },
+        {
+          "kind": "output",
+          "label": "flags",
+          "value": [
+            "burstUniformity is 0 ms (transcription-like)",
+            "deletionRatio is 0.0% (essentially no revision)",
+            "structuralEditCount is 0 (no large or far-back edits)",
+            "caretBacktrackCount is 0 (no caret jumps backward — purely linear typing)",
+            "frontToBackLinearity is 100% (every insert at end-of-doc)",
+            "charsPerSecond is 22.6 (sustained transcription speed)"
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "expected score ≥ 70 AND class === 'likelyAI'",
+          "value": {
+            "scoreOk": true,
+            "classOk": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Process forensics: synthetic composition scores human (<35)",
+      "group": "system",
+      "status": "pass",
+      "ms": 0,
+      "info": "score=10 class=human",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "fixture description",
+          "value": "varied bursts, 1 abandoned start (55 chars deleted), 2 caret-backtracks >100 chars, 2 structural deletes"
+        },
+        {
+          "kind": "input",
+          "label": "event count",
+          "value": 25
+        },
+        {
+          "kind": "input",
+          "label": "final text length",
+          "value": 245
+        },
+        {
+          "kind": "output",
+          "label": "processScore (0–100)",
+          "value": 10
+        },
+        {
+          "kind": "output",
+          "label": "processClass",
+          "value": "human"
+        },
+        {
+          "kind": "output",
+          "label": "features",
+          "value": {
+            "burstUniformity": 603.1030868212608,
+            "pauseBeforeNewSentence": null,
+            "pauseBeforeNewParagraph": null,
+            "deletionRatio": 0.3287671232876712,
+            "structuralEditCount": 3,
+            "caretBacktrackCount": 2,
+            "abandonedStartCount": 1,
+            "burstLengthCV": 0.7021132618487397,
+            "frontToBackLinearity": 0.8421052631578947,
+            "totalActiveSeconds": 44.5,
+            "charsPerSecond": 5.50561797752809
+          }
+        },
+        {
+          "kind": "output",
+          "label": "flags",
+          "value": []
+        },
+        {
+          "kind": "assertion",
+          "label": "expected score < 35 AND class === 'human'",
+          "value": {
+            "scoreOk": true,
+            "classOk": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: create synthetic student",
+      "group": "functional",
+      "status": "pass",
+      "ms": 39,
+      "info": "id=2",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "INSERT payload",
+          "value": {
+            "email": "diag-1779045613052-ccul8i@diagnostic.local",
+            "name": "Diagnostic Test User"
+          }
+        },
+        {
+          "kind": "query",
+          "label": "SQL",
+          "value": "INSERT INTO students (email, name) VALUES (...) RETURNING *"
+        },
+        {
+          "kind": "output",
+          "label": "row returned",
+          "value": {
+            "id": 2,
+            "email": "diag-1779045613052-ccul8i@diagnostic.local",
+            "name": "Diagnostic Test User",
+            "intro": null,
+            "createdAt": "2026-05-17T19:20:13.103Z",
+            "isAdmin": false,
+            "accommodated": false,
+            "integrityAckAt": null,
+            "processBaseline": null
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "returned row has numeric id",
+          "value": {
+            "idType": "number",
+            "id": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: integrity acknowledgment writes",
+      "group": "functional",
+      "status": "pass",
+      "ms": 71,
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "UPDATE payload",
+          "value": {
+            "studentId": 2,
+            "integrityAckAt": "2026-05-17T19:20:13.091Z"
+          }
+        },
+        {
+          "kind": "query",
+          "label": "SQL",
+          "value": "UPDATE students SET integrity_ack_at = $1 WHERE id = 2"
+        },
+        {
+          "kind": "output",
+          "label": "row after update",
+          "value": {
+            "a": "2026-05-17T19:20:13.091Z"
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "integrity_ack_at is non-null after update",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: draft round-trip + lock",
+      "group": "functional",
+      "status": "pass",
+      "ms": 64,
+      "info": "id=2",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "INSERT payload",
+          "value": {
+            "studentId": 2,
+            "moduleId": "d1",
+            "content": "diagnostic draft body",
+            "feedback": "diagnostic feedback body",
+            "feedbackAt": "2026-05-17T19:20:13.163Z",
+            "locked": true
+          }
+        },
+        {
+          "kind": "query",
+          "label": "SQL",
+          "value": "INSERT INTO assignment_drafts (...) VALUES (...)"
+        },
+        {
+          "kind": "output",
+          "label": "row(s) selected back",
+          "value": [
+            {
+              "id": 2,
+              "studentId": 2,
+              "moduleId": "d1",
+              "content": "diagnostic draft body",
+              "feedback": "diagnostic feedback body",
+              "feedbackAt": "2026-05-17T19:20:13.163Z",
+              "locked": true,
+              "createdAt": "2026-05-17T19:20:13.213Z"
+            }
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "row exists AND row.locked === true",
+          "value": {
+            "present": true,
+            "locked": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: canvas autosave round-trip",
+      "group": "functional",
+      "status": "pass",
+      "ms": 93,
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "step 1: INSERT payload",
+          "value": {
+            "studentId": 2,
+            "moduleId": "d1",
+            "content": "diagnostic canvas v1"
+          }
+        },
+        {
+          "kind": "input",
+          "label": "step 2: UPDATE payload",
+          "value": {
+            "content": "diagnostic canvas v2"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "row after update",
+          "value": {
+            "id": 2,
+            "studentId": 2,
+            "moduleId": "d1",
+            "content": "diagnostic canvas v2",
+            "keystrokes": [
+              {
+                "d": "x",
+                "k": "i",
+                "t": 0
+              }
+            ],
+            "scoreHistory": [],
+            "updatedAt": "2026-05-17T19:20:13.258Z"
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "row.content === 'diagnostic canvas v2'",
+          "value": {
+            "actual": "diagnostic canvas v2",
+            "expected": "diagnostic canvas v2",
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: submit module 1",
+      "group": "functional",
+      "status": "pass",
+      "ms": 60,
+      "info": "id=3",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "INSERT payload",
+          "value": {
+            "studentId": 2,
+            "moduleId": "d1",
+            "content": "diagnostic submission for module 1",
+            "aiStatus": "pending"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "row returned",
+          "value": {
+            "id": 3,
+            "studentId": 2,
+            "moduleId": "d1",
+            "content": "diagnostic submission for module 1",
+            "createdAt": "2026-05-17T19:20:13.369Z",
+            "aiScore": null,
+            "aiClass": null,
+            "aiCheckedAt": null,
+            "aiStatus": "pending",
+            "keystrokes": null,
+            "scoreHistory": null,
+            "activityReport": null,
+            "flaggedOnSubmit": false,
+            "reviewStatus": "pending",
+            "processScore": null,
+            "processClass": null,
+            "processFeatures": null,
+            "processFlags": null
+          }
+        },
+        {
+          "kind": "output",
+          "label": "row selected back by id",
+          "value": {
+            "id": 3,
+            "studentId": 2,
+            "moduleId": "d1",
+            "content": "diagnostic submission for module 1",
+            "createdAt": "2026-05-17T19:20:13.369Z",
+            "aiScore": null,
+            "aiClass": null,
+            "aiCheckedAt": null,
+            "aiStatus": "pending",
+            "keystrokes": null,
+            "scoreHistory": null,
+            "activityReport": null,
+            "flaggedOnSubmit": false,
+            "reviewStatus": "pending",
+            "processScore": null,
+            "processClass": null,
+            "processFeatures": null,
+            "processFlags": null
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "round-tripped content matches input",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: sequential gating allows next module after prior submitted",
+      "group": "functional",
+      "status": "pass",
+      "ms": 60,
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "target module index (0-based)",
+          "value": 1
+        },
+        {
+          "kind": "input",
+          "label": "prior module IDs that must be submitted",
+          "value": [
+            "d1"
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "prior submissions for student",
+          "value": [
+            "d1"
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "missing prior submissions list is empty",
+          "value": {
+            "missing": []
+          }
+        },
+        {
+          "kind": "input",
+          "label": "now insert module 2 to confirm chain works",
+          "value": {
+            "moduleId": "e1"
+          }
+        },
+        {
+          "kind": "output",
+          "label": "module 2 submission inserted",
+          "value": "ok"
+        }
+      ]
+    },
+    {
+      "name": "Functional: sequential gating blocks skipping ahead",
+      "group": "functional",
+      "status": "pass",
+      "ms": 29,
+      "info": "correctly blocked; missing: d2",
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "target module index (0-based)",
+          "value": 3
+        },
+        {
+          "kind": "input",
+          "label": "prior module IDs that would need to be submitted",
+          "value": [
+            "d1",
+            "e1",
+            "d2"
+          ]
+        },
+        {
+          "kind": "output",
+          "label": "actual prior submissions for student",
+          "value": [
+            "d1",
+            "e1"
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "missing list is non-empty (gate would block)",
+          "value": {
+            "missing": [
+              "d2"
+            ],
+            "wouldBlock": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: list submissions for student returns inserted rows",
+      "group": "functional",
+      "status": "pass",
+      "ms": 29,
+      "info": "2 submissions",
+      "evidence": [
+        {
+          "kind": "query",
+          "label": "SQL",
+          "value": "SELECT * FROM submissions WHERE student_id = 2"
+        },
+        {
+          "kind": "output",
+          "label": "submissions for synthetic student",
+          "value": [
+            {
+              "id": 3,
+              "moduleId": "d1",
+              "content": "diagnostic submission for module 1",
+              "aiStatus": "pending"
+            },
+            {
+              "id": 4,
+              "moduleId": "e1",
+              "content": "diagnostic submission for module 2",
+              "aiStatus": "pending"
+            }
+          ]
+        },
+        {
+          "kind": "assertion",
+          "label": "row count >= 2 (we inserted module 1 and 2)",
+          "value": {
+            "actual": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "Functional: admin accommodation toggle persists",
+      "group": "functional",
+      "status": "pass",
+      "ms": 59,
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "UPDATE payload",
+          "value": {
+            "studentId": 2,
+            "accommodated": true
+          }
+        },
+        {
+          "kind": "output",
+          "label": "row after update",
+          "value": {
+            "a": true
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "accommodated flag is true",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cleanup: delete synthetic student (cascade)",
+      "group": "functional",
+      "status": "pass",
+      "ms": 149,
+      "evidence": [
+        {
+          "kind": "input",
+          "label": "DELETE target",
+          "value": {
+            "studentId": 2
+          }
+        },
+        {
+          "kind": "note",
+          "label": "expected cascade",
+          "value": "drafts, canvas_sessions, submissions for this student should be removed by FK ON DELETE CASCADE"
+        },
+        {
+          "kind": "output",
+          "label": "rows remaining after delete",
+          "value": {
+            "students": 0,
+            "submissions": 0,
+            "assignment_drafts": 0,
+            "canvas_sessions": 0
+          }
+        },
+        {
+          "kind": "assertion",
+          "label": "all four counts === 0",
+          "value": {
+            "ok": true
+          }
+        }
+      ]
+    }
+  ]
+}
