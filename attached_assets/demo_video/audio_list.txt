@@ -1,7 +1,0 @@
-file 'pad_01.mp3'
-file 'pad_02.mp3'
-file 'pad_03.mp3'
-file 'pad_04.mp3'
-file 'pad_05.mp3'
-file 'pad_06.mp3'
-file 'pad_07.mp3'

@@ -72,3 +72,9 @@ id = "zCmiR_tEt2rKN2TusaFt5"
 uri = "file://attached_assets/demo_video/music_bed.mp3"
 type = "audio"
 title = "demo music bed"
+
+[[outputs]]
+id = "zxI2OCgHXpfZDC4D0Lu5N"
+uri = "file://attached_assets/demo_video/SOXL_Analysis_Platform_Demo.mp4"
+type = "video"
+title = "SOXL Analysis Platform — Narrated Product Demo (99s)"

@@ -1,0 +1,1 @@
+- [Narrated demo videos](narrated-demo-video.md) — generateVideo caps at 8s; build long narrated demos as a PIL-slide + TTS + ffmpeg slideshow instead.
