@@ -10,7 +10,7 @@ SOXL Analysis Platform — Probability-Driven Trading Research, AI Strategies & 
 ## Description (paste into YouTube)
 Fifteen years of SOXL price history, probability math, and AI-built strategies — all in one workspace.
 
-This is a quick walkthrough of the SOXL Analysis Platform, a quantitative research tool for the Direxion Daily Semiconductor Bull 3X ETF (SOXL). Everything you see is real footage from the running app: an interactive log-scale price chart, a historical probability engine, an AI strategy builder powered by Claude, a 20% call-sleeve / 80% cash allocation backtester, and three live self-diagnostics with full audit logging to a Neon Postgres database.
+This is a quick walkthrough of the SOXL Analysis Platform, a quantitative research tool for the Direxion Daily Semiconductor Bull 3X ETF (SOXL). Everything you see is live screen recordings of the running app — not mockups or static screenshots: an interactive log-scale price chart, a historical probability engine, an AI strategy builder powered by Claude, a 20% call-sleeve / 80% cash allocation backtester, and three live self-diagnostics with full audit logging to a Neon Postgres database.
 
 What's inside:
 • Interactive SOXL price chart (2010–present) on a log scale, with QQQ and VIX overlays

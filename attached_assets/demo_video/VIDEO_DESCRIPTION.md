@@ -4,7 +4,7 @@
 **Length:** ~99 seconds · **Resolution:** 1920×1080 · **Audio:** AI voiceover (warm, trustworthy narrator) + soft music bed
 
 ## What this video is
-A narrated product walkthrough of the SOXL Analysis Platform that uses **actual footage of the running app** — real screenshots of each feature captured live from the application, presented full-frame with gentle Ken Burns motion (slow zooms and pans). The only non-app frame is the opening title card.
+A narrated product walkthrough of the SOXL Analysis Platform that uses **real moving footage of the running app** — live screen recordings of each feature, captured from the actual application as it scrolls through every screen (not static screenshots). The only non-app frame is the opening title card.
 
 ## Scene-by-scene
 
@@ -30,4 +30,4 @@ A narrated product walkthrough of the SOXL Analysis Platform that uses **actual 
    A slow zoom into the diagnostic result highlighting "Saved to Neon as diagnostic_runs row #7," showing every run is persisted for a permanent audit trail.
 
 ## How the footage was produced
-Each feature was rendered live from the real application code and data, then captured as a high-resolution screenshot. The Replit editor toolbar was cropped out so only the app is shown. Screenshots were assembled into motion clips and synced to the existing narration segments and music bed. (The temporary, un-gated capture harness used only for screenshotting was removed after capture; the live app remains fully gated behind Google sign-in.)
+Each screen was recorded live from the real running application as it scrolled through every feature (true screen recordings, not stills). Each recording was then re-timed to its matching narration segment, scaled to 1920×1080, and assembled with the existing voiceover and music bed. (The temporary, un-gated capture views used only for recording were removed afterward; the live app remains fully gated behind Google sign-in.)
