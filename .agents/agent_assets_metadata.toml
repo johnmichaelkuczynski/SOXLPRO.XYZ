@@ -77,7 +77,7 @@ title = "demo music bed"
 id = "zxI2OCgHXpfZDC4D0Lu5N"
 uri = "file://attached_assets/demo_video/SOXL_Analysis_Platform_Demo.mp4"
 type = "video"
-title = "SOXL Analysis Platform — Demo (real app footage)"
+title = "SOXL Analysis Platform — Demo (real app footage + voiceover)"
 
 [[outputs]]
 id = "BERszRq03XjF6i3M-VHvK"
