@@ -45,8 +45,6 @@ if "show_sox" not in st.session_state:
     st.session_state.show_sox = False
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
-if "show_short_interest" not in st.session_state:
-    st.session_state.show_short_interest = False
 
 chart_component = components.declare_component("chart_draw", path="components/chart_draw")
 
@@ -124,75 +122,6 @@ def fetch_sox_data():
     df = yf.Ticker("^SOX").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
-
-
-@st.cache_data(ttl=3600)
-def fetch_short_interest():
-    ticker = yf.Ticker("SOXL")
-    info = ticker.info
-    result = {}
-    fields = [
-        ("sharesShort", "Shares Short"),
-        ("shortRatio", "Short Ratio (Days to Cover)"),
-        ("shortPercentOfFloat", "Short % of Float"),
-        ("sharesShortPriorMonth", "Shares Short (Prior Month)"),
-        ("sharesOutstanding", "Shares Outstanding"),
-        ("floatShares", "Float Shares"),
-    ]
-    for key, label in fields:
-        val = info.get(key)
-        if val is not None:
-            result[label] = val
-    date_short = info.get("dateShortInterest")
-    if date_short:
-        result["_date"] = datetime.fromtimestamp(date_short).strftime("%Y-%m-%d")
-    return result
-
-
-@st.cache_data(ttl=3600)
-def fetch_short_volume_history(symbol="SOXL", days_back=365):
-    import requests
-    import concurrent.futures
-
-    dates_to_fetch = []
-    d = datetime.now()
-    for _ in range(days_back):
-        d -= timedelta(days=1)
-        if d.weekday() < 5:
-            dates_to_fetch.append(d)
-
-    def fetch_one(dt):
-        url = f"https://cdn.finra.org/equity/regsho/daily/CNMSshvol{dt.strftime('%Y%m%d')}.txt"
-        try:
-            r = requests.get(url, timeout=5)
-            if r.status_code != 200:
-                return None
-            for line in r.text.strip().split("\n"):
-                if f"|{symbol}|" in line:
-                    parts = line.split("|")
-                    if len(parts) >= 5:
-                        short_vol = float(parts[2])
-                        total_vol = float(parts[4])
-                        return {
-                            "date": dt.strftime("%Y-%m-%d"),
-                            "short_volume": short_vol,
-                            "total_volume": total_vol,
-                            "short_ratio": round(short_vol / total_vol * 100, 1) if total_vol > 0 else 0,
-                        }
-        except Exception:
-            pass
-        return None
-
-    results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(fetch_one, dt): dt for dt in dates_to_fetch}
-        for future in concurrent.futures.as_completed(futures):
-            result = future.result()
-            if result:
-                results.append(result)
-
-    results.sort(key=lambda x: x["date"])
-    return results
 
 
 def convert_to_trading_days(value, unit):
@@ -388,7 +317,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
 with tab_chart:
-    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 2])
+    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
     with overlay_cols[0]:
         st.markdown("**SOXL Price** · Log Scale")
     with overlay_cols[1]:
@@ -432,13 +361,6 @@ with tab_chart:
             type="primary" if st.session_state.show_sox else "secondary",
         ):
             st.session_state.show_sox = not st.session_state.show_sox
-            st.rerun()
-    with overlay_cols[7]:
-        if st.button(
-            "Hide Short Int." if st.session_state.show_short_interest else "Short Int.",
-            type="primary" if st.session_state.show_short_interest else "secondary",
-        ):
-            st.session_state.show_short_interest = not st.session_state.show_short_interest
             st.rerun()
 
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
@@ -639,7 +561,7 @@ with tab_chart:
         if bt_basis == "Benchmark-Based":
             bt_bench_col1, bt_bench_col2 = st.columns([1, 3])
             with bt_bench_col1:
-                bt_bench = st.selectbox("Benchmark", ["QQQ", "TLT", "XLU", "VIX"], key="bt_bench")
+                bt_bench = st.selectbox("Benchmark", ["QQQ", "TLT", "XLU", "VIX", "SOX"], key="bt_bench")
             with bt_bench_col2:
                 st.markdown(
                     "<div style='padding:8px 0; font-size:13px; color:#666;'>"
@@ -649,7 +571,7 @@ with tab_chart:
                 )
 
             bt_bench_sym = st.session_state.get("bt_bench", "QQQ")
-            bt_bench_yf = "^VIX" if bt_bench_sym == "VIX" else bt_bench_sym
+            bt_bench_yf = "^VIX" if bt_bench_sym == "VIX" else "^SOX" if bt_bench_sym == "SOX" else bt_bench_sym
             try:
                 bench_hist = yf.Ticker(bt_bench_yf).history(period="max", auto_adjust=True)
                 bench_hist.index = bench_hist.index.tz_localize(None)
@@ -937,101 +859,6 @@ with tab_chart:
             st.session_state.analyze_result = None
             st.rerun()
 
-    if st.session_state.show_short_interest:
-        st.divider()
-        st.markdown("### Short Interest — SOXL")
-        try:
-            si = fetch_short_interest()
-            if si:
-                report_date = si.pop("_date", "Unknown")
-                st.markdown(f"*Latest FINRA report date: {report_date}*")
-                si_cols = st.columns(len(si))
-                for idx, (label, val) in enumerate(si.items()):
-                    with si_cols[idx]:
-                        if "%" in label or "Percent" in label.replace(" ", ""):
-                            display_val = f"{val * 100:.2f}%" if val < 1 else f"{val:.2f}%"
-                        elif val >= 1_000_000:
-                            display_val = f"{val / 1_000_000:.2f}M"
-                        elif val >= 1_000:
-                            display_val = f"{val / 1_000:.1f}K"
-                        else:
-                            display_val = f"{val:.2f}"
-                        st.metric(label=label, value=display_val)
-
-                shares_short = si.get("Shares Short")
-                prior = si.get("Shares Short (Prior Month)")
-                if shares_short and prior and prior > 0:
-                    change_pct = (shares_short - prior) / prior * 100
-                    change_dir = "increased" if change_pct > 0 else "decreased"
-                    st.info(
-                        f"Short interest has **{change_dir}** by **{abs(change_pct):.1f}%** "
-                        f"from the prior month ({prior / 1_000_000:.2f}M to {shares_short / 1_000_000:.2f}M shares)."
-                    )
-            else:
-                st.warning("Short interest data not available.")
-        except Exception as e:
-            st.error(f"Failed to fetch short interest data: {e}")
-
-        st.markdown("#### Daily Short Volume (FINRA) — Last 12 Months")
-        with st.spinner("Fetching FINRA short volume data..."):
-            try:
-                import plotly.graph_objects as go
-                from plotly.subplots import make_subplots
-
-                sv_data = fetch_short_volume_history("SOXL", days_back=365)
-                if sv_data and len(sv_data) > 5:
-                    sv_dates = [d["date"] for d in sv_data]
-                    sv_short = [d["short_volume"] for d in sv_data]
-                    sv_total = [d["total_volume"] for d in sv_data]
-                    sv_ratio = [d["short_ratio"] for d in sv_data]
-
-                    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-                    fig.add_trace(
-                        go.Bar(
-                            x=sv_dates, y=sv_short,
-                            name="Short Volume",
-                            marker_color="#43A047",
-                            opacity=0.7,
-                        ),
-                        secondary_y=False,
-                    )
-
-                    fig.add_trace(
-                        go.Scatter(
-                            x=sv_dates, y=sv_ratio,
-                            name="Short Volume %",
-                            line=dict(color="#1E88E5", width=2),
-                            mode="lines",
-                        ),
-                        secondary_y=True,
-                    )
-
-                    fig.update_layout(
-                        height=400,
-                        template="plotly_white",
-                        margin=dict(l=60, r=60, t=30, b=40),
-                        legend=dict(x=0.01, y=0.99),
-                        hovermode="x unified",
-                        bargap=0.1,
-                    )
-                    fig.update_yaxes(title_text="Short Volume", secondary_y=False)
-                    fig.update_yaxes(title_text="Short Vol %", ticksuffix="%", secondary_y=True)
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    avg_ratio = sum(sv_ratio) / len(sv_ratio)
-                    recent_ratio = sv_ratio[-1] if sv_ratio else 0
-                    st.markdown(
-                        f"**Current short volume ratio:** {recent_ratio}% · "
-                        f"**12-month average:** {avg_ratio:.1f}% · "
-                        f"**Data points:** {len(sv_data)} trading days"
-                    )
-                else:
-                    st.warning("Could not fetch enough short volume data from FINRA.")
-            except Exception as e:
-                st.error(f"Failed to fetch short volume history: {e}")
-
     st.divider()
 
     st.markdown("### Probability Engine")
@@ -1049,7 +876,7 @@ with tab_chart:
         with bench_col1:
             bench_ticker = st.selectbox(
                 "Benchmark",
-                ["QQQ", "TLT", "XLU", "VIX"],
+                ["QQQ", "TLT", "XLU", "VIX", "SOX"],
                 key="bench_ticker",
             )
         with bench_col2:
@@ -1148,7 +975,7 @@ with tab_chart:
 
         if pred_basis == "Benchmark History":
             bench_sym = st.session_state.get("bench_ticker", "QQQ")
-            bench_yf_sym = "^VIX" if bench_sym == "VIX" else bench_sym
+            bench_yf_sym = "^VIX" if bench_sym == "VIX" else "^SOX" if bench_sym == "SOX" else bench_sym
             try:
                 bench_df = yf.Ticker(bench_yf_sym).history(period="max", auto_adjust=True)
                 bench_df.index = bench_df.index.tz_localize(None)
