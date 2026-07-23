@@ -428,8 +428,14 @@ with tab_chart:
         try:
             sox_data = fetch_sox_data()
             if not sox_data.empty:
-                sox_dates_list = [d.strftime("%Y-%m-%d") for d in sox_data.index]
-                sox_prices_list = sox_data["Close"].tolist()
+                common_idx = data.index.intersection(sox_data.index)
+                if len(common_idx) > 0:
+                    first_common = common_idx[0]
+                    soxl_start = float(data.loc[first_common, "Close"])
+                    sox_start = float(sox_data.loc[first_common, "Close"])
+                    scale = soxl_start / sox_start if sox_start != 0 else 1.0
+                    sox_dates_list = [d.strftime("%Y-%m-%d") for d in sox_data.index]
+                    sox_prices_list = [p * scale for p in sox_data["Close"].tolist()]
         except Exception:
             pass
 
