@@ -121,6 +121,8 @@ window.addEventListener("message", function(event) {
       xlu_prices: args.xlu_prices || [],
       vix_dates: args.vix_dates || [],
       vix_prices: args.vix_prices || [],
+      sox_dates: args.sox_dates || [],
+      sox_prices: args.sox_prices || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -426,7 +428,8 @@ function renderChart() {
   var hasTLT = chartData.tlt_dates && chartData.tlt_dates.length > 0;
   var hasXLU = chartData.xlu_dates && chartData.xlu_dates.length > 0;
   var hasVIX = chartData.vix_dates && chartData.vix_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX;
+  var hasSOX = chartData.sox_dates && chartData.sox_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -483,6 +486,16 @@ function renderChart() {
       line: {color: '#FFB300', width: 1.5, dash: 'dot'},
       yaxis: 'y',
       hovertemplate: 'VIX: %{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasSOX) {
+    traces.push({
+      x: chartData.sox_dates, y: chartData.sox_prices,
+      mode: 'lines', name: 'SOX',
+      line: {color: '#43A047', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'SOX: %{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>'
     });
   }
 

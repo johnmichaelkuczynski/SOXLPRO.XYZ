@@ -41,6 +41,8 @@ if "show_xlu" not in st.session_state:
     st.session_state.show_xlu = False
 if "show_vix" not in st.session_state:
     st.session_state.show_vix = False
+if "show_sox" not in st.session_state:
+    st.session_state.show_sox = False
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 if "show_short_interest" not in st.session_state:
@@ -113,6 +115,13 @@ def fetch_xlu_data():
 @st.cache_data(ttl=300)
 def fetch_vix_data():
     df = yf.Ticker("^VIX").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_sox_data():
+    df = yf.Ticker("^SOX").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -379,7 +388,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
 with tab_chart:
-    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
+    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 2])
     with overlay_cols[0]:
         st.markdown("**SOXL Price** · Log Scale")
     with overlay_cols[1]:
@@ -418,6 +427,13 @@ with tab_chart:
             st.session_state.show_vix = not st.session_state.show_vix
             st.rerun()
     with overlay_cols[6]:
+        if st.button(
+            "Hide SOX" if st.session_state.show_sox else "SOX",
+            type="primary" if st.session_state.show_sox else "secondary",
+        ):
+            st.session_state.show_sox = not st.session_state.show_sox
+            st.rerun()
+    with overlay_cols[7]:
         if st.button(
             "Hide Short Int." if st.session_state.show_short_interest else "Short Int.",
             type="primary" if st.session_state.show_short_interest else "secondary",
@@ -484,6 +500,17 @@ with tab_chart:
         except Exception:
             pass
 
+    sox_dates_list = []
+    sox_prices_list = []
+    if st.session_state.show_sox:
+        try:
+            sox_data = fetch_sox_data()
+            if not sox_data.empty:
+                sox_dates_list = [d.strftime("%Y-%m-%d") for d in sox_data.index]
+                sox_prices_list = sox_data["Close"].tolist()
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
@@ -497,6 +524,8 @@ with tab_chart:
         xlu_prices=xlu_prices_list,
         vix_dates=vix_dates_list,
         vix_prices=vix_prices_list,
+        sox_dates=sox_dates_list,
+        sox_prices=sox_prices_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=900,
