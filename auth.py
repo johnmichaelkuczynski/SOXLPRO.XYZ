@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import types
 from pathlib import Path
 
 import streamlit as st
@@ -30,6 +31,22 @@ def _primary_domain() -> str:
 
 def _redirect_uri() -> str:
     return f"https://{_primary_domain()}/oauth2callback"
+
+
+def _is_dev_env() -> bool:
+    """True when running in the Replit workspace (not a deployed app).
+
+    REPLIT_CONTAINER is 'repl' in the workspace and 'deploy' in a deployed app.
+    """
+    return os.environ.get("REPLIT_CONTAINER", "") == "repl"
+
+
+def _dev_user() -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        is_logged_in=True,
+        name="Dev User",
+        email="dev@localhost",
+    )
 
 
 def auth_configured() -> bool:
@@ -108,7 +125,12 @@ def require_login():
     """Gate the entire app. Returns the logged-in user, or stops rendering.
 
     Call this immediately after st.set_page_config.
+    In the Replit dev workspace the Google wall is bypassed automatically.
+    In production (deployed app) Google sign-in is always required.
     """
+    if _is_dev_env():
+        return _dev_user()
+
     if not write_auth_secrets():
         st.error(
             "Google sign-in is not configured. Set GOOGLE_CLIENT_ID and "
@@ -125,6 +147,9 @@ def require_login():
 
 def render_user_badge() -> None:
     """Small signed-in indicator + logout button for the header."""
+    if _is_dev_env():
+        st.caption("🛠️ Dev mode")
+        return
     if not _is_logged_in():
         return
     user = st.user
