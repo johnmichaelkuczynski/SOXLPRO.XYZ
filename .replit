@@ -43,3 +43,7 @@ externalPort = 8000
 integrations = ["python_anthropic_ai_integrations:1.0.0", "python_openai_ai_integrations:1.0.0"]
 stack = "STREAMLIT"
 expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
