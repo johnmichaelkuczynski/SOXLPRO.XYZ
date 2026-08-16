@@ -113,16 +113,22 @@ window.addEventListener("message", function(event) {
       prices: args.prices,
       qqq_dates: args.qqq_dates || [],
       qqq_prices: args.qqq_prices || [],
+      qqq_actual: args.qqq_actual || [],
       tqqq_dates: args.tqqq_dates || [],
       tqqq_prices: args.tqqq_prices || [],
+      tqqq_actual: args.tqqq_actual || [],
       tlt_dates: args.tlt_dates || [],
       tlt_prices: args.tlt_prices || [],
+      tlt_actual: args.tlt_actual || [],
       xlu_dates: args.xlu_dates || [],
       xlu_prices: args.xlu_prices || [],
+      xlu_actual: args.xlu_actual || [],
       vix_dates: args.vix_dates || [],
       vix_prices: args.vix_prices || [],
+      vix_actual: args.vix_actual || [],
       sox_dates: args.sox_dates || [],
       sox_prices: args.sox_prices || [],
+      sox_actual: args.sox_actual || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -442,60 +448,66 @@ function renderChart() {
   if (hasQQQ) {
     traces.push({
       x: chartData.qqq_dates, y: chartData.qqq_prices,
+      customdata: chartData.qqq_actual,
       mode: 'lines', name: 'QQQ',
       line: {color: '#FF6F00', width: 1.5},
       yaxis: 'y',
-      hovertemplate: 'QQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+      hovertemplate: 'QQQ: %{x|%Y-%m-%d}<br>$%{customdata:.2f}<extra></extra>'
     });
   }
 
   if (hasTQQQ) {
     traces.push({
       x: chartData.tqqq_dates, y: chartData.tqqq_prices,
+      customdata: chartData.tqqq_actual,
       mode: 'lines', name: 'TQQQ',
       line: {color: '#AB47BC', width: 1.5},
       yaxis: 'y',
-      hovertemplate: 'TQQQ: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+      hovertemplate: 'TQQQ: %{x|%Y-%m-%d}<br>$%{customdata:.2f}<extra></extra>'
     });
   }
 
   if (hasTLT) {
     traces.push({
       x: chartData.tlt_dates, y: chartData.tlt_prices,
+      customdata: chartData.tlt_actual,
       mode: 'lines', name: 'TLT',
       line: {color: '#26A69A', width: 1.5},
       yaxis: 'y',
-      hovertemplate: 'TLT: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+      hovertemplate: 'TLT: %{x|%Y-%m-%d}<br>$%{customdata:.2f}<extra></extra>'
     });
   }
 
   if (hasXLU) {
     traces.push({
       x: chartData.xlu_dates, y: chartData.xlu_prices,
+      customdata: chartData.xlu_actual,
       mode: 'lines', name: 'XLU',
       line: {color: '#EF5350', width: 1.5},
       yaxis: 'y',
-      hovertemplate: 'XLU: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+      hovertemplate: 'XLU: %{x|%Y-%m-%d}<br>$%{customdata:.2f}<extra></extra>'
     });
   }
 
   if (hasVIX) {
     traces.push({
       x: chartData.vix_dates, y: chartData.vix_prices,
+      customdata: chartData.vix_actual,
       mode: 'lines', name: 'VIX',
       line: {color: '#FFB300', width: 1.5, dash: 'dot'},
       yaxis: 'y',
-      hovertemplate: 'VIX: %{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>'
+      hovertemplate: 'VIX: %{x|%Y-%m-%d}<br>%{customdata:.2f}<extra></extra>'
     });
   }
 
   if (hasSOX) {
     traces.push({
       x: chartData.sox_dates, y: chartData.sox_prices,
+      customdata: chartData.sox_actual,
       mode: 'lines', name: 'SOX',
       line: {color: '#43A047', width: 1.5},
       yaxis: 'y',
-      hovertemplate: 'SOX: %{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>'
+      hovertemplate: 'SOX: %{x|%Y-%m-%d}<br>%{customdata:.2f}<extra></extra>'
     });
   }
 
@@ -596,9 +608,15 @@ function renderChart() {
       fixedrange: false
     },
     xaxis: {
+      type: 'date',
       range: [chartData.dates[0], chartData.future_end],
       title: '', gridcolor: '#eee',
-      dtick: 'M12', tickformat: '%Y',
+      tickformatstops: [
+        {dtickrange: [null, 86400000], value: '%b %d, %Y'},
+        {dtickrange: [86400000, 'M1'], value: '%b %d, %Y'},
+        {dtickrange: ['M1', 'M12'], value: '%b %Y'},
+        {dtickrange: ['M12', null], value: '%Y'}
+      ],
       fixedrange: false
     },
     template: 'plotly_white',

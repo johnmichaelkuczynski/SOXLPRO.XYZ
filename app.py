@@ -15,6 +15,25 @@ from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
 from auth import require_login, render_user_badge
 
+
+def _inject_google_site_verification():
+    """Streamlit apps can't add <head> tags from Python, so patch the
+    Streamlit static index.html (idempotent; runs on every start, including
+    in the deployment)."""
+    meta_tag = '<meta name="google-site-verification" content="yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI" />'
+    try:
+        import pathlib
+        import streamlit as _stlib
+        index_path = pathlib.Path(_stlib.__file__).parent / "static" / "index.html"
+        html = index_path.read_text()
+        if meta_tag not in html:
+            index_path.write_text(html.replace("<head>", "<head>" + meta_tag, 1))
+    except Exception:
+        pass
+
+
+_inject_google_site_verification()
+
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
 # Gate the entire app behind Google sign-in.
@@ -367,75 +386,86 @@ with tab_chart:
     dates_list = [d.strftime("%Y-%m-%d") for d in data.index]
     prices_list = data["Close"].tolist()
 
+    def normalize_overlay(soxl_df, overlay_df):
+        """Rescale an overlay series to SOXL's price at their first common
+        date so relative performance is comparable on one axis. Returns
+        (dates, scaled_prices, actual_prices)."""
+        common_idx = soxl_df.index.intersection(overlay_df.index)
+        actual = overlay_df["Close"].tolist()
+        dates = [d.strftime("%Y-%m-%d") for d in overlay_df.index]
+        if len(common_idx) == 0:
+            return dates, actual, actual
+        first_common = common_idx[0]
+        soxl_start = float(soxl_df.loc[first_common, "Close"])
+        ov_start = float(overlay_df.loc[first_common, "Close"])
+        if not (np.isfinite(soxl_start) and np.isfinite(ov_start)) or soxl_start <= 0 or ov_start <= 0:
+            return dates, actual, actual
+        scale = soxl_start / ov_start
+        return dates, [p * scale for p in actual], actual
+
     qqq_dates_list = []
     qqq_prices_list = []
+    qqq_actual_list = []
     if st.session_state.show_qqq:
         try:
             qqq_data = fetch_qqq_data()
             if not qqq_data.empty:
-                qqq_dates_list = [d.strftime("%Y-%m-%d") for d in qqq_data.index]
-                qqq_prices_list = qqq_data["Close"].tolist()
+                qqq_dates_list, qqq_prices_list, qqq_actual_list = normalize_overlay(data, qqq_data)
         except Exception:
             pass
 
     tqqq_dates_list = []
     tqqq_prices_list = []
+    tqqq_actual_list = []
     if st.session_state.show_tqqq:
         try:
             tqqq_data = fetch_tqqq_data()
             if not tqqq_data.empty:
-                tqqq_dates_list = [d.strftime("%Y-%m-%d") for d in tqqq_data.index]
-                tqqq_prices_list = tqqq_data["Close"].tolist()
+                tqqq_dates_list, tqqq_prices_list, tqqq_actual_list = normalize_overlay(data, tqqq_data)
         except Exception:
             pass
 
     tlt_dates_list = []
     tlt_prices_list = []
+    tlt_actual_list = []
     if st.session_state.show_tlt:
         try:
             tlt_data = fetch_tlt_data()
             if not tlt_data.empty:
-                tlt_dates_list = [d.strftime("%Y-%m-%d") for d in tlt_data.index]
-                tlt_prices_list = tlt_data["Close"].tolist()
+                tlt_dates_list, tlt_prices_list, tlt_actual_list = normalize_overlay(data, tlt_data)
         except Exception:
             pass
 
     xlu_dates_list = []
     xlu_prices_list = []
+    xlu_actual_list = []
     if st.session_state.show_xlu:
         try:
             xlu_data = fetch_xlu_data()
             if not xlu_data.empty:
-                xlu_dates_list = [d.strftime("%Y-%m-%d") for d in xlu_data.index]
-                xlu_prices_list = xlu_data["Close"].tolist()
+                xlu_dates_list, xlu_prices_list, xlu_actual_list = normalize_overlay(data, xlu_data)
         except Exception:
             pass
 
     vix_dates_list = []
     vix_prices_list = []
+    vix_actual_list = []
     if st.session_state.show_vix:
         try:
             vix_data = fetch_vix_data()
             if not vix_data.empty:
-                vix_dates_list = [d.strftime("%Y-%m-%d") for d in vix_data.index]
-                vix_prices_list = vix_data["Close"].tolist()
+                vix_dates_list, vix_prices_list, vix_actual_list = normalize_overlay(data, vix_data)
         except Exception:
             pass
 
     sox_dates_list = []
     sox_prices_list = []
+    sox_actual_list = []
     if st.session_state.show_sox:
         try:
             sox_data = fetch_sox_data()
             if not sox_data.empty:
-                common_idx = data.index.intersection(sox_data.index)
-                if len(common_idx) > 0:
-                    first_common = common_idx[0]
-                    soxl_start = float(data.loc[first_common, "Close"])
-                    sox_start = float(sox_data.loc[first_common, "Close"])
-                    scale = soxl_start / sox_start if sox_start != 0 else 1.0
-                    sox_dates_list = [d.strftime("%Y-%m-%d") for d in sox_data.index]
-                    sox_prices_list = [p * scale for p in sox_data["Close"].tolist()]
+                sox_dates_list, sox_prices_list, sox_actual_list = normalize_overlay(data, sox_data)
         except Exception:
             pass
 
@@ -444,19 +474,25 @@ with tab_chart:
         prices=prices_list,
         qqq_dates=qqq_dates_list,
         qqq_prices=qqq_prices_list,
+        qqq_actual=qqq_actual_list,
         tqqq_dates=tqqq_dates_list,
         tqqq_prices=tqqq_prices_list,
+        tqqq_actual=tqqq_actual_list,
         tlt_dates=tlt_dates_list,
         tlt_prices=tlt_prices_list,
+        tlt_actual=tlt_actual_list,
         xlu_dates=xlu_dates_list,
         xlu_prices=xlu_prices_list,
+        xlu_actual=xlu_actual_list,
         vix_dates=vix_dates_list,
         vix_prices=vix_prices_list,
+        vix_actual=vix_actual_list,
         sox_dates=sox_dates_list,
         sox_prices=sox_prices_list,
+        sox_actual=sox_actual_list,
         lines=st.session_state.lines,
         future_end=future_end,
-        chart_height=900,
+        chart_height=560,
         key="soxl_chart",
         default=None,
     )
