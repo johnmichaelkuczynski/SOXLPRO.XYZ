@@ -20,6 +20,9 @@ _GOOGLE_METADATA = "https://accounts.google.com/.well-known/openid-configuration
 
 
 def _primary_domain() -> str:
+    public_app_url = os.environ.get("PUBLIC_APP_URL", "").strip().rstrip("/")
+    if public_app_url:
+        return public_app_url.removeprefix("https://").removeprefix("http://")
     domains = os.environ.get("REPLIT_DOMAINS", "")
     if domains:
         return domains.split(",")[0].strip()

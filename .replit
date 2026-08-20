@@ -47,3 +47,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
+
+[userenv]
+
+[userenv.production]
+PUBLIC_APP_URL = "https://soxlpro.xyz"
