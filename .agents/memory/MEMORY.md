@@ -1,1 +1,2 @@
 - [Narrated demo videos](narrated-demo-video.md) — generateVideo caps at 8s; build long narrated demos as a PIL-slide + TTS + ffmpeg slideshow instead.
+- [Deployment environment detection](deployment-environment-detection.md) — use REPLIT_DEPLOYMENT=1 for production checks; REPLIT_CONTAINER may still say repl on published VMs.

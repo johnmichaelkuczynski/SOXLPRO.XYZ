@@ -36,9 +36,13 @@ def _redirect_uri() -> str:
 def _is_dev_env() -> bool:
     """True when running in the Replit workspace (not a deployed app).
 
-    REPLIT_CONTAINER is 'repl' in the workspace and 'deploy' in a deployed app.
+    Replit sets REPLIT_DEPLOYMENT=1 only in published deployments. Do not use
+    REPLIT_CONTAINER here: VM deployments can report "repl", which would
+    accidentally bypass authentication on the public site.
     """
-    return os.environ.get("REPLIT_CONTAINER", "") == "repl"
+    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+        return False
+    return bool(os.environ.get("REPLIT_DEV_DOMAIN"))
 
 
 def _dev_user() -> types.SimpleNamespace:
