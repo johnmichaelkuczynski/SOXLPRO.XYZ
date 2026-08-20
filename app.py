@@ -91,6 +91,8 @@ if "show_vix" not in st.session_state:
     st.session_state.show_vix = False
 if "show_sox" not in st.session_state:
     st.session_state.show_sox = False
+if "show_gush" not in st.session_state:
+    st.session_state.show_gush = False
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 
@@ -168,6 +170,13 @@ def fetch_vix_data():
 @st.cache_data(ttl=300)
 def fetch_sox_data():
     df = yf.Ticker("^SOX").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_gush_data():
+    df = yf.Ticker("GUSH").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -365,7 +374,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
 tab_chart, tab_vol, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
 with tab_chart:
-    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
+    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
     with overlay_cols[0]:
         st.markdown("**SOXL Price** · Log Scale")
     with overlay_cols[1]:
@@ -409,6 +418,13 @@ with tab_chart:
             type="primary" if st.session_state.show_sox else "secondary",
         ):
             st.session_state.show_sox = not st.session_state.show_sox
+            st.rerun()
+    with overlay_cols[7]:
+        if st.button(
+            "Hide GUSH" if st.session_state.show_gush else "GUSH",
+            type="primary" if st.session_state.show_gush else "secondary",
+        ):
+            st.session_state.show_gush = not st.session_state.show_gush
             st.rerun()
 
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
@@ -498,6 +514,17 @@ with tab_chart:
         except Exception:
             pass
 
+    gush_dates_list = []
+    gush_prices_list = []
+    gush_actual_list = []
+    if st.session_state.show_gush:
+        try:
+            gush_data = fetch_gush_data()
+            if not gush_data.empty:
+                gush_dates_list, gush_prices_list, gush_actual_list = normalize_overlay(data, gush_data)
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
@@ -519,6 +546,9 @@ with tab_chart:
         sox_dates=sox_dates_list,
         sox_prices=sox_prices_list,
         sox_actual=sox_actual_list,
+        gush_dates=gush_dates_list,
+        gush_prices=gush_prices_list,
+        gush_actual=gush_actual_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=560,

@@ -129,6 +129,9 @@ window.addEventListener("message", function(event) {
       sox_dates: args.sox_dates || [],
       sox_prices: args.sox_prices || [],
       sox_actual: args.sox_actual || [],
+      gush_dates: args.gush_dates || [],
+      gush_prices: args.gush_prices || [],
+      gush_actual: args.gush_actual || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -435,7 +438,8 @@ function renderChart() {
   var hasXLU = chartData.xlu_dates && chartData.xlu_dates.length > 0;
   var hasVIX = chartData.vix_dates && chartData.vix_dates.length > 0;
   var hasSOX = chartData.sox_dates && chartData.sox_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX;
+  var hasGUSH = chartData.gush_dates && chartData.gush_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX || hasGUSH;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -508,6 +512,17 @@ function renderChart() {
       line: {color: '#43A047', width: 1.5},
       yaxis: 'y',
       hovertemplate: 'SOX: %{x|%Y-%m-%d}<br>%{customdata:.2f}<extra></extra>'
+    });
+  }
+
+  if (hasGUSH) {
+    traces.push({
+      x: chartData.gush_dates, y: chartData.gush_prices,
+      customdata: chartData.gush_actual,
+      mode: 'lines', name: 'GUSH',
+      line: {color: '#E91E63', width: 1.5},
+      yaxis: 'y',
+      hovertemplate: 'GUSH: %{x|%Y-%m-%d}<br>$%{customdata:.2f}<extra></extra>'
     });
   }
 
@@ -598,6 +613,11 @@ function renderChart() {
     var vixValidPrices = chartData.vix_prices.filter(function(p){return p>0;});
     priceMin = Math.min(priceMin, Math.min.apply(null, vixValidPrices));
     priceMax = Math.max(priceMax, Math.max.apply(null, vixValidPrices));
+  }
+  if (hasGUSH) {
+    var gushValidPrices = chartData.gush_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, gushValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, gushValidPrices));
   }
 
   var layout = {
