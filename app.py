@@ -13,7 +13,6 @@ from diagnostic import render_diagnostic_tab
 from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
-from auth import require_login, render_user_badge
 
 
 def _inject_google_site_verification():
@@ -64,10 +63,6 @@ def _inject_google_site_verification():
 _inject_google_site_verification()
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
-
-# Gate the entire app behind Google sign-in.
-current_user = require_login()
-current_user_email = getattr(current_user, "email", None)
 
 if "lines" not in st.session_state:
     st.session_state.lines = []
@@ -214,11 +209,9 @@ except Exception as e:
     st.error(f"Failed to fetch SOXL data: {e}")
     st.stop()
 
-col_title, col_user, col_refresh = st.columns([7, 1, 1])
+col_title, col_refresh = st.columns([7, 1])
 with col_title:
     st.markdown("### SOXL Analysis")
-with col_user:
-    render_user_badge()
 with col_refresh:
     if st.button("Refresh", help="Refresh data"):
         st.cache_data.clear()
@@ -1468,11 +1461,11 @@ with tab_diag:
         ["System Check", "Synthetic User", "Quality Control", "Backtest Sweep"]
     )
     with diag_sub_system:
-        render_diagnostic_tab(user_email=current_user_email)
+        render_diagnostic_tab()
     with diag_sub_synth:
-        render_synthetic_user_tab(user_email=current_user_email)
+        render_synthetic_user_tab()
     with diag_sub_qc:
-        render_quality_control_tab(user_email=current_user_email)
+        render_quality_control_tab()
     with diag_sub_sweep:
         render_backtest_sweep_tab()
 
