@@ -1,3 +1,6 @@
+import base64
+from pathlib import Path
+
 import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
@@ -209,9 +212,36 @@ except Exception as e:
     st.error(f"Failed to fetch SOXL data: {e}")
     st.stop()
 
-col_title, col_refresh = st.columns([7, 1])
+logo_path = Path("attached_assets/zhi_logoc_1787826573212.png")
+logo_data_uri = (
+    "data:image/png;base64,"
+    + base64.b64encode(logo_path.read_bytes()).decode("ascii")
+)
+
+col_title, col_contact, col_refresh = st.columns([6, 1.15, 0.85])
 with col_title:
-    st.markdown("### SOXL Analysis")
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; gap:12px; min-height:44px;">
+          <a href="https://zhisystems.ai/" target="_blank" rel="noopener noreferrer"
+             title="Visit ZHI Systems" aria-label="Visit ZHI Systems">
+            <img src="{logo_data_uri}" alt="ZHI Systems"
+                 style="display:block; width:38px; height:38px; border-radius:8px;
+                        box-shadow:0 1px 4px rgba(0,0,0,0.22);" />
+          </a>
+          <div style="font-size:1.35rem; font-weight:700; color:#111827;">
+            SOXL Analysis
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+with col_contact:
+    st.link_button(
+        "Contact Us",
+        "mailto:zhi@zhisystems.org",
+        width="stretch",
+    )
 with col_refresh:
     if st.button("Refresh", help="Refresh data"):
         st.cache_data.clear()
@@ -1470,10 +1500,12 @@ with tab_diag:
         render_backtest_sweep_tab()
 
 st.markdown(
-    "<div style='text-align:center; margin-top:48px; padding-top:16px; "
-    "border-top:1px solid rgba(0,0,0,0.06); font-size:12px; color:#9ca3af;'>"
+    "<div style='text-align:center; margin-top:48px; padding:24px 0; "
+    "border-top:1px solid #d1d5db; font-size:16px;'>"
     "<a href='mailto:zhi@zhisystems.org' "
-    "style='color:#9ca3af; text-decoration:none;'>Contact us</a>"
+    "style='display:inline-block; color:#ffffff; background:#2563eb; "
+    "font-weight:700; text-decoration:none; padding:10px 22px; "
+    "border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.18);'>Contact Us</a>"
     "</div>",
     unsafe_allow_html=True,
 )
