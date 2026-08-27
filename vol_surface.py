@@ -46,7 +46,14 @@ def _bs_model_price(spot, strike, t_years, vol, flag):
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.25, min_oi=50, min_vol=1):
+def fetch_raw_options_chain(ticker_symbol="SOXL"):
+    """Fetch one shared option-chain snapshot for all option views.
+
+    The volatility surface applies strict quality filters downstream, while the
+    call risk/reward view keeps every contract with a usable ask. Keeping the
+    network request here means Streamlit can render both tabs from one cached
+    snapshot instead of downloading the chain twice on every rerun.
+    """
     ticker = yf.Ticker(ticker_symbol)
     expirations = ticker.options
     if not expirations:
@@ -56,18 +63,14 @@ def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.25, min_oi=50, min_vo
     spot = float(hist["Close"].iloc[-1])
 
     rows = []
-    rejection_log = {}
+    fetch_log = {}
     today = datetime.now().date()
     for exp_str in expirations:
-        rej = {"spread": 0, "liquidity": 0, "iv_fail": 0, "no_quote": 0,
-               "thin_price": 0, "deep_otm_put": 0, "kept": 0}
         try:
             exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
             dte = (exp_date - today).days
-            if dte < 7:
+            if dte < 1:
                 continue
-            t_years = max(dte, 1) / 365.0
-            forward = spot * np.exp(RISK_FREE_RATE * t_years)
             chain = ticker.option_chain(exp_str)
             for kind, df in [("c", chain.calls), ("p", chain.puts)]:
                 for _, row in df.iterrows():
@@ -77,60 +80,111 @@ def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.25, min_oi=50, min_vo
                     yf_iv = float(row.get("impliedVolatility", 0) or 0)
                     vol = float(row.get("volume", 0) or 0)
                     oi = float(row.get("openInterest", 0) or 0)
-                    # Require live two-sided quote (no last-price fallback — too stale)
-                    if bid <= 0 or ask <= 0 or strike <= 0:
-                        rej["no_quote"] += 1
-                        continue
-                    mid = (bid + ask) / 2.0
-                    if mid <= 0:
-                        rej["no_quote"] += 1
-                        continue
-                    # Floor on price: sub-$1 options are dominated by tick noise
-                    if mid < MIN_MID_PRICE:
-                        rej["thin_price"] += 1
-                        continue
-                    # Drop deep OTM puts (tail-protection only, IV is unreliable)
-                    if kind == "p" and strike < DEEP_OTM_PUT_FLOOR * spot:
-                        rej["deep_otm_put"] += 1
-                        continue
-                    spread_pct = (ask - bid) / mid
-                    if spread_pct > spread_cap:
-                        rej["spread"] += 1
-                        continue
-                    # Liquidity: oi ≥ 50, volume ≥ 1 (volume == 0 stale)
-                    if oi < min_oi or vol < min_vol:
-                        rej["liquidity"] += 1
-                        continue
-                    iv = _compute_iv_fallback(mid, spot, strike, t_years, kind)
-                    if not np.isfinite(iv) or iv <= 0:
-                        if yf_iv > 0:
-                            iv = yf_iv
-                    if not np.isfinite(iv) or iv < 0.05 or iv > 5.0:
-                        rej["iv_fail"] += 1
-                        continue
-                    rej["kept"] += 1
+                    last_trade = row.get("lastTradeDate")
+                    if pd.isna(last_trade):
+                        last_trade = None
                     rows.append({
                         "kind": kind,
+                        "contract_symbol": str(row.get("contractSymbol", "") or ""),
                         "strike": strike,
-                        "moneyness": strike / spot,
-                        "log_moneyness": float(np.log(strike / forward)),
-                        "forward": forward,
                         "dte": dte,
                         "exp_date": exp_str,
-                        "iv": iv,
+                        "yf_iv": yf_iv,
                         "bid": bid,
                         "ask": ask,
-                        "mid": mid,
-                        "spread_pct": spread_pct,
+                        "last_price": float(row.get("lastPrice", 0) or 0),
                         "volume": vol,
                         "open_interest": oi,
+                        "last_trade": last_trade,
+                        "in_the_money": bool(row.get("inTheMoney", False)),
                     })
-            rejection_log[exp_str] = rej
-        except Exception:
+            fetch_log[exp_str] = {"status": "ok"}
+        except Exception as exc:
+            fetch_log[exp_str] = {"status": "error", "message": str(exc)}
             continue
 
     df = pd.DataFrame(rows)
-    return df, spot, datetime.now(), rejection_log
+    return df, spot, datetime.now(), fetch_log
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_options_chain(ticker_symbol="SOXL", spread_cap=0.25, min_oi=50, min_vol=1):
+    """Build the existing strict vol-surface dataset from the shared snapshot."""
+    raw, spot, fetched_at, _ = fetch_raw_options_chain(ticker_symbol)
+    if raw.empty or spot <= 0:
+        return pd.DataFrame(), spot, fetched_at, {}
+
+    rows = []
+    rejection_log = {}
+    for exp_str, exp_rows in raw.groupby("exp_date", sort=True):
+        rej = {"spread": 0, "liquidity": 0, "iv_fail": 0, "no_quote": 0,
+               "thin_price": 0, "deep_otm_put": 0, "kept": 0}
+        for _, row in exp_rows.iterrows():
+            kind = str(row["kind"])
+            bid = float(row["bid"])
+            ask = float(row["ask"])
+            strike = float(row["strike"])
+            yf_iv = float(row["yf_iv"])
+            vol = float(row["volume"])
+            oi = float(row["open_interest"])
+            dte = int(row["dte"])
+            if dte < 7:
+                continue
+            t_years = max(dte, 1) / 365.0
+            forward = spot * np.exp(RISK_FREE_RATE * t_years)
+
+            # Require live two-sided quote (no last-price fallback — too stale)
+            if bid <= 0 or ask <= 0 or strike <= 0 or ask < bid:
+                rej["no_quote"] += 1
+                continue
+            mid = (bid + ask) / 2.0
+            if mid <= 0:
+                rej["no_quote"] += 1
+                continue
+            # Floor on price: sub-$1 options are dominated by tick noise
+            if mid < MIN_MID_PRICE:
+                rej["thin_price"] += 1
+                continue
+            # Drop deep OTM puts (tail-protection only, IV is unreliable)
+            if kind == "p" and strike < DEEP_OTM_PUT_FLOOR * spot:
+                rej["deep_otm_put"] += 1
+                continue
+            spread_pct = (ask - bid) / mid
+            if spread_pct > spread_cap:
+                rej["spread"] += 1
+                continue
+            # Liquidity: oi ≥ 50, volume ≥ 1 (volume == 0 stale)
+            if oi < min_oi or vol < min_vol:
+                rej["liquidity"] += 1
+                continue
+            iv = _compute_iv_fallback(mid, spot, strike, t_years, kind)
+            if not np.isfinite(iv) or iv <= 0:
+                if yf_iv > 0:
+                    iv = yf_iv
+            if not np.isfinite(iv) or iv < 0.05 or iv > 5.0:
+                rej["iv_fail"] += 1
+                continue
+            rej["kept"] += 1
+            rows.append({
+                "kind": kind,
+                "strike": strike,
+                "moneyness": strike / spot,
+                "log_moneyness": float(np.log(strike / forward)),
+                "forward": forward,
+                "dte": dte,
+                "exp_date": exp_str,
+                "iv": iv,
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "spread_pct": spread_pct,
+                "volume": vol,
+                "open_interest": oi,
+            })
+        rejection_log[exp_str] = rej
+
+    df = pd.DataFrame(rows)
+    return df, spot, fetched_at, rejection_log
 
 
 def apply_no_arb_filters(df):
@@ -626,6 +680,7 @@ def render_vol_surface_tab():
     with col_refresh:
         st.write("")
         if st.button("🔄 Refresh now", use_container_width=True):
+            fetch_raw_options_chain.clear()
             fetch_options_chain.clear()
             compute_iv_rank_panel.clear()
             st.rerun()
