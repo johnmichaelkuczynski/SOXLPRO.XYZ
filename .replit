@@ -1,7 +1,7 @@
 modules = ["python-3.11", "nodejs-20", "web", "nix"]
 [deployment]
 deploymentTarget = "vm"
-run = ["node", "seo_server.js"]
+run = ["streamlit", "run", "app.py", "--server.port", "5000", "--server.headless", "true"]
 
 [nix]
 channel = "stable-25_05"
@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node seo_server.js"
+args = "streamlit run app.py --server.port 5000"
 waitForPort = 5000
 
 [[ports]]

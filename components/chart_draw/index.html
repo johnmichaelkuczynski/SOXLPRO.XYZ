@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Interactive SOXL historical price chart</title>
-<script id="plotly-script" src="https://cdn.plot.ly/plotly-2.35.2.min.js" defer></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; }
@@ -15,21 +15,13 @@
   }
   .tbtn:hover { background: #f0f0f0; }
   .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
-  .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
-  .tbtn.danger:hover:not(:disabled) { background: #B71C1C; color: #fff; }
-  .tbtn:disabled { cursor: not-allowed; opacity: 0.45; }
+   .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
+   .tbtn.danger:hover { background: #B71C1C; color: #fff; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
    .sr-only {
      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
    }
-  #chart-status {
-    min-height: 20px; padding: 8px 2px; font-size: 14px; color: #555;
-  }
-  #chart-status.error {
-    color: #b42318; background: #fff4f2; border: 1px solid #fecdca;
-    border-radius: 6px; padding: 8px 10px;
-  }
   #chart-container { position: relative; width: 100%; }
   #chart { width: 100%; }
   #select-overlay {
@@ -89,14 +81,13 @@
 <body>
 <div id="toolbar">
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
-  <button class="tbtn danger" id="deleteLinesBtn" onclick="clearAll()" disabled>&#128465; Delete lines</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
+  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
   <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
 <div id="chart-container">
-  <div id="chart-status" role="status" aria-live="polite">Loading interactive chart…</div>
   <div id="chart"></div>
   <div id="select-overlay" aria-hidden="true"></div>
   <div id="select-highlight"></div>
@@ -128,34 +119,10 @@ var lines = [];
 var chartData = null;
 var rendered = false;
 var knownShapeCount = 0;
-var plotlyReady = false;
-var plotlyLoadFailed = false;
-var plotlyScript = document.getElementById('plotly-script');
 
 var selecting = false;
 var selectStartX = 0;
 var selectedRange = null;
-
-plotlyScript.addEventListener('load', function() {
-  plotlyReady = true;
-  if (chartData) {
-    updateChartStatus('');
-    renderChart();
-    renderLineList();
-    setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 300);
-  }
-});
-plotlyScript.addEventListener('error', function() {
-  plotlyLoadFailed = true;
-  updateChartStatus('The interactive chart could not load. Please refresh to try again.', true);
-});
-
-function updateChartStatus(message, isError) {
-  var status = document.getElementById('chart-status');
-  status.textContent = message || '';
-  status.classList.toggle('error', !!isError);
-  status.style.display = message ? '' : 'none';
-}
 
 function sendToStreamlit(type, data) {
   window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*");
@@ -220,17 +187,6 @@ window.addEventListener("message", function(event) {
       lines = (args.lines || []).slice();
       rendered = true;
     }
-    if (!plotlyReady) {
-      updateChartStatus(
-        plotlyLoadFailed
-          ? 'The interactive chart could not load. Please refresh to try again.'
-          : 'Loading interactive chart…',
-        plotlyLoadFailed
-      );
-      renderLineList();
-      return;
-    }
-    updateChartStatus('');
     renderChart();
     renderLineList();
     setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 300);
@@ -269,7 +225,6 @@ function setMode(mode) {
   announce(modeAnnouncement + ' ' + statusText);
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
 
-  if (!plotlyReady) return;
   Plotly.relayout(chartDiv, {
     dragmode: mode === 'draw' ? 'drawline' : 'pan',
     'newshape.line.color': '#888',
@@ -281,7 +236,7 @@ function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
 function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
 
 function resetView() {
-  if (!chartData || !plotlyReady) return;
+  if (!chartData) return;
   var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
   var priceMax = Math.max.apply(null, chartData.prices);
   var yPad = 0.3;
@@ -292,10 +247,6 @@ function resetView() {
 }
 
 function clearAll() {
-  if (lines.length === 0) {
-    announce('There are no drawn lines to delete.');
-    return;
-  }
   lines = [];
   knownShapeCount = 0;
   clearSelection();
@@ -561,15 +512,6 @@ chartDiv.addEventListener('plotly_relayout', function(eventData) {
 
 function renderChart() {
   if (!chartData) return;
-  if (!plotlyReady) {
-    updateChartStatus(
-      plotlyLoadFailed
-        ? 'The interactive chart could not load. Please refresh to try again.'
-        : 'Loading interactive chart…',
-      plotlyLoadFailed
-    );
-    return;
-  }
   var traces = [];
 
   var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
@@ -804,7 +746,7 @@ function renderChart() {
 
   Plotly.react(chartDiv, traces, layout, config);
   knownShapeCount = 0;
-  document.getElementById('deleteLinesBtn').disabled = lines.length === 0;
+  document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
 }
 
 function renderLineList() {

@@ -17,8 +17,54 @@ from diagnostic import render_diagnostic_tab
 from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
-from ask_soxl_pro import render_ask_soxl_pro
 
+
+def _inject_google_site_verification():
+    """Streamlit apps can't add <head> tags from Python, so patch the
+    Streamlit static index.html (idempotent; runs on every start, including
+    in the deployment).
+
+    NOTE: If this patch consistently fails (e.g. after a Streamlit upgrade or
+    permission issue), fall back to DNS TXT verification for soxlpro.xyz:
+      google-site-verification=yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI
+    DNS TXT verification is unaffected by app restarts or dependency changes.
+    """
+    import logging
+    import pathlib
+
+    meta_tag = '<meta name="google-site-verification" content="yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI" />'
+    try:
+        import streamlit as _stlib
+        index_path = pathlib.Path(_stlib.__file__).parent / "static" / "index.html"
+        html = index_path.read_text()
+        if meta_tag not in html:
+            patched = html.replace("<head>", "<head>" + meta_tag, 1)
+            if "<head>" not in html:
+                logging.warning(
+                    "Google site verification: could not find <head> tag in "
+                    "%s — patch skipped. Use DNS TXT verification as fallback.",
+                    index_path,
+                )
+            else:
+                index_path.write_text(patched)
+                logging.info(
+                    "Google site verification: meta tag injected into %s", index_path
+                )
+        else:
+            logging.info(
+                "Google site verification: meta tag already present in %s", index_path
+            )
+    except Exception as exc:
+        logging.warning(
+            "Google site verification: failed to patch Streamlit index.html — %s. "
+            "Add a DNS TXT record for soxlpro.xyz with value "
+            "'google-site-verification=yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI' "
+            "as a more robust alternative.",
+            exc,
+        )
+
+
+_inject_google_site_verification()
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
@@ -49,9 +95,7 @@ if "show_gush" not in st.session_state:
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 
-chart_component = components.declare_component(
-    "chart_draw", path="components/chart_draw"
-)
+chart_component = components.declare_component("chart_draw", path="components/chart_draw")
 
 
 @st.cache_data(ttl=300)
@@ -351,7 +395,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
             unsafe_allow_html=True,
         )
 
-tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_ask, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "💬 Ask SOXL Pro", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
+tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
@@ -1446,9 +1490,6 @@ with tab_strategy:
                 else:
                     st.markdown(response_text)
 
-with tab_ask:
-    render_ask_soxl_pro(data, fetch_qqq_data)
-
 with tab_diag:
     diag_sub_system, diag_sub_synth, diag_sub_qc, diag_sub_sweep = st.tabs(
         ["System Check", "Synthetic User", "Quality Control", "Backtest Sweep"]
@@ -1465,10 +1506,6 @@ with tab_diag:
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding:24px 0; "
     "border-top:1px solid #d1d5db; font-size:16px;'>"
-    "<a href='/' "
-    "style='display:inline-block; margin-right:10px; color:#2563eb; "
-    "font-weight:700; text-decoration:none; padding:10px 22px; "
-    "border:1px solid #93b4e8; border-radius:8px;'>Public research guide</a>"
     "<a href='mailto:zhi@zhisystems.org' "
     "style='display:inline-block; color:#ffffff; background:#2563eb; "
     "font-weight:700; text-decoration:none; padding:10px 22px; "
