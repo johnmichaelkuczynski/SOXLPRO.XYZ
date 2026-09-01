@@ -23,7 +23,6 @@ const streamlit = spawn(
       ...process.env,
       STREAMLIT_PORT: String(STREAMLIT_PORT),
       STREAMLIT_ADDRESS: "127.0.0.1",
-      STREAMLIT_BASE_URL_PATH: "tool",
     },
   },
 );
@@ -80,13 +79,28 @@ function sendSocialPreview(res, headOnly = false) {
 }
 
 function upstreamPath(url) {
-  if (url === "/oauth2callback" || url.startsWith("/oauth2callback?")) {
-    return `/tool${url}`;
+  if (url === "/tool" || url === "/tool/") {
+    return "/";
   }
-  if (url === "/tool") {
-    return "/tool/";
+  if (url.startsWith("/tool/")) {
+    return url.slice("/tool".length);
   }
   return url;
+}
+
+function webSocketOriginAllowed(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const originUrl = new URL(origin);
+    const requestHost = String(req.headers.host || "").toLowerCase();
+    return (
+      (originUrl.protocol === "https:" || originUrl.protocol === "http:") &&
+      originUrl.host.toLowerCase() === requestHost
+    );
+  } catch {
+    return false;
+  }
 }
 
 function proxyRequest(req, res) {
@@ -129,14 +143,14 @@ const server = http.createServer((req, res) => {
   } else if (requestPath === "/social-preview" || requestPath === "/og-image.svg") {
     sendSocialPreview(res, req.method === "HEAD");
   } else if (requestPath === "/") {
-    sendStatic(res, path.join(PUBLIC_ROOT, "index.html"));
+    proxyRequest(req, res);
   } else if (requestPath === "/methodology") {
     res.writeHead(308, { Location: "/methodology/" });
     res.end();
   } else if (requestPath === "/methodology/") {
     sendStatic(res, path.join(PUBLIC_ROOT, "methodology", "index.html"));
-  } else if (requestPath === "/tool") {
-    res.writeHead(308, { Location: "/tool/" });
+  } else if (requestPath === "/tool" || requestPath === "/tool/") {
+    res.writeHead(302, { Location: "/" });
     res.end();
   } else {
     proxyRequest(req, res);
@@ -147,8 +161,23 @@ server.on("upgrade", (req, socket, head) => {
   socket.on("error", () => {
     socket.destroy();
   });
+  if (!webSocketOriginAllowed(req)) {
+    socket.end(
+      "HTTP/1.1 403 Forbidden\r\n" +
+      "Connection: close\r\n" +
+      "Content-Type: text/plain; charset=utf-8\r\n" +
+      "Content-Length: 26\r\n\r\n" +
+      "WebSocket origin rejected\n",
+    );
+    return;
+  }
   const targetPath = upstreamPath(req.url);
   const headers = { ...req.headers, host: `127.0.0.1:${STREAMLIT_PORT}` };
+  // The browser's public Origin is valid at the SEO proxy, but Streamlit sees
+  // this second hop as 127.0.0.1 and rejects that public Origin. The outer
+  // This public proxy validated the browser Origin above, so do not forward it
+  // to the private loopback WebSocket hop.
+  delete headers.origin;
   const proxy = http.request(
     {
       hostname: "127.0.0.1",
@@ -173,6 +202,17 @@ server.on("upgrade", (req, socket, head) => {
     if (upstreamHead.length) socket.write(upstreamHead);
     if (head.length) upstreamSocket.write(head);
     socket.pipe(upstreamSocket).pipe(socket);
+  });
+  proxy.on("response", (upstreamResponse) => {
+    const statusLine = `HTTP/1.1 ${upstreamResponse.statusCode || 502} ${upstreamResponse.statusMessage || ""}\r\n`;
+    const responseHeaders = Object.entries(upstreamResponse.headers)
+      .flatMap(([name, values]) => {
+        const list = Array.isArray(values) ? values : [values];
+        return list.map((value) => `${name}: ${value}\r\n`);
+      })
+      .join("");
+    socket.write(`${statusLine}${responseHeaders}\r\n`);
+    upstreamResponse.pipe(socket);
   });
   proxy.on("error", () => socket.destroy());
   proxy.end();

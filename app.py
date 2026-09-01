@@ -17,6 +17,7 @@ from diagnostic import render_diagnostic_tab
 from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
+from ask_soxl_pro import render_ask_soxl_pro
 
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
@@ -350,7 +351,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
             unsafe_allow_html=True,
         )
 
-tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
+tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_ask, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "💬 Ask SOXL Pro", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
@@ -1444,6 +1445,9 @@ with tab_strategy:
                     st.warning("The strategy document had a formatting issue. Please try saying 'generate the strategy again' to retry.")
                 else:
                     st.markdown(response_text)
+
+with tab_ask:
+    render_ask_soxl_pro(data, fetch_qqq_data)
 
 with tab_diag:
     diag_sub_system, diag_sub_synth, diag_sub_qc, diag_sub_sweep = st.tabs(

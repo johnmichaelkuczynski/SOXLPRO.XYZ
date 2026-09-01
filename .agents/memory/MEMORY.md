@@ -3,3 +3,4 @@
 - [Plotly heatmap hover safety](plotly-heatmap-hover-safety.md) — mixed customdata can trigger SVG NaN errors on hover; prefer preformatted hovertext.
 - [Streamlit cold-response metadata](streamlit-cold-response-metadata.md) — app.py head patches run only after a frontend session starts, not on the first cold HTML request.
 - [Transformed proxy responses](transformed-proxy-responses.md) — force identity encoding and replace stale validators whenever a reverse proxy rewrites HTML.
+- [Loopback WebSocket origins](loopback-websocket-origins.md) — validate the public Origin at the front proxy, then omit it on the private Streamlit hop.
