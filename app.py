@@ -678,10 +678,10 @@ with tab_chart:
                 else:
                     st.session_state.analyze_result = None
 
-    with st.expander("💬 Ask SOXL Pro about this chart", expanded=False):
+    with st.expander("💬 Talk with SOXL Pro", expanded=False):
         st.caption(
-            "Ask how the selected benchmarks relate to SOXL, whether a move has "
-            "historically acted as a signal, or what the normalized lines mean."
+            "Ask anything about the app—charts, benchmarks, probabilities, options, "
+            "volatility, dislocation, strategies, backtests, or what a result means."
         )
         if st.session_state.market_chat_messages:
             if st.button("Start new chat", key="market_chat_reset"):
@@ -692,13 +692,14 @@ with tab_chart:
                     st.markdown(message["content"])
         else:
             st.markdown(
-                "_Try: “Is VIX giving a useful buy or sell signal for SOXL right now?”_"
+                "_Try: “Explain the Call Risk Score,” “Compare the Probability "
+                "Engine with Backtest,” or “What are these chart lines telling me?”_"
             )
 
         with st.form("market_chart_chat_form", clear_on_submit=True):
             market_prompt = st.text_input(
                 "Your question",
-                placeholder="Ask about SOXL, VIX, BTC, QQQ, or another benchmark shown above…",
+                placeholder="Talk with SOXL Pro…",
                 label_visibility="collapsed",
             )
             ask_market = st.form_submit_button("Ask", type="primary")

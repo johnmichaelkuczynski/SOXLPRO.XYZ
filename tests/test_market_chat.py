@@ -4,8 +4,11 @@ import pandas as pd
 
 from market_chat import (
     CHART_MAPPING_EXPLANATION,
+    PRODUCT_EVIDENCE,
+    _deterministic_product_evidence,
     _evidence_catalog,
-    _interpretation_from_evidence,
+    _needs_mapping,
+    _safe_fallback,
     build_market_intelligence,
 )
 
@@ -59,23 +62,23 @@ class MarketChatGroundingTests(unittest.TestCase):
         self.assertIn("not available", statement)
         self.assertIn("n=0", statement)
 
-    def test_interpretation_is_allowlisted_and_non_prescriptive(self):
+    def test_fallback_is_allowlisted_and_non_prescriptive(self):
         cases = [
-            _interpretation_from_evidence("mapping", []),
-            _interpretation_from_evidence("correlation", []),
-            _interpretation_from_evidence(
+            _safe_fallback("mapping", []),
+            _safe_fallback("correlation", []),
+            _safe_fallback(
                 "signal",
                 ["SOXL was higher 61.00% of the time after 21 trading days."],
             ),
-            _interpretation_from_evidence(
+            _safe_fallback(
                 "signal",
                 ["SOXL was higher 39.00% of the time after 21 trading days."],
             ),
-            _interpretation_from_evidence(
+            _safe_fallback(
                 "signal",
                 ["SOXL was higher 50.00% of the time after 21 trading days."],
             ),
-            _interpretation_from_evidence("general", []),
+            _safe_fallback("general", []),
         ]
         prohibited = [
             "buy soxl",
@@ -94,6 +97,60 @@ class MarketChatGroundingTests(unittest.TestCase):
     def test_chart_mapping_explanation_is_fixed_and_always_available(self):
         self.assertIn("displayed benchmark = actual benchmark", CHART_MAPPING_EXPLANATION)
         self.assertIn("visual only", CHART_MAPPING_EXPLANATION)
+        self.assertTrue(_needs_mapping("What do these lines mean?", False))
+        self.assertTrue(_needs_mapping("Explain this overlay", False))
+
+    def test_product_knowledge_covers_non_chart_features(self):
+        self.assertIn("APP.call_payoff", PRODUCT_EVIDENCE)
+        self.assertIn("APP.risk_score", PRODUCT_EVIDENCE)
+        self.assertIn("APP.dislocation", PRODUCT_EVIDENCE)
+        self.assertIn("APP.backtest_data", PRODUCT_EVIDENCE)
+        self.assertIn("APP.vol_surface", PRODUCT_EVIDENCE)
+        self.assertIn("APP.diagnostic", PRODUCT_EVIDENCE)
+
+    def test_product_evidence_uses_full_conversation_context(self):
+        ids = _deterministic_product_evidence(
+            "Explain the Call Risk Score. How is that different from the Vol Surface?"
+        )
+        self.assertIn("APP.risk_score", ids)
+        self.assertIn("APP.call_payoff", ids)
+        self.assertIn("APP.vol_surface", ids)
+
+    def test_product_fallback_answers_follow_up_specifically(self):
+        answer = _safe_fallback(
+            "general",
+            [],
+            "Explain the Call Risk Score. How is that different from the Vol Surface?",
+        )
+        self.assertIn("Call Risk/Reward", answer)
+        self.assertIn("Vol Surface", answer)
+        self.assertIn("different question", answer)
+
+    def test_all_advertised_tools_have_specific_failure_paths(self):
+        cases = {
+            "Explain the Probability Engine": "Probability Engine",
+            "Explain the Call Risk Score": "Call Risk Score",
+            "Explain the Vol Surface": "Vol Surface",
+            "Explain SOXL-QQQ Dislocation": "Dislocation",
+            "Explain Strategy Builder": "Strategy Builder",
+            "Explain Backtest": "Backtest",
+            "What does Diagnostic check?": "Diagnostic",
+        }
+        for question, expected in cases.items():
+            evidence_ids = _deterministic_product_evidence(question)
+            self.assertTrue(evidence_ids, question)
+            answer = _safe_fallback("general", [], question)
+            self.assertIn(expected, answer, question)
+
+    def test_strategy_builder_backtest_comparison_uses_both_tools(self):
+        question = "How is Strategy Builder different from Backtest?"
+        evidence_ids = _deterministic_product_evidence(question)
+        self.assertIn("APP.strategy_builder", evidence_ids)
+        self.assertIn("APP.backtest_data", evidence_ids)
+        answer = _safe_fallback("general", [], question)
+        self.assertIn("Strategy Builder", answer)
+        self.assertIn("Backtest", answer)
+        self.assertIn("different roles", answer)
 
 
 if __name__ == "__main__":

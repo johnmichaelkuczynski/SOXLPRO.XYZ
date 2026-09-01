@@ -20,6 +20,78 @@ CHART_MAPPING_EXPLANATION = (
     "visual only; it is not a prediction."
 )
 ALLOWED_FOCUSES = {"signal", "correlation", "regime", "mapping", "general"}
+APP_KNOWLEDGE = """
+SOXL Pro is a public research application centered on SOXL, a leveraged
+semiconductor ETF. The assistant may discuss the whole application:
+
+- Chart & Probabilities: SOXL history, normalized overlays for QQQ, TQQQ, TLT,
+  XLU, VIX, SOX, GUSH, and BTC; drawn trend lines; selected-period analysis;
+  SOXL-history and benchmark-history probability studies.
+- Vol Surface: current SOXL option-chain implied volatility across strike and
+  expiration, with liquidity/no-arbitrage quality filters, fitted smiles, local
+  outlier filtering, and model-discrepancy tables. A discrepancy is not a
+  guaranteed trade.
+- Call Risk/Reward: ask-price purchase cost, expiration scenario payoff,
+  break-even, maximum loss, risk-neutral probability estimates, theta,
+  liquidity, and a composite Risk Score. Missing or implausible IV suppresses
+  model probabilities but not deterministic payoff scenarios.
+- SOXL-QQQ Dislocation: rolling beta, residual return, z-scores, historical
+  mean-reversion events, and clearly labeled relative-value verdicts.
+- Strategy Builder: conversational portfolio context plus historical
+  probability tables to create a structured SOXL entry framework.
+- Backtest: allocation engine, period analysis, probability engine, volatility
+  regimes, dislocation, strategy-builder, limited volatility-surface, and
+  custom-strategy backtests with risk-adjusted metrics and downloadable reports.
+- Diagnostic: system checks, synthetic-user checks, quality control, and
+  backtest sweeps.
+
+Explain where a user can find a tool, how it works, what its output means, how
+two tools differ, and what its limitations are. Do not claim access to news,
+fundamentals, account holdings, or data that is not present in the supplied
+knowledge and evidence.
+""".strip()
+
+PRODUCT_EVIDENCE = {
+    "APP.call_payoff": (
+        "Call Risk/Reward uses purchase cost = ask × 100 shares, break-even = "
+        "strike + ask, and expiration P/L = [max(SOXL at expiration − strike, 0) "
+        "− ask] × 100."
+    ),
+    "APP.risk_score": (
+        "The Call Risk Score is 70% modeled probability of loss, 20% theta burn "
+        "as a percentage of premium, and 10% liquidity; higher means more model risk."
+    ),
+    "APP.dislocation": (
+        "SOXL-QQQ Dislocation compares SOXL returns with rolling-beta-implied QQQ "
+        "returns, then standardizes cumulative residuals into z-scores and checks "
+        "historical mean reversion."
+    ),
+    "APP.vol_surface": (
+        "Vol Surface organizes current SOXL option-chain implied volatility across "
+        "strike and expiration, applies liquidity and no-arbitrage quality filters, "
+        "fits volatility smiles, and flags contracts whose market IV differs from "
+        "the fitted surface."
+    ),
+    "APP.probability_engine": (
+        "The Probability Engine measures how often SOXL historically reached a "
+        "chosen move over a chosen horizon; Benchmark History instead conditions "
+        "SOXL's later outcomes on historically similar benchmark behavior."
+    ),
+    "APP.strategy_builder": (
+        "Strategy Builder combines the user's stated goals and risk context with "
+        "historical SOXL probability tables to create a structured entry framework."
+    ),
+    "APP.diagnostic": (
+        "Diagnostic contains system checks, synthetic-user checks, quality-control "
+        "checks, and backtest sweeps so operators can inspect whether data, AI, and "
+        "analytical workflows are functioning."
+    ),
+    "APP.backtest_data": (
+        "Backtests include allocation, period, probability, volatility-regime, "
+        "dislocation, strategy, volatility-surface, and custom-strategy studies; "
+        "their displayed methodology and date limits define what each result covers."
+    ),
+}
 
 
 def _return_pct(series: pd.Series, periods: int) -> float | None:
@@ -267,10 +339,114 @@ def _fallback_evidence_ids(catalog: Mapping[str, str], benchmarks: Mapping) -> l
     return preferred[:5] or list(catalog)[:5]
 
 
-def _interpretation_from_evidence(
-    focus: str, evidence_statements: Sequence[str]
+def _safe_fallback(
+    focus: str, evidence_statements: Sequence[str], conversation_text: str = ""
 ) -> str:
-    """Return only allowlisted, non-prescriptive explanatory language."""
+    """Return an allowlisted fallback if generated prose fails validation."""
+    lowered = conversation_text.lower()
+    asks_calls = any(
+        term in lowered
+        for term in ("call risk", "risk score", "call option", "break-even", "theta")
+    )
+    asks_surface = any(
+        term in lowered
+        for term in ("vol surface", "volatility surface", "implied volatility", "skew")
+    )
+    if asks_calls and asks_surface:
+        return (
+            "Call Risk/Reward analyzes the economics and modeled risk of individual "
+            "call contracts: what the buyer pays, where the contract breaks even, "
+            "how expiration scenarios change the payoff, and how probability, time "
+            "decay, and liquidity affect the Risk Score. Vol Surface answers a "
+            "different question. It compares implied volatility across strikes and "
+            "expirations, fits the overall smile or skew, and highlights contracts "
+            "whose volatility differs from nearby contracts. Use Call Risk/Reward "
+            "to inspect a contract's payoff trade-off; use Vol Surface to inspect "
+            "how the options market is pricing volatility across the chain."
+        )
+    if asks_calls:
+        return (
+            "The Call Risk Score summarizes three pressures on a call contract: the "
+            "model-estimated chance of finishing below break-even, current time-decay "
+            "burn relative to the premium, and trading liquidity. Higher scores mean "
+            "more modeled risk under those assumptions. You can find it in the Call "
+            "Risk/Reward tab beside each contract's payoff scenarios, break-even, "
+            "theta, and liquidity details."
+        )
+    if asks_surface:
+        return (
+            "The Vol Surface shows how the options market prices implied volatility "
+            "across strikes and expiration dates. It fits the broader volatility "
+            "shape, filters low-quality observations, and highlights contracts whose "
+            "market volatility differs from nearby contracts. It is useful for "
+            "examining relative option pricing, not for guaranteeing that a flagged "
+            "contract is mispriced."
+        )
+    if "dislocation" in lowered:
+        return (
+            "SOXL-QQQ Dislocation asks whether SOXL has moved unusually far from "
+            "what its recent relationship with QQQ would imply. It estimates rolling "
+            "beta, measures the residual move, standardizes it, and compares similar "
+            "historical episodes for mean reversion."
+        )
+    asks_strategy = any(
+        term in lowered
+        for term in ("strategy builder", "entry strategy", "strategy assistant")
+    )
+    asks_backtest = any(
+        term in lowered for term in ("backtest", "historical test", "test a strategy")
+    )
+    if asks_strategy and asks_backtest:
+        return (
+            "Strategy Builder and Backtest serve different roles. Strategy Builder "
+            "uses the user's goals, available cash, risk tolerance, and historical "
+            "probabilities to draft a structured entry framework. Backtest then "
+            "examines defined rules against historical data and reports how they "
+            "would have behaved, including risk and drawdown measures. Use Strategy "
+            "Builder to formulate an approach and Backtest to challenge its rules "
+            "before treating the framework as actionable."
+        )
+    if asks_strategy:
+        return (
+            "Strategy Builder is the app's conversational planning tool. It combines "
+            "the user's portfolio context, available cash, risk tolerance, and goals "
+            "with historical SOXL probability tables, then produces a structured "
+            "entry framework. It is a planning aid rather than a guarantee or a "
+            "substitute for testing the rules."
+        )
+    if any(
+        term in lowered
+        for term in (
+            "diagnostic",
+            "system check",
+            "synthetic user",
+            "quality control",
+            "backtest sweep",
+        )
+    ):
+        return (
+            "Diagnostic is the app's inspection area. System Check examines core "
+            "data and AI dependencies, Synthetic User exercises a realistic strategy "
+            "conversation, Quality Control reviews generated output, and Backtest "
+            "Sweep checks analytical behavior across multiple configurations. It "
+            "helps diagnose whether the application is functioning; it does not "
+            "produce a market forecast."
+        )
+    if asks_backtest:
+        return (
+            "The Backtest area lets you test the app's analytical ideas against "
+            "historical data rather than accepting a current signal at face value. "
+            "It includes allocation, probability, volatility-regime, dislocation, "
+            "strategy, volatility-surface, and custom-strategy studies with risk "
+            "metrics and methodology notes."
+        )
+    if "probability" in lowered:
+        return (
+            "The Probability Engine counts comparable historical outcomes for a "
+            "chosen SOXL move and time horizon. Its benchmark mode asks a different "
+            "question: after benchmark behavior similar to the selected setup, what "
+            "did SOXL do next? Results are historical frequencies, not forecasts."
+        )
     if focus == "mapping":
         return (
             "The chart puts differently priced assets onto one visual scale so "
@@ -317,11 +493,107 @@ def _interpretation_from_evidence(
             "available validated evidence does not support a directional claim."
         )
     return (
-        "The chart can reveal a relationship worth researching, but it does not "
-        "create a mechanical trading rule. Same-day correlation and forward "
-        "predictive evidence are different, so the historical outcomes below "
-        "should be treated as context rather than certainty."
+        "I can explain any SOXL Pro tool, compare its outputs, and use the app's "
+        "validated market evidence to examine a question. Ask about the chart, "
+        "probabilities, options, volatility surface, dislocation, strategy tools, "
+        "backtests, or diagnostics."
     )
+
+
+def _deterministic_product_evidence(conversation_text: str) -> list[str]:
+    lowered = conversation_text.lower()
+    selected = []
+    keyword_map = (
+        (
+            ("call risk", "risk score", "call option", "break-even", "theta"),
+            ("APP.risk_score", "APP.call_payoff"),
+        ),
+        (
+            ("vol surface", "volatility surface", "implied volatility", "skew"),
+            ("APP.vol_surface",),
+        ),
+        (("dislocation", "relative to qqq", "mean reversion"), ("APP.dislocation",)),
+        (("backtest", "historical test"), ("APP.backtest_data",)),
+        (("probability engine", "historical probability"), ("APP.probability_engine",)),
+        (("strategy builder", "entry strategy"), ("APP.strategy_builder",)),
+        (
+            (
+                "diagnostic",
+                "system check",
+                "synthetic user",
+                "quality control",
+                "backtest sweep",
+            ),
+            ("APP.diagnostic",),
+        ),
+    )
+    for terms, evidence_ids in keyword_map:
+        if any(term in lowered for term in terms):
+            selected.extend(evidence_ids)
+    return list(dict.fromkeys(selected))
+
+
+def _needs_mapping(question: str, requested: bool) -> bool:
+    terms = (
+        "map",
+        "mapping",
+        "normaliz",
+        "same scale",
+        "function",
+        "overlay",
+        "what do the lines",
+        "what do these lines",
+        "what does the line",
+        "chart line",
+    )
+    lowered = question.lower()
+    explicit_chart_context = any(
+        term in lowered for term in ("chart", "line", "overlay", "benchmark")
+    )
+    return any(term in lowered for term in terms) or (
+        requested and explicit_chart_context
+    )
+
+
+def _validate_generated_answer(
+    client, question: str, answer: str, approved_evidence: Sequence[str]
+) -> bool:
+    """Semantic guard for natural prose; fail closed on any validator problem."""
+    if not answer or re.search(r"[\d$%]", answer):
+        return False
+    validation = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Audit an answer from a financial research app. Return JSON "
+                    "with safe=true only if it contains no deterministic instruction "
+                    "to buy, sell, enter, exit, accumulate, short, or open a position; "
+                    "no guaranteed outcome; no unsupported price, probability, date, "
+                    "quantity, news, or fabricated app capability; and no claim that "
+                    "correlation proves causation. Educational explanations of what "
+                    "an app tool measures are allowed. Keys: safe (boolean), reason "
+                    "(short string)."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "question": question,
+                        "answer": answer,
+                        "approved_app_knowledge": APP_KNOWLEDGE,
+                        "approved_evidence": list(approved_evidence),
+                    }
+                ),
+            },
+        ],
+        response_format={"type": "json_object"},
+        max_completion_tokens=1200,
+    )
+    result = json.loads(validation.choices[0].message.content or "{}")
+    return result.get("safe") is True
 
 
 def answer_market_question(
@@ -335,22 +607,40 @@ def answer_market_question(
         soxl_data, benchmarks, current_soxl_price, quote_context
     )
     catalog = _evidence_catalog(intelligence)
-    system = """Classify a user's SOXL chart question and select supporting evidence.
-Return a JSON object with exactly two keys:
-1. focus: exactly one of signal, correlation, regime, mapping, or general.
-2. evidence_ids: an array of at most six exact IDs selected from AVAILABLE_EVIDENCE.
-Choose only evidence that directly supports the user's latest question. Do not
-create IDs. Return no explanation, advice, price, probability, or other prose."""
+    catalog.update(PRODUCT_EVIDENCE)
+    system = """You are the conversational intelligence inside SOXL Pro. Users
+may talk with you naturally about the entire app, not only the chart. Answer
+their latest question directly, organically, and in plain English. Use prior
+conversation for context.
+
+Return JSON with exactly four keys:
+- answer: natural explanatory prose with no digits, dollar signs, percent signs,
+  dates, sample sizes, or unsupported numerical claims. Do not give deterministic
+  trading instructions or guarantees. Numerical evidence is rendered separately.
+- focus: one of signal, correlation, regime, mapping, or general.
+- evidence_ids: at most six exact IDs from AVAILABLE_EVIDENCE that directly
+  support the answer. Do not invent IDs.
+- show_mapping: boolean, true when explaining normalized chart lines.
+
+You may explain navigation, methods, relationships, limitations, or compare
+features using APPROVED_APP_KNOWLEDGE. Never pretend the app has data or tools
+outside that knowledge. For market conclusions, distinguish correlation from
+forward evidence and treat findings as research context."""
     conversation = [
         {"role": m["role"], "content": str(m["content"])}
         for m in messages[-10:]
         if m.get("role") in {"user", "assistant"}
     ]
+    conversation_text = " ".join(
+        message["content"] for message in conversation if message["role"] == "user"
+    )
     user_payload = {
         "conversation": conversation,
+        "approved_app_knowledge": APP_KNOWLEDGE,
         "available_evidence": catalog,
     }
-    response = get_openai_client().chat.completions.create(
+    client = get_openai_client()
+    response = client.chat.completions.create(
         model=DEFAULT_MODEL,
         messages=[
             {"role": "system", "content": system},
@@ -367,26 +657,67 @@ create IDs. Return no explanation, advice, price, probability, or other prose.""
     if focus not in ALLOWED_FOCUSES:
         focus = "general"
     requested_ids = parsed.get("evidence_ids", [])
-    evidence_ids = [
+    model_evidence_ids = [
         item for item in requested_ids if isinstance(item, str) and item in catalog
     ][:6]
-    if not evidence_ids:
+    evidence_ids = list(
+        dict.fromkeys(
+            _deterministic_product_evidence(conversation_text) + model_evidence_ids
+        )
+    )[:6]
+    latest_question = conversation[-1]["content"] if conversation else ""
+    asks_for_market_evidence = any(
+        term in latest_question.lower()
+        for term in (
+            "signal",
+            "predict",
+            "probability",
+            "chance",
+            "correlation",
+            "return",
+            "buy",
+            "sell",
+            "right now",
+            "today",
+        )
+    )
+    if not evidence_ids and asks_for_market_evidence:
         evidence_ids = _fallback_evidence_ids(catalog, benchmarks)
 
     evidence_statements = [catalog[item] for item in evidence_ids]
-    explanation = _interpretation_from_evidence(focus, evidence_statements)
-    parts = [explanation, CHART_MAPPING_EXPLANATION]
+    generated_answer = str(parsed.get("answer", "")).strip()
+    try:
+        answer_is_safe = _validate_generated_answer(
+            client,
+            latest_question,
+            generated_answer,
+            [catalog[item] for item in evidence_ids],
+        )
+    except Exception:
+        answer_is_safe = False
+    explanation = (
+        generated_answer
+        if answer_is_safe
+        else _safe_fallback(focus, evidence_statements, conversation_text)
+    )
+    parts = [explanation]
+    if _needs_mapping(latest_question, bool(parsed.get("show_mapping", False))):
+        parts.append(CHART_MAPPING_EXPLANATION)
     if evidence_ids:
         parts.append(
             "**Evidence calculated by the app:**\n"
             + "\n".join(f"- {statement}" for statement in evidence_statements)
         )
-    parts.append(
-        f"**Data basis:** {intelligence['analysis_basis']} "
-        f"Daily-close data is current through {intelligence['as_of']}."
-    )
-    parts.append(
-        "_Risk note: SOXL is a leveraged ETF. Historical relationships can break "
-        "down quickly, so this is research context—not personalized investment advice._"
-    )
+    has_market_evidence = any(not item.startswith("APP.") for item in evidence_ids)
+    if has_market_evidence:
+        parts.append(
+            f"**Data basis:** {intelligence['analysis_basis']} "
+            f"Daily-close data is current through {intelligence['as_of']}."
+        )
+    if asks_for_market_evidence:
+        parts.append(
+            "_Risk note: SOXL is a leveraged ETF. Historical relationships can "
+            "break down quickly, so this is research context—not personalized "
+            "investment advice._"
+        )
     return "\n\n".join(parts)
