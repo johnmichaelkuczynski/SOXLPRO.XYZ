@@ -1,12 +1,8 @@
 import os
 import sys
 
-from seo_metadata import inject_structured_data
-
 
 def main():
-    if not inject_structured_data():
-        raise RuntimeError("Could not inject structured data into Streamlit")
     port = os.environ.get("STREAMLIT_PORT", "5000")
     address = os.environ.get("STREAMLIT_ADDRESS")
     base_url_path = os.environ.get("STREAMLIT_BASE_URL_PATH")

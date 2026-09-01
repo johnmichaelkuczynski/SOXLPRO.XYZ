@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">SOXL Analysis</title>
+  <desc id="desc">Quantitative research dashboard for SOXL semiconductor ETF analysis</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="100%" stop-color="#162b4d"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#56d6b5"/>
+      <stop offset="100%" stop-color="#8de8c8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#background)"/>
+  <circle cx="1050" cy="88" r="170" fill="#24466b" opacity=".34"/>
+  <circle cx="1100" cy="580" r="260" fill="#0e755f" opacity=".14"/>
+  <path d="M0 478 C110 430 166 476 260 407 S410 337 504 377 S649 428 746 315 S903 266 1000 206 S1110 210 1200 124" fill="none" stroke="url(#line)" stroke-width="9" stroke-linecap="round"/>
+  <path d="M0 514 C110 466 166 512 260 443 S410 373 504 413 S649 464 746 351 S903 302 1000 242 S1110 246 1200 160" fill="none" stroke="#56d6b5" stroke-width="2" opacity=".25"/>
+  <text x="92" y="174" fill="#8de8c8" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="5">SOXL RESEARCH</text>
+  <text x="88" y="274" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700">SOXL Analysis</text>
+  <text x="92" y="332" fill="#c7d5e8" font-family="Arial, Helvetica, sans-serif" font-size="30">Quantitative tools for leveraged semiconductor ETF research</text>
+  <g fill="#ffffff" font-family="Arial, Helvetica, sans-serif">
+    <text x="94" y="414" font-size="22" font-weight="700">PRICE CHARTS</text>
+    <text x="330" y="414" font-size="22" font-weight="700">PROBABILITY</text>
+    <text x="580" y="414" font-size="22" font-weight="700">VOLATILITY</text>
+    <text x="822" y="414" font-size="22" font-weight="700">BACKTESTS</text>
+  </g>
+</svg>

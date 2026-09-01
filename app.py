@@ -17,58 +17,7 @@ from diagnostic import render_diagnostic_tab
 from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
-from seo_metadata import inject_structured_data
 
-
-def _inject_google_site_verification():
-    """Streamlit apps can't add <head> tags from Python, so patch the
-    Streamlit static index.html (idempotent; runs on every start, including
-    in the deployment).
-
-    NOTE: If this patch consistently fails (e.g. after a Streamlit upgrade or
-    permission issue), fall back to DNS TXT verification for soxlpro.xyz:
-      google-site-verification=yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI
-    DNS TXT verification is unaffected by app restarts or dependency changes.
-    """
-    import logging
-    import pathlib
-
-    meta_tag = '<meta name="google-site-verification" content="yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI" />'
-    try:
-        import streamlit as _stlib
-        index_path = pathlib.Path(_stlib.__file__).parent / "static" / "index.html"
-        html = index_path.read_text()
-        if meta_tag not in html:
-            patched = html.replace("<head>", "<head>" + meta_tag, 1)
-            if "<head>" not in html:
-                logging.warning(
-                    "Google site verification: could not find <head> tag in "
-                    "%s — patch skipped. Use DNS TXT verification as fallback.",
-                    index_path,
-                )
-            else:
-                index_path.write_text(patched)
-                logging.info(
-                    "Google site verification: meta tag injected into %s", index_path
-                )
-        else:
-            logging.info(
-                "Google site verification: meta tag already present in %s", index_path
-            )
-    except Exception as exc:
-        logging.warning(
-            "Google site verification: failed to patch Streamlit index.html — %s. "
-            "Add a DNS TXT record for soxlpro.xyz with value "
-            "'google-site-verification=yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI' "
-            "as a more robust alternative.",
-            exc,
-        )
-
-
-_inject_google_site_verification()
-# The launcher injects this before Streamlit starts. Keep this idempotent call
-# as a fallback for alternate launch commands.
-inject_structured_data()
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 

@@ -64,6 +64,21 @@ function sendStatic(res, filePath) {
   });
 }
 
+function sendSocialPreview(res, headOnly = false) {
+  fs.readFile(path.join(__dirname, "static", "og-image.svg"), (error, data) => {
+    if (error) {
+      sendText(res, "Not found\n", "text/plain", 404);
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "image/svg+xml",
+      "Content-Length": data.length,
+      "Cache-Control": "public, max-age=86400, immutable",
+    });
+    res.end(headOnly ? undefined : data);
+  });
+}
+
 function upstreamPath(url) {
   if (url === "/oauth2callback" || url.startsWith("/oauth2callback?")) {
     return `/tool${url}`;
@@ -111,6 +126,8 @@ const server = http.createServer((req, res) => {
     sendText(res, renderSitemap(), "application/xml");
   } else if (requestPath === "/llms.txt") {
     sendText(res, renderLlms(), "text/plain");
+  } else if (requestPath === "/social-preview" || requestPath === "/og-image.svg") {
+    sendSocialPreview(res, req.method === "HEAD");
   } else if (requestPath === "/") {
     sendStatic(res, path.join(PUBLIC_ROOT, "index.html"));
   } else if (requestPath === "/methodology") {
