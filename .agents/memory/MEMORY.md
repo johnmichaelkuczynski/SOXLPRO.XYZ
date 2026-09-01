@@ -1,3 +1,4 @@
 - [Narrated demo videos](narrated-demo-video.md) — generateVideo caps at 8s; build long narrated demos as a PIL-slide + TTS + ffmpeg slideshow instead.
 - [Deployment environment detection](deployment-environment-detection.md) — use REPLIT_DEPLOYMENT=1 for production checks; REPLIT_CONTAINER may still say repl on published VMs.
 - [Plotly heatmap hover safety](plotly-heatmap-hover-safety.md) — mixed customdata can trigger SVG NaN errors on hover; prefer preformatted hovertext.
+- [Streamlit cold-response metadata](streamlit-cold-response-metadata.md) — app.py head patches run only after a frontend session starts, not on the first cold HTML request.

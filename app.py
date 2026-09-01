@@ -17,6 +17,7 @@ from diagnostic import render_diagnostic_tab
 from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
+from seo_metadata import inject_structured_data
 
 
 def _inject_google_site_verification():
@@ -65,6 +66,9 @@ def _inject_google_site_verification():
 
 
 _inject_google_site_verification()
+# The launcher injects this before Streamlit starts. Keep this idempotent call
+# as a fallback for alternate launch commands.
+inject_structured_data()
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
@@ -95,7 +99,9 @@ if "show_gush" not in st.session_state:
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 
-chart_component = components.declare_component("chart_draw", path="components/chart_draw")
+chart_component = components.declare_component(
+    "chart_draw", path="components/chart_draw"
+)
 
 
 @st.cache_data(ttl=300)

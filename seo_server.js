@@ -11,24 +11,21 @@ const {
 const PUBLIC_PORT = Number(process.env.PORT || 5000);
 const STREAMLIT_PORT = Number(process.env.STREAMLIT_PORT || 8501);
 const PUBLIC_ROOT = path.join(__dirname, "public");
-const STREAMLIT_BIN = process.env.STREAMLIT_BIN || "streamlit";
+const PYTHON_BIN = process.env.PYTHON_BIN || "python3";
 let shuttingDown = false;
 
 const streamlit = spawn(
-  STREAMLIT_BIN,
-  [
-    "run",
-    "app.py",
-    "--server.port",
-    String(STREAMLIT_PORT),
-    "--server.address",
-    "127.0.0.1",
-    "--server.headless",
-    "true",
-    "--server.baseUrlPath",
-    "tool",
-  ],
-  { stdio: "inherit" },
+  PYTHON_BIN,
+  ["main.py"],
+  {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      STREAMLIT_PORT: String(STREAMLIT_PORT),
+      STREAMLIT_ADDRESS: "127.0.0.1",
+      STREAMLIT_BASE_URL_PATH: "tool",
+    },
+  },
 );
 
 streamlit.on("error", (error) => {
@@ -130,6 +127,9 @@ const server = http.createServer((req, res) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
+  socket.on("error", () => {
+    socket.destroy();
+  });
   const targetPath = upstreamPath(req.url);
   const headers = { ...req.headers, host: `127.0.0.1:${STREAMLIT_PORT}` };
   const proxy = http.request(
@@ -142,6 +142,9 @@ server.on("upgrade", (req, socket, head) => {
     },
   );
   proxy.on("upgrade", (upstreamResponse, upstreamSocket, upstreamHead) => {
+    upstreamSocket.on("error", () => {
+      socket.destroy();
+    });
     const statusLine = `HTTP/1.1 ${upstreamResponse.statusCode} ${upstreamResponse.statusMessage || ""}\r\n`;
     const responseHeaders = Object.entries(upstreamResponse.headers)
       .flatMap(([name, values]) => {
