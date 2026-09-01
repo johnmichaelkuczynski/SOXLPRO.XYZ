@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<title>Interactive SOXL historical price chart</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -14,9 +15,13 @@
   }
   .tbtn:hover { background: #f0f0f0; }
   .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
-  .tbtn.danger { color: #E53935; border-color: #E53935; }
-  .tbtn.danger:hover { background: #E53935; color: #fff; }
+   .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
+   .tbtn.danger:hover { background: #B71C1C; color: #fff; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
+   .sr-only {
+     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+   }
   #chart-container { position: relative; width: 100%; }
   #chart { width: 100%; }
   #select-overlay {
@@ -56,22 +61,46 @@
   #line-list { padding: 4px 2px; }
   .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
   .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-  .ldel { cursor: pointer; color: #E53935; border: none; background: none; font-size: 15px; padding: 2px 6px; }
+   .ldel { cursor: pointer; color: #B71C1C; border: none; background: none; font-size: 15px; padding: 2px 6px; }
   .ldel:hover { background: #fee; border-radius: 4px; }
+   #keyboard-selection {
+     display: none; align-items: end; gap: 10px; flex-wrap: wrap;
+     padding: 8px 12px; margin: 6px 2px; background: #f8f9fa;
+     border: 1px solid #d9e2ec; border-radius: 8px;
+   }
+   #keyboard-selection-heading { font-size: 13px; font-weight: 600; color: #334e68; width: 100%; }
+   #keyboard-selection label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #486581; }
+   #keyboard-selection input { padding: 6px 8px; border: 1px solid #9fb3c8; border-radius: 5px; font-size: 13px; color: #102a43; }
+   .range-apply {
+     padding: 7px 14px; border: 1px solid #1565C0; border-radius: 6px;
+     cursor: pointer; font-size: 13px; font-weight: 600; color: #fff; background: #1565C0;
+   }
+   .range-apply:hover { background: #0D47A1; }
 </style>
 </head>
 <body>
 <div id="toolbar">
-  <button class="tbtn" id="drawBtn" onclick="toggleDraw()">&#9998; Draw Line</button>
-  <button class="tbtn" id="selectBtn" onclick="toggleSelect()">&#9634; Select Period</button>
+  <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
+  <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
   <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
+  <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
 <div id="chart-container">
   <div id="chart"></div>
-  <div id="select-overlay"></div>
+  <div id="select-overlay" aria-hidden="true"></div>
   <div id="select-highlight"></div>
+</div>
+<div id="keyboard-selection" aria-labelledby="keyboard-selection-heading">
+  <span id="keyboard-selection-heading">Keyboard period selection</span>
+  <label for="start-date">Start date
+    <input id="start-date" type="date">
+  </label>
+  <label for="end-date">End date
+    <input id="end-date" type="date">
+  </label>
+  <button class="range-apply" onclick="applyKeyboardSelection()">Apply date range</button>
 </div>
 <div id="analyze-bar">
   <span id="analyze-text"></span>
@@ -105,6 +134,24 @@ function setFrameHeight(h) {
   sendToStreamlit("streamlit:setFrameHeight", {height: h});
 }
 
+function announce(message) {
+  document.getElementById('announcement').textContent = message;
+}
+
+function configureKeyboardDateInputs() {
+  if (!chartData || !chartData.dates || chartData.dates.length === 0) return;
+  var startInput = document.getElementById('start-date');
+  var endInput = document.getElementById('end-date');
+  var minDate = msToDateStr(new Date(chartData.dates[0]).getTime());
+  var maxDate = msToDateStr(new Date(chartData.dates[chartData.dates.length - 1]).getTime());
+  startInput.min = minDate;
+  startInput.max = maxDate;
+  endInput.min = minDate;
+  endInput.max = maxDate;
+  if (!startInput.value) startInput.value = minDate;
+  if (!endInput.value) endInput.value = maxDate;
+}
+
 window.addEventListener("message", function(event) {
   if (event.data.type === "streamlit:render") {
     var args = event.data.args;
@@ -135,6 +182,7 @@ window.addEventListener("message", function(event) {
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
+     configureKeyboardDateInputs();
     if (!rendered) {
       lines = (args.lines || []).slice();
       rendered = true;
@@ -153,10 +201,13 @@ function setMode(mode) {
   var selectBtn = document.getElementById('selectBtn');
   drawBtn.classList.toggle('active', mode === 'draw');
   selectBtn.classList.toggle('active', mode === 'select');
+  drawBtn.setAttribute('aria-pressed', mode === 'draw' ? 'true' : 'false');
+  selectBtn.setAttribute('aria-pressed', mode === 'select' ? 'true' : 'false');
   drawBtn.textContent = mode === 'draw' ? '[ ] Stop Drawing' : '\u270E Draw Line';
   selectBtn.textContent = mode === 'select' ? '[ ] Stop Selecting' : '\u25A2 Select Period';
 
   selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
+  document.getElementById('keyboard-selection').style.display = mode === 'select' ? 'flex' : 'none';
 
   if (mode !== 'select' && selectedRange) {
     clearSelection();
@@ -166,6 +217,13 @@ function setMode(mode) {
   if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line \u2022 Double-click a line to delete it';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
   document.getElementById('status').textContent = statusText;
+  var modeAnnouncement = mode === 'draw'
+    ? 'Draw Line mode enabled.'
+    : mode === 'select'
+      ? 'Select Period mode enabled.'
+      : 'Chart navigation mode enabled.';
+  announce(modeAnnouncement + ' ' + statusText);
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
 
   Plotly.relayout(chartDiv, {
     dragmode: mode === 'draw' ? 'drawline' : 'pan',
@@ -195,6 +253,7 @@ function clearAll() {
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
+  announce('All drawn lines cleared.');
 }
 
 function deleteLine(idx) {
@@ -202,6 +261,7 @@ function deleteLine(idx) {
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
+  announce('Line ' + (idx + 1) + ' deleted.');
 }
 
 function clearSelection() {
@@ -209,6 +269,27 @@ function clearSelection() {
   document.getElementById('analyze-bar').style.display = 'none';
   renderChart();
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+
+function applyKeyboardSelection() {
+  var startDate = document.getElementById('start-date').value;
+  var endDate = document.getElementById('end-date').value;
+  if (!startDate || !endDate) {
+    announce('Enter both a start date and an end date to select a period.');
+    return;
+  }
+  if (startDate > endDate) {
+    announce('The start date must be on or before the end date.');
+    return;
+  }
+  var startMs = new Date(startDate + 'T00:00:00').getTime();
+  var endMs = new Date(endDate + 'T23:59:59').getTime();
+  selectedRange = {start: startDate, end: endDate, startMs: startMs, endMs: endMs};
+  document.getElementById('analyze-text').textContent = 'Selected: ' + startDate + ' to ' + endDate;
+  document.getElementById('analyze-bar').style.display = 'flex';
+  renderChart();
+  announce('Period selected from ' + startDate + ' to ' + endDate + '.');
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 100);
 }
 
 function analyzeSelection() {
@@ -307,6 +388,7 @@ selectOverlay.addEventListener('mouseup', function(e) {
 
   document.getElementById('analyze-text').textContent = 'Selected: ' + startDate + ' to ' + endDate;
   document.getElementById('analyze-bar').style.display = 'flex';
+  announce('Period selected from ' + startDate + ' to ' + endDate + '.');
 
   renderChart();
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 100);

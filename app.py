@@ -230,9 +230,9 @@ with col_title:
                  style="display:block; width:38px; height:38px; border-radius:8px;
                         box-shadow:0 1px 4px rgba(0,0,0,0.22);" />
           </a>
-          <div style="font-size:1.35rem; font-weight:700; color:#111827;">
+          <h1 style="font-size:1.35rem; font-weight:700; color:#111827; margin:0;">
             SOXL Analysis
-          </div>
+          </h1>
         </div>
         """,
         unsafe_allow_html=True,
