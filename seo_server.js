@@ -115,7 +115,14 @@ function proxyRequest(req, res) {
       headers,
     },
     (upstream) => {
-      res.writeHead(upstream.statusCode || 502, upstream.headers);
+      const responseHeaders = { ...upstream.headers };
+      if (targetPath === "/") {
+        responseHeaders["cache-control"] = "no-store, max-age=0";
+        responseHeaders["clear-site-data"] = '"cache"';
+        delete responseHeaders.etag;
+        delete responseHeaders["last-modified"];
+      }
+      res.writeHead(upstream.statusCode || 502, responseHeaders);
       upstream.pipe(res);
     },
   );

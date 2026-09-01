@@ -15,8 +15,9 @@
   }
   .tbtn:hover { background: #f0f0f0; }
   .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
-   .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
-   .tbtn.danger:hover { background: #B71C1C; color: #fff; }
+  .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
+  .tbtn.danger:hover:not(:disabled) { background: #B71C1C; color: #fff; }
+  .tbtn:disabled { cursor: not-allowed; opacity: 0.45; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
    .sr-only {
      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -88,9 +89,9 @@
 <body>
 <div id="toolbar">
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
+  <button class="tbtn danger" id="deleteLinesBtn" onclick="clearAll()" disabled>&#128465; Delete lines</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
-  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
   <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
@@ -291,6 +292,10 @@ function resetView() {
 }
 
 function clearAll() {
+  if (lines.length === 0) {
+    announce('There are no drawn lines to delete.');
+    return;
+  }
   lines = [];
   knownShapeCount = 0;
   clearSelection();
@@ -799,7 +804,7 @@ function renderChart() {
 
   Plotly.react(chartDiv, traces, layout, config);
   knownShapeCount = 0;
-  document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
+  document.getElementById('deleteLinesBtn').disabled = lines.length === 0;
 }
 
 function renderLineList() {
