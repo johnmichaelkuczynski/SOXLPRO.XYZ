@@ -6,87 +6,124 @@ id = "TlDpIqhJzIuhWiniexdfB"
 uri = "file://README.md"
 type = "text"
 title = "SOXL Analysis Platform — README"
+logical_id = "a113f9ab-abb0-435c-921a-819bdcb7eb81"
 
 [[outputs]]
 id = "fW7HflGJMMVcSBHADpug_"
 uri = "file://BLUEPRINT.md"
 type = "text"
 title = "SOXL Analysis Platform — BLUEPRINT.md"
+logical_id = "c31b1477-6509-4236-bcc7-4ede28095c26"
 
 [[outputs]]
 id = "6Rf0o7tRIqXBgLMxz27OZ"
 uri = "file://tools/demo_video/out/2026-05-18T23-02-08/soxl-demo.mp4"
 type = "video"
 title = "SOXL App Walkthrough (3:05)"
+logical_id = "2f8ebc00-fc2c-4670-a552-5decc3d2d269"
 
 [[outputs]]
 id = "GqiS7a06TpzhKjerc15Ft"
 uri = "file://tools/demo_video/out/2026-05-18T23-36-29/soxl-demo.mp4"
 type = "video"
 title = "SOXL App Walkthrough (1:50, taller frame, visible cursor)"
+logical_id = "90ed0154-84f0-4385-8d96-a9f193bc91c8"
 
 [[outputs]]
 id = "peM3a0WHQ48-B07kdXY62"
 uri = "file://attached_assets/demo_video/seg_01.mp3"
 type = "audio"
 title = "demo seg 1"
+logical_id = "dd5200dc-fb78-40d8-815e-d96bbf22afa2"
 
 [[outputs]]
 id = "eUsq-EMeY7nJeyIb7quII"
 uri = "file://attached_assets/demo_video/seg_02.mp3"
 type = "audio"
 title = "demo seg 2"
+logical_id = "227fdbf1-c048-4b46-a55e-08d79de958ea"
 
 [[outputs]]
 id = "QCcYkwR2_z4RifTQNMgAT"
 uri = "file://attached_assets/demo_video/seg_03.mp3"
 type = "audio"
 title = "demo seg 3"
+logical_id = "ae3cc368-c72d-483d-8de3-7e9c2cc030a2"
 
 [[outputs]]
 id = "k_F4IwJcGuqrKyptcCQbT"
 uri = "file://attached_assets/demo_video/seg_04.mp3"
 type = "audio"
 title = "demo seg 4"
+logical_id = "97d8e457-b357-48c6-8290-6af04362d791"
 
 [[outputs]]
 id = "F8tmuKlXrZp6YKQorNJhb"
 uri = "file://attached_assets/demo_video/seg_05.mp3"
 type = "audio"
 title = "demo seg 5"
+logical_id = "94d95ec0-7161-468f-8d0a-ed723f9ed2c4"
 
 [[outputs]]
 id = "XmQWZCdNBktatcKVqnrrU"
 uri = "file://attached_assets/demo_video/seg_06.mp3"
 type = "audio"
 title = "demo seg 6"
+logical_id = "3a0476c2-740e-4bee-ac9c-b7f45fff40ed"
 
 [[outputs]]
 id = "Khu0ombh2lTnPLtsTfj8i"
 uri = "file://attached_assets/demo_video/seg_07.mp3"
 type = "audio"
 title = "demo seg 7"
+logical_id = "86906b7b-37ef-4eb8-8bb5-c45d9e3af2d5"
 
 [[outputs]]
 id = "zCmiR_tEt2rKN2TusaFt5"
 uri = "file://attached_assets/demo_video/music_bed.mp3"
 type = "audio"
 title = "demo music bed"
+logical_id = "c14d7ed8-edee-4c21-bcfc-1f5dcaa225ab"
 
 [[outputs]]
 id = "zxI2OCgHXpfZDC4D0Lu5N"
 uri = "file://attached_assets/demo_video/SOXL_Analysis_Platform_Demo.mp4"
 type = "video"
 title = "SOXL Analysis Platform — Demo (real app footage + voiceover)"
+logical_id = "dd01ba26-5998-4607-9675-119a04c10444"
 
 [[outputs]]
 id = "BERszRq03XjF6i3M-VHvK"
 uri = "file://attached_assets/demo_video/VIDEO_DESCRIPTION.md"
 type = "text"
 title = "Demo Video — Written Description"
+logical_id = "7f1f5587-5bd2-4c44-8064-8aa3137b8e42"
 
 [[outputs]]
 id = "n8ItUcTA7s4Dpx6-Wo-Rm"
 uri = "file://attached_assets/demo_video/YOUTUBE_DESCRIPTION.md"
 type = "text"
 title = "YouTube Video Description (ready to paste)"
+logical_id = "2a287097-2cf2-4afc-880f-9d8a6ecf9403"
+
+[[outputs]]
+id = "ov5HtOw5rNMgvZqS7PPNI"
+uri = "file://promo_assets/soxlpro_tiktok_narration.mp3"
+type = "audio"
+title = "SOXL Pro TikTok narration"
+description = "Text-to-speech audio: Think SOXL options are confusing? Meet SOXL Pro. See market trends, probability tools, volatility surfaces, backtests, and a call risk-reward heatmap that turns each contract in…"
+logical_id = "390acbfb-6d05-4d39-bf39-0b5c83804d57"
+
+[[outputs]]
+id = "8bQly4NHFKs05LaFNiW-p"
+uri = "file://promo_assets/SOXLPro_TikTok_Promo.mp4"
+type = "video"
+title = "SOXL Pro TikTok Promo"
+description = "37.7-second vertical 1080x1920 promo using live SOXL Pro screenshots, friendly male narration, ZHI Systems services, and no music."
+logical_id = "f09a3d53-5873-40fe-ad1b-eac1365c6daf"
+content_hash = "sha256:8b23cb019d7d44f0eb87f78ab6a821bc384aea0f43d2c0d25b5bc415f9ceda1e"
+size = 9612715
+mtime_ms = 1788272234169
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/f09a3d53-5873-40fe-ad1b-eac1365c6daf/07a120e0-a2ef-4e36-8dc1-0326165176b7"
+storage_version_token = "1788272273577647"
+content_type = "video/mp4"
