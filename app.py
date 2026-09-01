@@ -92,6 +92,8 @@ if "show_sox" not in st.session_state:
     st.session_state.show_sox = False
 if "show_gush" not in st.session_state:
     st.session_state.show_gush = False
+if "show_btc" not in st.session_state:
+    st.session_state.show_btc = False
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 
@@ -176,6 +178,13 @@ def fetch_sox_data():
 @st.cache_data(ttl=300)
 def fetch_gush_data():
     df = yf.Ticker("GUSH").history(period="max", auto_adjust=True)
+    df.index = df.index.tz_localize(None)
+    return df[["Close"]].copy()
+
+
+@st.cache_data(ttl=300)
+def fetch_btc_data():
+    df = yf.Ticker("BTC-USD").history(period="max", auto_adjust=True)
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -450,6 +459,13 @@ with tab_chart:
         ):
             st.session_state.show_gush = not st.session_state.show_gush
             st.rerun()
+    with overlay_cols[8]:
+        if st.button(
+            "Hide BTC" if st.session_state.show_btc else "BTC",
+            type="primary" if st.session_state.show_btc else "secondary",
+        ):
+            st.session_state.show_btc = not st.session_state.show_btc
+            st.rerun()
 
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
     dates_list = [d.strftime("%Y-%m-%d") for d in data.index]
@@ -549,6 +565,17 @@ with tab_chart:
         except Exception:
             pass
 
+    btc_dates_list = []
+    btc_prices_list = []
+    btc_actual_list = []
+    if st.session_state.show_btc:
+        try:
+            btc_data = fetch_btc_data()
+            if not btc_data.empty:
+                btc_dates_list, btc_prices_list, btc_actual_list = normalize_overlay(data, btc_data)
+        except Exception:
+            pass
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
@@ -573,6 +600,9 @@ with tab_chart:
         gush_dates=gush_dates_list,
         gush_prices=gush_prices_list,
         gush_actual=gush_actual_list,
+        btc_dates=btc_dates_list,
+        btc_prices=btc_prices_list,
+        btc_actual=btc_actual_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=560,
