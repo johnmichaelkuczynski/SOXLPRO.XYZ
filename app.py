@@ -1506,6 +1506,10 @@ with tab_diag:
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding:24px 0; "
     "border-top:1px solid #d1d5db; font-size:16px;'>"
+    "<a href='/' "
+    "style='display:inline-block; margin-right:10px; color:#2563eb; "
+    "font-weight:700; text-decoration:none; padding:10px 22px; "
+    "border:1px solid #93b4e8; border-radius:8px;'>Public research guide</a>"
     "<a href='mailto:zhi@zhisystems.org' "
     "style='display:inline-block; color:#ffffff; background:#2563eb; "
     "font-weight:700; text-decoration:none; padding:10px 22px; "

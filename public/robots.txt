@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /tool/_stcore/
+Disallow: /_stcore/
+
+Sitemap: https://soxlpro.xyz/sitemap.xml

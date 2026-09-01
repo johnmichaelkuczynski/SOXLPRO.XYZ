@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="google-site-verification" content="yJ3j7aTgMTOt62WpeNQL_rAWyRMuzLBSVJ7L2BmsAoI" />
+    <title>SOXL Analysis Platform | Probability, Options Risk &amp; Backtests</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232563eb'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-size='34' font-family='Arial' font-weight='700' fill='white'%3ES%3C/text%3E%3C/svg%3E" />
+    <meta
+      name="description"
+      content="Research SOXL with historical probabilities, options risk/reward, volatility-surface diagnostics, dislocation analysis, and auditable backtests."
+    />
+    <link rel="canonical" href="https://soxlpro.xyz/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://soxlpro.xyz/" />
+    <meta property="og:title" content="SOXL Analysis Platform" />
+    <meta
+      property="og:description"
+      content="An auditable research tool for SOXL probability, options risk, volatility, dislocation, and backtest analysis."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="SOXL Analysis Platform" />
+    <meta
+      name="twitter:description"
+      content="Historical probability and risk analysis for Direxion Daily Semiconductor Bull 3X Shares."
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "SOXL Analysis Platform",
+        "url": "https://soxlpro.xyz/",
+        "applicationCategory": "FinanceApplication",
+        "description": "Quantitative research for SOXL historical probabilities, options risk, volatility, dislocation, and backtesting.",
+        "operatingSystem": "Web"
+      }
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172033;
+        --muted: #526176;
+        --blue: #2563eb;
+        --blue-dark: #1746a2;
+        --panel: #ffffff;
+        --wash: #f0f4fa;
+        --line: #d9e2ef;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--wash);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+      header, main, footer { width: min(1100px, calc(100% - 40px)); margin: 0 auto; }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 25px 0;
+      }
+      .brand { color: var(--ink); font-weight: 800; letter-spacing: .02em; text-decoration: none; }
+      nav { display: flex; gap: 22px; }
+      nav a { color: var(--muted); text-decoration: none; font-weight: 600; }
+      nav a:hover, nav a:focus { color: var(--blue); }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.15fr .85fr;
+        gap: 42px;
+        align-items: center;
+        padding: 66px 0 58px;
+      }
+      .eyebrow { color: var(--blue); font-size: .82rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+      h1 { max-width: 720px; margin: 12px 0 20px; font-size: clamp(2.35rem, 6vw, 4.6rem); line-height: 1.06; letter-spacing: -.045em; }
+      h2 { margin-top: 0; font-size: 1.45rem; line-height: 1.2; }
+      h3 { margin-bottom: 8px; font-size: 1.05rem; }
+      .lede { max-width: 690px; color: var(--muted); font-size: 1.18rem; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+      .button {
+        display: inline-block; border-radius: 8px; padding: 11px 18px;
+        font-weight: 750; text-decoration: none;
+      }
+      .primary { color: #fff; background: var(--blue); box-shadow: 0 4px 12px #2563eb33; }
+      .primary:hover, .primary:focus { background: var(--blue-dark); }
+      .secondary { color: var(--blue-dark); border: 1px solid #a8bee9; background: #fff; }
+      .hero-card, .card {
+        border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+        box-shadow: 0 12px 32px #1c3d6b12;
+      }
+      .hero-card { padding: 28px; }
+      .hero-card strong { display: block; color: var(--blue); font-size: 2.5rem; line-height: 1; }
+      .hero-card p { color: var(--muted); margin-bottom: 0; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 24px 0 62px; }
+      .card { padding: 24px; }
+      .card p { color: var(--muted); margin-bottom: 0; }
+      .section { padding: 22px 0 65px; }
+      .section > p { max-width: 760px; color: var(--muted); }
+      footer { border-top: 1px solid var(--line); color: var(--muted); padding: 26px 0 38px; font-size: .94rem; }
+      footer a { color: var(--blue-dark); }
+      @media (max-width: 760px) {
+        header { align-items: flex-start; gap: 14px; flex-direction: column; }
+        nav { gap: 15px; flex-wrap: wrap; }
+        .hero { grid-template-columns: 1fr; padding-top: 38px; }
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">SOXL ANALYSIS</a>
+      <nav aria-label="Primary navigation">
+        <a href="/methodology/">Methodology</a>
+        <a href="/tool/">Open interactive tool</a>
+      </nav>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <div class="eyebrow">Quantitative research for a leveraged ETF</div>
+          <h1 id="page-title">Understand SOXL before you size the trade.</h1>
+          <p class="lede">
+            SOXL Analysis combines historical probability, options risk/reward,
+            volatility-surface diagnostics, SOXL-QQQ dislocation analysis, and
+            auditable call-sleeve backtests in one research workspace.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="/tool/">Open the interactive SOXL tool</a>
+            <a class="button secondary" href="/methodology/">Read the methodology</a>
+          </div>
+        </div>
+        <aside class="hero-card" aria-label="Research principle">
+          <strong>n = every result</strong>
+          <h2>Probabilities with their denominator</h2>
+          <p>
+            Historical move estimates show the analogue count, date range, and
+            calculation method so you can judge the evidence instead of relying
+            on an unexplained forecast.
+          </p>
+        </aside>
+      </section>
+
+      <section class="section" aria-labelledby="research-title">
+        <h2 id="research-title">Research topics</h2>
+        <p>
+          The public pages explain what each analysis means. The interactive
+          application performs the calculations against current available data.
+        </p>
+        <div class="grid">
+          <article class="card">
+            <h3>Probability and price history</h3>
+            <p>Explore the historical frequency of SOXL moves across selectable magnitudes and time horizons, with sample sizes attached.</p>
+          </article>
+          <article class="card">
+            <h3>Options risk and volatility</h3>
+            <p>Inspect call risk/reward and the available options-chain BUY/SELL discrepancy view instead of treating leveraged ETF exposure as ordinary equity risk.</p>
+          </article>
+          <article class="card">
+            <h3>Backtests and dislocation</h3>
+            <p>Compare SOXL with QQQ, study normalized dislocation, and evaluate the premium-at-risk call-sleeve allocation engine using historical windows.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="limits-title">
+        <h2 id="limits-title">Use it as research, not a promise</h2>
+        <p>
+          SOXL is a daily 3× leveraged semiconductor ETF. Historical outcomes,
+          Black-Scholes marks, and model probabilities are not guarantees and
+          do not account for every future market condition. Review the
+          <a href="/methodology/">methodology and limitations</a> before using
+          an output in a decision.
+        </p>
+      </section>
+    </main>
+    <footer>
+      SOXL Analysis Platform · <a href="/methodology/">Methodology</a> ·
+      <a href="/tool/">Interactive tool</a>
+    </footer>
+  </body>
+</html>

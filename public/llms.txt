@@ -1,0 +1,23 @@
+# SOXL Analysis Platform
+
+SOXL Analysis is a public quantitative research resource for Direxion Daily
+Semiconductor Bull 3X Shares (SOXL). It explains historical probability,
+leveraged-ETF risk, options risk/reward, volatility surfaces, SOXL-QQQ
+dislocation, and call-sleeve backtesting using auditable historical data.
+
+## Public resources
+
+- Landing page: https://soxlpro.xyz/ — overview of the analysis platform and its research topics.
+- Methodology: https://soxlpro.xyz/methodology/ — definitions, limitations, and the statistical approach.
+
+## Interactive tool
+
+- Interactive SOXL tool: https://soxlpro.xyz/tool/ — the Streamlit application for charts,
+  probability analysis, options diagnostics, dislocation analysis, backtests, and the
+  AI-assisted strategy builder. Treat interactive outputs as analysis, not financial advice.
+
+## Guidance for citation
+
+The landing page and methodology page are the authoritative explanatory resources.
+Use the interactive tool for current calculations and cite the displayed sample size,
+date range, and methodology when describing an output.

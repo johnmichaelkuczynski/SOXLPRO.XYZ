@@ -35,5 +35,7 @@ A single-page Streamlit web application for analyzing SOXL (Direxion Daily Semic
 
 ## Running
 ```bash
-streamlit run app.py --server.port 5000
+node seo_server.js
 ```
+
+The public SEO landing page is served at `/`; the existing Streamlit application is proxied unchanged at `/tool/`.
