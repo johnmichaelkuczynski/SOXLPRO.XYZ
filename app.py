@@ -17,6 +17,7 @@ from diagnostic import render_diagnostic_tab
 from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
+from market_chat import answer_market_question
 
 
 def _inject_google_site_verification():
@@ -74,6 +75,8 @@ if "prob_result" not in st.session_state:
     st.session_state.prob_result = None
 if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
+if "market_chat_messages" not in st.session_state:
+    st.session_state.market_chat_messages = []
 if "strategy_html" not in st.session_state:
     st.session_state.strategy_html = None
 if "analyze_result" not in st.session_state:
@@ -674,6 +677,128 @@ with tab_chart:
                     }
                 else:
                     st.session_state.analyze_result = None
+
+    with st.expander("💬 Ask SOXL Pro about this chart", expanded=False):
+        st.caption(
+            "Ask how the selected benchmarks relate to SOXL, whether a move has "
+            "historically acted as a signal, or what the normalized lines mean."
+        )
+        if st.session_state.market_chat_messages:
+            if st.button("Start new chat", key="market_chat_reset"):
+                st.session_state.market_chat_messages = []
+                st.rerun()
+            for message in st.session_state.market_chat_messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+        else:
+            st.markdown(
+                "_Try: “Is VIX giving a useful buy or sell signal for SOXL right now?”_"
+            )
+
+        with st.form("market_chart_chat_form", clear_on_submit=True):
+            market_prompt = st.text_input(
+                "Your question",
+                placeholder="Ask about SOXL, VIX, BTC, QQQ, or another benchmark shown above…",
+                label_visibility="collapsed",
+            )
+            ask_market = st.form_submit_button("Ask", type="primary")
+
+        if ask_market and market_prompt.strip():
+            prompt_text = market_prompt.strip()
+            st.session_state.market_chat_messages.append(
+                {"role": "user", "content": prompt_text}
+            )
+            with st.chat_message("user"):
+                st.markdown(prompt_text)
+
+            selected_benchmarks = {
+                "QQQ": st.session_state.show_qqq,
+                "TQQQ": st.session_state.show_tqqq,
+                "TLT": st.session_state.show_tlt,
+                "XLU": st.session_state.show_xlu,
+                "VIX": st.session_state.show_vix,
+                "SOX": st.session_state.show_sox,
+                "GUSH": st.session_state.show_gush,
+                "BTC": st.session_state.show_btc,
+            }
+            prompt_upper = prompt_text.upper()
+            wanted = {
+                label
+                for label, selected in selected_benchmarks.items()
+                if selected or label in prompt_upper
+            }
+            if not wanted:
+                wanted = {"QQQ", "VIX"}
+            if "ALL" in prompt_upper or "EVERY BENCHMARK" in prompt_upper:
+                wanted = set(selected_benchmarks)
+
+            benchmark_loaders = {
+                "QQQ": fetch_qqq_data,
+                "TQQQ": fetch_tqqq_data,
+                "TLT": fetch_tlt_data,
+                "XLU": fetch_xlu_data,
+                "VIX": fetch_vix_data,
+                "SOX": fetch_sox_data,
+                "GUSH": fetch_gush_data,
+                "BTC": fetch_btc_data,
+            }
+            benchmark_frames = {}
+            unavailable = []
+            for label in sorted(wanted):
+                try:
+                    frame = benchmark_loaders[label]()
+                    if frame.empty:
+                        unavailable.append(label)
+                    else:
+                        benchmark_frames[label] = frame
+                except Exception:
+                    unavailable.append(label)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Testing the historical relationship…"):
+                    try:
+                        answer = answer_market_question(
+                            st.session_state.market_chat_messages,
+                            data,
+                            benchmark_frames,
+                            current_price,
+                            {
+                                "state": (
+                                    quote.get("state")
+                                    if quote
+                                    else "daily close"
+                                ),
+                                "extended": bool(
+                                    quote and quote.get("extended")
+                                ),
+                                "retrieved_at": datetime.now().astimezone().isoformat(
+                                    timespec="seconds"
+                                ),
+                            },
+                        )
+                        if unavailable:
+                            answer += (
+                                "\n\n_Data was temporarily unavailable for: "
+                                + ", ".join(unavailable)
+                                + "._"
+                            )
+                    except Exception as exc:
+                        if "FREE_CLOUD_BUDGET_EXCEEDED" in str(exc):
+                            answer = (
+                                "The AI analysis budget is currently exhausted. "
+                                "Please try again after the Replit credits reset or "
+                                "are increased."
+                            )
+                        else:
+                            answer = (
+                                "I couldn't complete that analysis just now. "
+                                "Please try the question again in a moment."
+                            )
+                    st.markdown(answer)
+            st.session_state.market_chat_messages.append(
+                {"role": "assistant", "content": answer}
+            )
+            st.rerun()
 
     if st.session_state.analyze_result:
         import plotly.graph_objects as go
