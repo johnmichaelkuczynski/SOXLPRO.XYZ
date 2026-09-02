@@ -225,6 +225,19 @@ def _stratified_limit(frame, maximum):
     ).head(maximum).reset_index(drop=True)
 
 
+def _heatmap_contract_label(row):
+    risk = (
+        f"{row['risk_score']:.0f}"
+        if np.isfinite(row["risk_score"])
+        else "Unavailable"
+    )
+    expiration = pd.to_datetime(row["expiration"]).strftime("%b %d, %Y")
+    return (
+        f"STRIKE ${row['strike']:g} · {expiration} · "
+        f"Risk {risk} · {row['money_label']}"
+    )
+
+
 def build_return_heatmap(frame, spot, scenarios=DEFAULT_SCENARIOS):
     scenario_labels = [f"{value:+d}%" if value != 0 else "Flat"
                        for value in scenarios]
@@ -234,15 +247,7 @@ def build_return_heatmap(frame, spot, scenarios=DEFAULT_SCENARIOS):
         for row in z
     ])
 
-    y_labels = frame.apply(
-        lambda row: (
-            f"R{row['risk_score']:.0f} · {row['expiration']} · "
-            f"${row['strike']:g} {row['money_label']}"
-        ) if np.isfinite(row["risk_score"]) else (
-            f"R— · {row['expiration']} · ${row['strike']:g} {row['money_label']}"
-        ),
-        axis=1,
-    ).tolist()
+    y_labels = frame.apply(_heatmap_contract_label, axis=1).tolist()
 
     hovertext = []
     for _, row in frame.iterrows():
@@ -297,7 +302,7 @@ def build_return_heatmap(frame, spot, scenarios=DEFAULT_SCENARIOS):
             "(purchase at current ask)"
         ),
         xaxis_title="SOXL move by each call's expiration",
-        yaxis_title="Risk Score · expiration · strike",
+        yaxis_title="Call contract — STRIKE shown first",
         height=max(540, min(1700, 31 * len(frame) + 190)),
         margin={"l": 20, "r": 20, "t": 70, "b": 35},
         font={"family": "Arial, sans-serif", "color": "#111827"},
@@ -472,6 +477,11 @@ def render_call_risk_reward_tab():
     else:
         st.caption(f"Showing all {len(shown)} matching contracts.")
 
+    st.info(
+        "**Where is the strike price?** Each heatmap row starts with it in bold-style "
+        "text—for example, **STRIKE $185**. The rest of the row shows expiration, "
+        "Risk Score, and whether the call is in or out of the money."
+    )
     st.plotly_chart(
         build_return_heatmap(shown, spot),
         width="stretch",

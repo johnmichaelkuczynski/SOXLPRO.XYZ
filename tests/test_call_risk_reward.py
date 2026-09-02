@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from call_risk_reward import (
+    _heatmap_contract_label,
     DEFAULT_SCENARIOS,
     _stratified_limit,
     build_return_heatmap,
@@ -65,6 +66,18 @@ def _sample_chain():
 
 
 class CallRiskRewardTests(unittest.TestCase):
+    def test_heatmap_row_puts_strike_first_and_labels_it(self):
+        row = pd.Series({
+            "risk_score": 68.4,
+            "expiration": "2028-01-21",
+            "strike": 425.0,
+            "money_label": "OTM",
+        })
+        label = _heatmap_contract_label(row)
+        self.assertTrue(label.startswith("STRIKE $425"))
+        self.assertIn("Jan 21, 2028", label)
+        self.assertIn("Risk 68", label)
+
     def test_prepare_call_metrics_uses_ask_and_standard_contract(self):
         metrics = prepare_call_metrics(_sample_chain(), spot=70.0)
         otm = metrics.loc[metrics["contract_symbol"] == "SOXL_OTM"].iloc[0]
