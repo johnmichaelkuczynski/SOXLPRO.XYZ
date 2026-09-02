@@ -127,3 +127,81 @@ mtime_ms = 1788272234169
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/f09a3d53-5873-40fe-ad1b-eac1365c6daf/07a120e0-a2ef-4e36-8dc1-0326165176b7"
 storage_version_token = "1788272273577647"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "kYFgogAJhkC1MNGk1TEWS"
+uri = "file://promo_assets_v2/voice_05.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 5"
+description = "Text-to-speech audio: Choose the move. Choose the timeframe. Then study what actually happened across comparable periods instead of relying on a hunch."
+logical_id = "fd433dc7-7057-4543-a341-fa588b4d7d24"
+
+[[outputs]]
+id = "m-HvkDbflFPfu7TngvOS3"
+uri = "file://promo_assets_v2/voice_04.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 4"
+description = "Text-to-speech audio: It tells you how probable it is that SOXL will rise by a certain amount within a certain period of time. Those estimates are grounded in more than a decade of historical market …"
+logical_id = "652090fd-8e61-4402-bbde-186201a59a20"
+
+[[outputs]]
+id = "n5KqOPRzXAuiWZZT0UQLg"
+uri = "file://promo_assets_v2/voice_03.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 3"
+description = "Text-to-speech audio: But there is something you can measure: the recurring price action of a mean-reverting security that often moves with broader Nasdaq and Dow market trends. SOXL Pro does exactly…"
+logical_id = "ffabc5cf-a001-4c0e-92d2-0fba64c9095d"
+
+[[outputs]]
+id = "rKDsbXvlC6eRM7fDMwHIv"
+uri = "file://promo_assets_v2/voice_02.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 2"
+description = "Text-to-speech audio: That is very, very hard to do. There is no statistically dependable, automated way to know tomorrow's winners in advance."
+logical_id = "0c4687b5-60e8-4605-bea7-85645a30bd69"
+
+[[outputs]]
+id = "WsoyRw0Zab2lwRs6eNC-H"
+uri = "file://promo_assets_v2/voice_07.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 7"
+description = "Text-to-speech audio: You can choose from existing strategies, design your own rules, and backtest the results against history before putting capital at risk."
+logical_id = "0d394659-b843-444e-adb4-0dbbdffed97f"
+
+[[outputs]]
+id = "z5oarJHQ5GZjYNYX9Zmto"
+uri = "file://promo_assets_v2/voice_01.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 1"
+description = "Text-to-speech audio: Most people try to make money by picking the very best stocks before everyone else does."
+logical_id = "2f25bde1-d289-429d-90a5-1052a86dd38c"
+
+[[outputs]]
+id = "hX0CLkSjMx7c_y55Tuog6"
+uri = "file://promo_assets_v2/voice_06.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 6"
+description = "Text-to-speech audio: For options, SOXL Pro reveals the risk and potential reward for calls across the options chain, with clear strike prices, expirations, and scenario-based outcomes."
+logical_id = "aa78a86c-c5e0-4e72-bd82-a9e063841b5b"
+
+[[outputs]]
+id = "EXL3ivf4MQQT7u-Z4ebDz"
+uri = "file://promo_assets_v2/voice_08.mp3"
+type = "audio"
+title = "SOXL Pro promo segment 8"
+description = "Text-to-speech audio: SOXL Pro is not about guessing the next great stock. It is about quantifying probability, timing, risk, and reward. Explore it now at S O X L Pro dot X Y Z. Scenario analysis is…"
+logical_id = "1851fb4a-731e-4267-a2e3-da9fdff6eb08"
+
+[[outputs]]
+id = "c3BVdBLfoqF0xOadpBmv9"
+uri = "file://promo_assets_v2/SOXLPRO_Probability_Promo.mp4"
+type = "video"
+title = "SOXL Pro — Probability, Not Guesswork"
+description = "79-second 16:9 narrated promo in 720p. Voiceover only; no music."
+logical_id = "aea0cfb2-5fd0-4cab-b93f-f7d171fa4126"
+content_hash = "sha256:8483a846d7631b01c9fe9a00e153df0298a7842f95881b70f13286de9bbdd4e7"
+size = 6876574
+mtime_ms = 1788386455825
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/aea0cfb2-5fd0-4cab-b93f-f7d171fa4126/e6a8d5a8-5a20-4d0c-a5f4-d4b61814d72a"
+storage_version_token = "1788386478947473"
+content_type = "video/mp4"
