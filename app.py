@@ -19,6 +19,7 @@ from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
 from market_chat import answer_market_question
 from landing_signal import render_landing_signal
+from visitor_counter import render_visitor_counter
 
 
 def _inject_google_site_verification():
@@ -261,6 +262,7 @@ with col_refresh:
         st.cache_data.clear()
         st.rerun()
 
+render_visitor_counter()
 render_landing_signal(data)
 
 def get_price_at_offset(df, days_ago):

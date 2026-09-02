@@ -1,4 +1,4 @@
-modules = ["python-3.11", "nodejs-20", "web", "nix"]
+modules = ["python-3.11", "nodejs-20", "web", "nix", "postgresql-16"]
 [deployment]
 deploymentTarget = "vm"
 run = ["streamlit", "run", "app.py", "--server.port", "5000", "--server.headless", "true"]
