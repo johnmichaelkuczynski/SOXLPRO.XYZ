@@ -15,6 +15,7 @@ from landing_signal import (
     price_range_percentile,
     signal_from_percentile,
 )
+from backtest_engine import walk_forward_signal_backtest, summarize_signal_backtest
 
 
 def _history(periods=4200):
@@ -119,6 +120,44 @@ class LandingSignalTests(unittest.TestCase):
         result = composite_signal(readings)
         self.assertTrue(np.isnan(result["percentile"]))
         self.assertEqual(result["signal"], "INSUFFICIENT HISTORY")
+
+    def test_walk_forward_study_reports_models_metrics_and_calibration(self):
+        index = pd.bdate_range("2010-01-04", periods=1300)
+        qqq = pd.Series(np.linspace(50, 100, len(index)), index=index)
+        soxl = pd.Series(
+            np.linspace(20, 80, len(index)) + np.sin(np.arange(len(index)) / 12) * 8,
+            index=index,
+        )
+        results, calibration = walk_forward_signal_backtest(
+            soxl, qqq, min_training=504, recalibrate_every=126
+        )
+        summary = summarize_signal_backtest(results)
+        self.assertFalse(results.empty)
+        self.assertFalse(calibration.empty)
+        self.assertEqual(
+            set(summary["Model"]), {"Composite", "SOXL-only", "QQQ-relative"}
+        )
+        self.assertTrue({
+            "Sample size", "Median return", "Average return", "Positive rate",
+            "Average drawdown", "Worst drawdown", "False-signal rate",
+        }.issubset(summary.columns))
+
+    def test_walk_forward_past_signals_do_not_change_when_future_changes(self):
+        index = pd.bdate_range("2010-01-04", periods=1100)
+        qqq = pd.Series(np.linspace(50, 100, len(index)), index=index)
+        soxl = pd.Series(40 + np.sin(np.arange(len(index)) / 15) * 10, index=index)
+        first, _ = walk_forward_signal_backtest(
+            soxl, qqq, min_training=504, recalibrate_every=126
+        )
+        changed = soxl.copy()
+        changed.iloc[950:] *= 4
+        second, _ = walk_forward_signal_backtest(
+            changed, qqq, min_training=504, recalibrate_every=126
+        )
+        cutoff = index[928]
+        pd.testing.assert_series_equal(
+            first.loc[:cutoff, "Composite"], second.loc[:cutoff, "Composite"]
+        )
 
 
 if __name__ == "__main__":

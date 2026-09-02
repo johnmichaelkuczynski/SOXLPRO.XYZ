@@ -16,6 +16,7 @@ from backtest_engine import (
     safe_filename,
     soxl_allocation_engine, simulate_allocation_engine, ALLOCATION_DEFAULTS,
     simulate_call_sleeve_engine, CALL_SLEEVE_DEFAULTS, compute_risk_metrics,
+    walk_forward_signal_backtest, summarize_signal_backtest,
 )
 from plotly.subplots import make_subplots
 from datetime import datetime as _dt2
@@ -1423,15 +1424,75 @@ def render_backtest_tab():
     )
     sub = st.tabs([
         "🎯 Allocation Engine (DEFAULT)",
+        "Daily Signal Study",
         "Period Analysis", "Probability Engine", "Vol Regime",
         "SOXL-QQQ Dislocation", "Strategy Builder", "Vol Surface (limited)",
         "🛠 Custom Strategy",
     ])
     with sub[0]: _allocation_engine_tab()
-    with sub[1]: _period_analysis_tab()
-    with sub[2]: _probability_engine_tab()
-    with sub[3]: _vol_regime_tab()
-    with sub[4]: _dislocation_tab()
-    with sub[5]: _strategy_builder_tab()
-    with sub[6]: _vol_surface_tab()
-    with sub[7]: _custom_strategy_tab()
+    with sub[1]: _daily_signal_study_tab()
+    with sub[2]: _period_analysis_tab()
+    with sub[3]: _probability_engine_tab()
+    with sub[4]: _vol_regime_tab()
+    with sub[5]: _dislocation_tab()
+    with sub[6]: _strategy_builder_tab()
+    with sub[7]: _vol_surface_tab()
+    with sub[8]: _custom_strategy_tab()
+
+
+def _daily_signal_study_tab():
+    st.markdown("#### Does the daily signal predict forward SOXL returns?")
+    st.caption(
+        "Strict walk-forward study: each reading uses prices available on that date. "
+        "Weights and thresholds are selected from completed training windows, then frozen "
+        "for the next out-of-sample year."
+    )
+    if st.button("Run daily signal study", type="primary", key="daily_signal_study"):
+        with st.spinner("Recomputing historical signals and walk-forward windows…"):
+            soxl = get_equity_history("SOXL")
+            qqq = get_equity_history("QQQ")
+            results, calibration = walk_forward_signal_backtest(
+                soxl["adj_close"], qqq["adj_close"]
+            )
+            summary = summarize_signal_backtest(results)
+        if results.empty:
+            st.warning("Not enough aligned SOXL and QQQ history for an out-of-sample study.")
+            return
+        st.success(
+            f"Evaluated {len(results):,} out-of-sample trading days from "
+            f"{results.index.min():%Y-%m-%d} through {results.index.max():%Y-%m-%d}."
+        )
+        horizon = st.selectbox("Holding period", ["1d", "5d", "10d", "21d", "63d"], index=3)
+        view = summary[summary["Holding period"] == horizon].copy()
+        percent_cols = [
+            "Median return", "Average return", "Positive rate", "Average drawdown",
+            "Worst drawdown", "False-signal rate",
+        ]
+        st.dataframe(
+            view, hide_index=True, use_container_width=True,
+            column_config={col: st.column_config.NumberColumn(format="%.2%%") for col in percent_cols},
+        )
+        st.caption(
+            "False signal = non-positive forward return after Buy/Strong Buy, or "
+            "non-negative return after Sell/Strong Sell. It is not assigned to Do Nothing."
+        )
+        st.markdown("##### Walk-forward calibration audit")
+        st.dataframe(calibration, hide_index=True, use_container_width=True)
+        with st.expander("Methodology and anti-look-ahead controls"):
+            st.markdown(
+                """
+- **Historical reconstruction:** every timeframe percentile is based only on its
+  trailing window through that date; All Time uses an expanding window.
+- **Out-of-sample calibration:** after three training years, settings are chosen
+  using forward 21-session returns whose outcomes were already known at the
+  training cutoff. Settings remain frozen for the next 252 sessions.
+- **Neutral-zone guardrail:** the existing 35%–65% Do Nothing zone is the default.
+  A narrower zone is accepted only when its training separation score improves
+  by at least 10%; otherwise the default or a wider neutral zone wins.
+- **Baselines:** SOXL-only is its trailing one-year range percentile. QQQ-relative
+  is the trailing one-year percentile of the SOXL/QQQ price ratio.
+- **Metrics:** returns are close-to-close, drawdown is the worst close-to-close
+  excursion during the holding period, and overlapping observations are shown
+  because this study measures conditional outcomes rather than a tradable equity curve.
+                """
+            )

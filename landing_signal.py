@@ -95,16 +95,20 @@ def condition_from_percentile(percentile):
     return "Neutral"
 
 
-def signal_from_percentile(percentile):
+DEFAULT_THRESHOLDS = (15.0, 35.0, 65.0, 85.0)
+
+
+def signal_from_percentile(percentile, thresholds=DEFAULT_THRESHOLDS):
     if not np.isfinite(percentile):
         return "INSUFFICIENT HISTORY"
-    if percentile < 15:
+    strong_buy, buy, sell, strong_sell = thresholds
+    if percentile < strong_buy:
         return "STRONG BUY"
-    if percentile < 35:
+    if percentile < buy:
         return "BUY"
-    if percentile < 65:
+    if percentile < sell:
         return "DO NOTHING"
-    if percentile < 85:
+    if percentile < strong_sell:
         return "SELL"
     return "STRONG SELL"
 
@@ -133,20 +137,21 @@ def compute_timeframe_readings(price_data, now=None):
     return pd.DataFrame(rows), closes
 
 
-def composite_signal(readings):
+def composite_signal(readings, weights=None, thresholds=DEFAULT_THRESHOLDS):
     valid = readings[pd.to_numeric(
         readings["Percentile"], errors="coerce"
     ).notna()]
     if valid.empty:
         return {"percentile": np.nan, "signal": "INSUFFICIENT HISTORY"}
+    weight_map = weights or TIMEFRAME_WEIGHTS
     weights = np.array([
-        TIMEFRAME_WEIGHTS[row["Timeframe"]]
+        weight_map[row["Timeframe"]]
         for _, row in valid.iterrows()
     ])
     percentile = float(np.average(valid["Percentile"], weights=weights))
     return {
         "percentile": percentile,
-        "signal": signal_from_percentile(percentile),
+        "signal": signal_from_percentile(percentile, thresholds),
     }
 
 

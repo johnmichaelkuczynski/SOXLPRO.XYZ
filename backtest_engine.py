@@ -2,9 +2,167 @@ import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from landing_signal import (
+    DEFAULT_THRESHOLDS, TIMEFRAMES, TIMEFRAME_WEIGHTS, signal_from_percentile,
+)
 
 
 TRADING_DAYS = 252
+
+SIGNAL_HOLDING_PERIODS = (1, 5, 10, 21, 63)
+SIGNAL_ORDER = ["STRONG BUY", "BUY", "DO NOTHING", "SELL", "STRONG SELL"]
+
+
+def _range_percentile(values):
+    values = pd.Series(values).dropna()
+    if values.empty:
+        return np.nan
+    low, high, current = values.min(), values.max(), values.iloc[-1]
+    return 50.0 if high <= low else float((current - low) / (high - low) * 100)
+
+
+def _historical_signal_features(soxl_prices, qqq_prices):
+    """Compute daily features with trailing data only (no centered/full-sample stats)."""
+    data = pd.concat(
+        [pd.Series(soxl_prices, name="soxl"), pd.Series(qqq_prices, name="qqq")],
+        axis=1, join="inner",
+    ).dropna().sort_index()
+    out = pd.DataFrame(index=data.index)
+    for label, sessions in TIMEFRAMES.items():
+        if sessions is None:
+            low = data.soxl.expanding(2).min()
+            high = data.soxl.expanding(2).max()
+        else:
+            low = data.soxl.rolling(sessions, min_periods=sessions).min()
+            high = data.soxl.rolling(sessions, min_periods=sessions).max()
+        out[label] = ((data.soxl - low) / (high - low).replace(0, np.nan) * 100).clip(0, 100)
+
+    out["soxl_only"] = data.soxl.rolling(252, min_periods=126).apply(_range_percentile)
+    relative = data.soxl / data.qqq
+    out["qqq_relative"] = relative.rolling(252, min_periods=126).apply(_range_percentile)
+    return data, out
+
+
+def _weighted_composite(features, weights):
+    columns = [c for c in TIMEFRAMES if c in features]
+    weight = pd.Series({c: weights[c] for c in columns})
+    numerator = features[columns].mul(weight).sum(axis=1, min_count=1)
+    denominator = features[columns].notna().mul(weight).sum(axis=1)
+    return numerator / denominator.replace(0, np.nan)
+
+
+def _training_score(percentile, future_return, thresholds):
+    labels = percentile.map(lambda value: signal_from_percentile(value, thresholds))
+    frame = pd.DataFrame({"label": labels, "ret": future_return}).dropna()
+    if len(frame) < 150:
+        return -np.inf
+    means = frame.groupby("label").ret.mean()
+    counts = frame.groupby("label").size()
+    if any(counts.get(label, 0) < 10 for label in SIGNAL_ORDER if label != "DO NOTHING"):
+        return -np.inf
+    directional = (
+        means.get("STRONG BUY", 0) + means.get("BUY", 0)
+        - means.get("SELL", 0) - means.get("STRONG SELL", 0)
+    )
+    return float(directional)
+
+
+def walk_forward_signal_backtest(
+    soxl_prices, qqq_prices, holding_periods=SIGNAL_HOLDING_PERIODS,
+    min_training=756, recalibrate_every=252,
+):
+    """Out-of-sample signal study. Parameters are selected on prior windows only."""
+    data, features = _historical_signal_features(soxl_prices, qqq_prices)
+    forward = pd.DataFrame({
+        days: data.soxl.shift(-days) / data.soxl - 1 for days in holding_periods
+    }, index=data.index)
+    evaluation_horizon = 21 if 21 in forward else list(holding_periods)[0]
+    weight_candidates = {
+        "default": TIMEFRAME_WEIGHTS,
+        "equal": {label: 1.0 for label in TIMEFRAMES},
+        "long": {label: 1.0 + i / 5 for i, label in enumerate(TIMEFRAMES)},
+    }
+    threshold_candidates = {
+        "default": DEFAULT_THRESHOLDS,
+        "wider_neutral": (15.0, 30.0, 70.0, 85.0),
+        "narrower_neutral": (15.0, 40.0, 60.0, 85.0),
+    }
+    result = pd.DataFrame(index=data.index)
+    result["SOXL close"] = data.soxl
+    calibration_rows = []
+
+    for start in range(min_training, len(data), recalibrate_every):
+        end = min(start + recalibrate_every, len(data))
+        train_end = start - evaluation_horizon
+        train_slice = slice(0, train_end)
+        scored = []
+        for weight_name, weights in weight_candidates.items():
+            composite = _weighted_composite(features, weights)
+            for threshold_name, thresholds in threshold_candidates.items():
+                score = _training_score(
+                    composite.iloc[train_slice],
+                    forward[evaluation_horizon].iloc[train_slice],
+                    thresholds,
+                )
+                scored.append((score, weight_name, threshold_name, weights, thresholds))
+        default = next(row for row in scored if row[1:3] == ("default", "default"))
+        best = max(scored, key=lambda row: row[0])
+        # A narrower neutral zone must beat the broad default by a material 10%.
+        if best[2] == "narrower_neutral" and (
+            not np.isfinite(default[0]) or best[0] < default[0] * 1.10
+        ):
+            eligible = [row for row in scored if row[2] != "narrower_neutral"]
+            best = max(eligible, key=lambda row: row[0])
+        if not np.isfinite(best[0]):
+            best = default
+        _, weight_name, threshold_name, weights, thresholds = best
+        composite = _weighted_composite(features.iloc[start:end], weights)
+        result.loc[result.index[start:end], "Composite percentile"] = composite
+        result.loc[result.index[start:end], "Composite"] = composite.map(
+            lambda value: signal_from_percentile(value, thresholds)
+        )
+        result.loc[result.index[start:end], "SOXL-only"] = features.soxl_only.iloc[start:end].map(
+            signal_from_percentile
+        )
+        result.loc[result.index[start:end], "QQQ-relative"] = features.qqq_relative.iloc[start:end].map(
+            signal_from_percentile
+        )
+        calibration_rows.append({
+            "Evaluation start": data.index[start], "Evaluation end": data.index[end - 1],
+            "Training observations": train_end, "Weights": weight_name,
+            "Thresholds": threshold_name, "Buy boundary": thresholds[1],
+            "Sell boundary": thresholds[2], "Training score": best[0],
+        })
+
+    for days in holding_periods:
+        result[f"{days}d return"] = forward[days]
+        future_path = pd.concat(
+            [data.soxl.shift(-step) / data.soxl - 1 for step in range(1, days + 1)],
+            axis=1,
+        )
+        result[f"{days}d drawdown"] = future_path.min(axis=1)
+    return result.dropna(subset=["Composite"]), pd.DataFrame(calibration_rows)
+
+
+def summarize_signal_backtest(results, holding_periods=SIGNAL_HOLDING_PERIODS):
+    rows = []
+    for model in ("Composite", "SOXL-only", "QQQ-relative"):
+        for signal in SIGNAL_ORDER:
+            sample = results[results[model] == signal]
+            for days in holding_periods:
+                returns = sample[f"{days}d return"].dropna()
+                drawdown = sample.loc[returns.index, f"{days}d drawdown"]
+                buy_side = signal in ("BUY", "STRONG BUY")
+                sell_side = signal in ("SELL", "STRONG SELL")
+                false = ((returns <= 0) if buy_side else (returns >= 0) if sell_side else pd.Series(False, index=returns.index))
+                rows.append({
+                    "Model": model, "Signal": signal, "Holding period": f"{days}d",
+                    "Sample size": len(returns), "Median return": returns.median(),
+                    "Average return": returns.mean(), "Positive rate": (returns > 0).mean(),
+                    "Average drawdown": drawdown.mean(), "Worst drawdown": drawdown.min(),
+                    "False-signal rate": false.mean() if (buy_side or sell_side) else np.nan,
+                })
+    return pd.DataFrame(rows)
 
 
 def _norm_cdf(x):
