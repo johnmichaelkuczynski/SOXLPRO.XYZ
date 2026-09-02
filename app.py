@@ -18,6 +18,7 @@ from backtest_sweep import render_backtest_sweep_tab
 from synthetic_user import render_synthetic_user_tab
 from quality_control import render_quality_control_tab
 from market_chat import answer_market_question
+from landing_signal import render_landing_signal
 
 
 def _inject_google_site_verification():
@@ -260,6 +261,7 @@ with col_refresh:
         st.cache_data.clear()
         st.rerun()
 
+render_landing_signal(data)
 
 def get_price_at_offset(df, days_ago):
     target_date = df.index[-1] - timedelta(days=days_ago)

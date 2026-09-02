@@ -1,0 +1,125 @@
+import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import numpy as np
+import pandas as pd
+
+from landing_signal import (
+    TIMEFRAMES,
+    TIMEFRAME_WEIGHTS,
+    completed_close_history,
+    composite_signal,
+    compute_timeframe_readings,
+    condition_from_percentile,
+    price_range_percentile,
+    signal_from_percentile,
+)
+
+
+def _history(periods=4200):
+    dates = pd.bdate_range("2010-01-04", periods=periods)
+    closes = np.linspace(10.0, 110.0, periods)
+    return pd.DataFrame({"Close": closes}, index=dates)
+
+
+class LandingSignalTests(unittest.TestCase):
+    def test_formula_uses_current_min_and_max(self):
+        percentile, current, low, high = price_range_percentile([10, 30, 50])
+        self.assertEqual(percentile, 100.0)
+        self.assertEqual((current, low, high), (50.0, 10.0, 50.0))
+        percentile, *_ = price_range_percentile([10, 30, 20])
+        self.assertEqual(percentile, 50.0)
+
+    def test_flat_or_single_price_range_is_unavailable(self):
+        for values in ([10], [10, 10, 10]):
+            percentile, *_ = price_range_percentile(values)
+            self.assertTrue(np.isnan(percentile))
+
+    def test_condition_boundaries(self):
+        self.assertEqual(condition_from_percentile(19.99), "Oversold")
+        self.assertEqual(condition_from_percentile(20), "Neutral")
+        self.assertEqual(condition_from_percentile(80), "Neutral")
+        self.assertEqual(condition_from_percentile(80.01), "Overbought")
+
+    def test_signal_boundaries_match_requested_ranges(self):
+        expected = {
+            0: "STRONG BUY",
+            14.99: "STRONG BUY",
+            15: "BUY",
+            34.99: "BUY",
+            35: "DO NOTHING",
+            64.99: "DO NOTHING",
+            65: "SELL",
+            84.99: "SELL",
+            85: "STRONG SELL",
+            100: "STRONG SELL",
+        }
+        for percentile, signal in expected.items():
+            self.assertEqual(signal_from_percentile(percentile), signal)
+
+    def test_all_requested_timeframes_are_present(self):
+        readings, _ = compute_timeframe_readings(
+            _history(),
+            now=datetime(2030, 1, 1, tzinfo=ZoneInfo("America/New_York")),
+        )
+        self.assertEqual(readings["Timeframe"].tolist(), list(TIMEFRAMES))
+
+    def test_long_timeframes_have_twice_one_week_weight(self):
+        self.assertEqual(
+            TIMEFRAME_WEIGHTS["10 Years"],
+            2 * TIMEFRAME_WEIGHTS["1 Week"],
+        )
+        self.assertEqual(
+            TIMEFRAME_WEIGHTS["All Time"],
+            2 * TIMEFRAME_WEIGHTS["1 Week"],
+        )
+
+    def test_composite_is_weighted_percentile(self):
+        rows = pd.DataFrame([
+            {"Timeframe": "1 Week", "Percentile": 0.0},
+            {"Timeframe": "10 Years", "Percentile": 100.0},
+        ])
+        result = composite_signal(rows)
+        self.assertAlmostEqual(result["percentile"], 200 / 3)
+        self.assertEqual(result["signal"], "SELL")
+
+    def test_incomplete_current_session_is_excluded(self):
+        today = pd.Timestamp("2026-09-02")
+        data = pd.DataFrame(
+            {"Close": [10.0, 20.0]},
+            index=[today - pd.Timedelta(days=1), today],
+        )
+        morning = datetime(
+            2026, 9, 2, 12, 0, tzinfo=ZoneInfo("America/New_York")
+        )
+        at_close = datetime(
+            2026, 9, 2, 16, 0, tzinfo=ZoneInfo("America/New_York")
+        )
+        self.assertEqual(completed_close_history(data, morning).iloc[-1], 10.0)
+        self.assertEqual(completed_close_history(data, at_close).iloc[-1], 20.0)
+
+    def test_missing_long_history_is_explicit(self):
+        readings, _ = compute_timeframe_readings(
+            _history(100),
+            now=datetime(2030, 1, 1, tzinfo=ZoneInfo("America/New_York")),
+        )
+        ten_year = readings.set_index("Timeframe").loc["10 Years"]
+        self.assertTrue(np.isnan(ten_year["Percentile"]))
+        self.assertEqual(ten_year["Condition"], "Insufficient history")
+
+    def test_one_close_cannot_create_a_composite_signal(self):
+        data = pd.DataFrame(
+            {"Close": [10.0]}, index=[pd.Timestamp("2020-01-02")]
+        )
+        readings, _ = compute_timeframe_readings(
+            data,
+            now=datetime(2030, 1, 1, tzinfo=ZoneInfo("America/New_York")),
+        )
+        result = composite_signal(readings)
+        self.assertTrue(np.isnan(result["percentile"]))
+        self.assertEqual(result["signal"], "INSUFFICIENT HISTORY")
+
+
+if __name__ == "__main__":
+    unittest.main()
