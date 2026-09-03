@@ -18,6 +18,19 @@
    .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
    .tbtn.danger:hover { background: #B71C1C; color: #fff; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
+  .scale-group {
+    display: inline-flex; align-items: center; gap: 0; border: 1px solid #bbb;
+    border-radius: 6px; overflow: hidden; background: #fff;
+  }
+  .scale-group .tbtn { border: 0; border-radius: 0; padding: 7px 12px; }
+  .scale-group .tbtn + .tbtn { border-left: 1px solid #ccc; }
+  .height-control {
+    display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px;
+    border: 1px solid #ccc; border-radius: 6px; background: #fff;
+    font-size: 13px; color: #334155;
+  }
+  .height-control input { width: 150px; cursor: ns-resize; }
+  #heightValue { min-width: 48px; font-weight: 700; color: #0f172a; }
    .sr-only {
      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
@@ -83,6 +96,15 @@
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
+  <span class="scale-group" role="group" aria-label="Price scale">
+    <button class="tbtn active" id="logScaleBtn" aria-pressed="true" onclick="setScale('log')">Log Scale</button>
+    <button class="tbtn" id="linearScaleBtn" aria-pressed="false" onclick="setScale('linear')">Linear Scale</button>
+  </span>
+  <label class="height-control" for="heightSlider">
+    Chart height
+    <input id="heightSlider" type="range" min="520" max="1400" step="40" value="900" oninput="setChartHeight(this.value)">
+    <span id="heightValue">900 px</span>
+  </label>
   <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
   <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
@@ -119,6 +141,8 @@ var lines = [];
 var chartData = null;
 var rendered = false;
 var knownShapeCount = 0;
+var scaleMode = 'log';
+var currentChartHeight = 900;
 
 var selecting = false;
 var selectStartX = 0;
@@ -189,6 +213,11 @@ window.addEventListener("message", function(event) {
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
+    if (!rendered) {
+      currentChartHeight = chartData.chart_height;
+      document.getElementById('heightSlider').value = currentChartHeight;
+      document.getElementById('heightValue').textContent = currentChartHeight + ' px';
+    }
      configureKeyboardDateInputs();
     if (!rendered) {
       lines = (args.lines || []).slice();
@@ -242,14 +271,67 @@ function setMode(mode) {
 function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
 function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
 
+function allVisiblePrices() {
+  if (!chartData) return [];
+  var series = [
+    chartData.prices, chartData.qqq_prices, chartData.tqqq_prices,
+    chartData.tlt_prices, chartData.xlu_prices, chartData.vix_prices,
+    chartData.sox_prices, chartData.gush_prices, chartData.btc_prices,
+    chartData.custom_prices
+  ];
+  var values = [];
+  series.forEach(function(items) {
+    (items || []).forEach(function(value) {
+      if (Number.isFinite(value) && value > 0) values.push(value);
+    });
+  });
+  return values;
+}
+
+function yAxisRange() {
+  var values = allVisiblePrices();
+  if (values.length === 0) return null;
+  var priceMin = Math.min.apply(null, values);
+  var priceMax = Math.max.apply(null, values);
+  if (scaleMode === 'log') {
+    var logPad = 0.12;
+    return [Math.log10(priceMin) - logPad, Math.log10(priceMax) + logPad];
+  }
+  var span = Math.max(priceMax - priceMin, priceMax * 0.02, 0.01);
+  var pad = span * 0.06;
+  return [Math.max(0, priceMin - pad), priceMax + pad];
+}
+
+function setScale(mode) {
+  if (mode !== 'log' && mode !== 'linear') return;
+  scaleMode = mode;
+  var logBtn = document.getElementById('logScaleBtn');
+  var linearBtn = document.getElementById('linearScaleBtn');
+  logBtn.classList.toggle('active', mode === 'log');
+  linearBtn.classList.toggle('active', mode === 'linear');
+  logBtn.setAttribute('aria-pressed', mode === 'log' ? 'true' : 'false');
+  linearBtn.setAttribute('aria-pressed', mode === 'linear' ? 'true' : 'false');
+  Plotly.relayout(chartDiv, {
+    'yaxis.type': mode,
+    'yaxis.range': yAxisRange()
+  });
+  announce((mode === 'log' ? 'Logarithmic' : 'Linear') + ' price scale selected.');
+}
+
+function setChartHeight(value) {
+  currentChartHeight = Math.max(520, Math.min(1400, Number(value) || 900));
+  document.getElementById('heightValue').textContent = currentChartHeight + ' px';
+  Plotly.relayout(chartDiv, {height: currentChartHeight}).then(function() {
+    setFrameHeight(document.body.scrollHeight + 20);
+  });
+}
+
 function resetView() {
   if (!chartData) return;
-  var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
-  var priceMax = Math.max.apply(null, chartData.prices);
-  var yPad = 0.3;
   Plotly.relayout(chartDiv, {
     'xaxis.range': [chartData.dates[0], chartData.future_end],
-    'yaxis.range': [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad]
+    'yaxis.type': scaleMode,
+    'yaxis.range': yAxisRange()
   });
 }
 
@@ -439,7 +521,7 @@ chartDiv.addEventListener('dblclick', function(e) {
     x0 = xRange[0]; x1 = xRange[1];
   }
   var clickXms = x0 + xFrac * (x1 - x0);
-  var clickLogY = yRange[0] + yFrac * (yRange[1] - yRange[0]);
+  var clickAxisY = yRange[0] + yFrac * (yRange[1] - yRange[0]);
 
   var xSpan = x1 - x0;
   var ySpan = yRange[1] - yRange[0];
@@ -451,13 +533,13 @@ chartDiv.addEventListener('dblclick', function(e) {
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
     if (!ln.y1 || !ln.y2 || ln.y1 <= 0 || ln.y2 <= 0) continue;
-    var lx1 = ln.x1_ms, ly1 = Math.log10(ln.y1);
-    var lx2 = ln.x2_ms, ly2 = Math.log10(ln.y2);
+    var lx1 = ln.x1_ms, ly1 = scaleMode === 'log' ? Math.log10(ln.y1) : ln.y1;
+    var lx2 = ln.x2_ms, ly2 = scaleMode === 'log' ? Math.log10(ln.y2) : ln.y2;
     var dt = lx2 - lx1;
     if (dt === 0) continue;
     var slope = (ly2 - ly1) / dt;
-    var projLogY = ly1 + slope * (clickXms - lx1);
-    var normDy = Math.abs(projLogY - clickLogY) / ySpan;
+    var projectedY = ly1 + slope * (clickXms - lx1);
+    var normDy = Math.abs(projectedY - clickAxisY) / ySpan;
     if (normDy < threshold && normDy < bestDist) {
       bestDist = normDy;
       bestIdx = i;
@@ -647,7 +729,9 @@ function renderChart() {
     if (!y1 || !y2 || y1 <= 0 || y2 <= 0) continue;
     var dt = x2 - x1;
     if (dt === 0) continue;
-    var logSlope = (Math.log10(y2) - Math.log10(y1)) / dt;
+    var transformedY1 = scaleMode === 'log' ? Math.log10(y1) : y1;
+    var transformedY2 = scaleMode === 'log' ? Math.log10(y2) : y2;
+    var transformedSlope = (transformedY2 - transformedY1) / dt;
     var color = COLORS[i % COLORS.length];
 
     traces.push({
@@ -660,11 +744,13 @@ function renderChart() {
 
     var fwdEnd = Math.max(x1, x2);
     var fwdY0 = fwdEnd === x2 ? y2 : y1;
-    var fwdLogY = Math.log10(fwdY0) + logSlope * (futureMs - fwdEnd);
-    if (fwdLogY > -3 && fwdLogY < 6) {
+    var fwdStart = scaleMode === 'log' ? Math.log10(fwdY0) : fwdY0;
+    var fwdTransformedY = fwdStart + transformedSlope * (futureMs - fwdEnd);
+    var fwdY = scaleMode === 'log' ? Math.pow(10, fwdTransformedY) : fwdTransformedY;
+    if (fwdY > 0 && Number.isFinite(fwdY) && (scaleMode !== 'log' || (fwdTransformedY > -3 && fwdTransformedY < 6))) {
       traces.push({
         x: [new Date(fwdEnd), new Date(futureMs)],
-        y: [fwdY0, Math.pow(10, fwdLogY)],
+        y: [fwdY0, fwdY],
         mode: 'lines', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         hoverinfo: 'skip'
@@ -674,21 +760,19 @@ function renderChart() {
     var backEnd = Math.min(x1, x2);
     var backY0 = backEnd === x1 ? y1 : y2;
     var backMs = backEnd - 63072000000;
-    var backLogY = Math.log10(backY0) + logSlope * (backMs - backEnd);
-    if (backLogY > -3 && backLogY < 6) {
+    var backStart = scaleMode === 'log' ? Math.log10(backY0) : backY0;
+    var backTransformedY = backStart + transformedSlope * (backMs - backEnd);
+    var backY = scaleMode === 'log' ? Math.pow(10, backTransformedY) : backTransformedY;
+    if (backY > 0 && Number.isFinite(backY) && (scaleMode !== 'log' || (backTransformedY > -3 && backTransformedY < 6))) {
       traces.push({
         x: [new Date(backMs), new Date(backEnd)],
-        y: [Math.pow(10, backLogY), backY0],
+        y: [backY, backY0],
         mode: 'lines', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         hoverinfo: 'skip'
       });
     }
   }
-
-  var priceMin = Math.min.apply(null, chartData.prices.filter(function(p){return p>0;}));
-  var priceMax = Math.max.apply(null, chartData.prices);
-  var yPad = 0.3;
 
   var shapes = [];
   if (selectedRange) {
@@ -702,52 +786,11 @@ function renderChart() {
     });
   }
 
-  if (hasQQQ) {
-    var qqqValidPrices = chartData.qqq_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, qqqValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, qqqValidPrices));
-  }
-  if (hasTQQQ) {
-    var tqqqValidPrices = chartData.tqqq_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, tqqqValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, tqqqValidPrices));
-  }
-  if (hasTLT) {
-    var tltValidPrices = chartData.tlt_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, tltValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, tltValidPrices));
-  }
-  if (hasXLU) {
-    var xluValidPrices = chartData.xlu_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, xluValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, xluValidPrices));
-  }
-  if (hasVIX) {
-    var vixValidPrices = chartData.vix_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, vixValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, vixValidPrices));
-  }
-  if (hasGUSH) {
-    var gushValidPrices = chartData.gush_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, gushValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, gushValidPrices));
-  }
-  if (hasBTC) {
-    var btcValidPrices = chartData.btc_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, btcValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, btcValidPrices));
-  }
-  if (hasCustom) {
-    var customValidPrices = chartData.custom_prices.filter(function(p){return p>0;});
-    priceMin = Math.min(priceMin, Math.min.apply(null, customValidPrices));
-    priceMax = Math.max(priceMax, Math.max.apply(null, customValidPrices));
-  }
-
   var layout = {
     yaxis: {
-      type: 'log', tickprefix: '$', title: '',
+      type: scaleMode, tickprefix: '$', title: '',
       gridcolor: '#eee',
-      range: [Math.log10(priceMin) - yPad, Math.log10(priceMax) + yPad],
+      range: yAxisRange(),
       fixedrange: false
     },
     xaxis: {
@@ -763,7 +806,7 @@ function renderChart() {
       fixedrange: false
     },
     template: 'plotly_white',
-    height: chartData.chart_height,
+    height: currentChartHeight,
     margin: {l: 65, r: 20, t: 10, b: 40},
     showlegend: hasOverlay,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },

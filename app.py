@@ -423,7 +423,7 @@ tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_dia
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
     with overlay_cols[0]:
-        st.markdown("**SOXL Price** · Log Scale")
+        st.markdown("**SOXL Historical Price**")
     with overlay_cols[1]:
         if st.button(
             "Hide QQQ" if st.session_state.show_qqq else "QQQ",
@@ -677,7 +677,7 @@ with tab_chart:
         custom_actual=custom_actual_list,
         lines=st.session_state.lines,
         future_end=future_end,
-        chart_height=560,
+        chart_height=900,
         key="soxl_chart",
         default=None,
     )
