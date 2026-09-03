@@ -205,3 +205,65 @@ mtime_ms = 1788386455825
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/aea0cfb2-5fd0-4cab-b93f-f7d171fa4126/e6a8d5a8-5a20-4d0c-a5f4-d4b61814d72a"
 storage_version_token = "1788386478947473"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "SDzfIlKAjDIIQFeqg1ODo"
+uri = "file://promo_assets_v3/voice_03.mp3"
+type = "audio"
+title = "SOXL Pro vertical promo segment 3"
+description = "Text-to-speech audio: Then set the exact question. Choose the move you want, choose the timeframe, and measure how often history reached that outcome."
+logical_id = "30c81f7e-2f14-4523-94e9-4ebb4f9f8d02"
+
+[[outputs]]
+id = "nhXKuKcKQpZhBZvXS5VS8"
+uri = "file://promo_assets_v3/voice_04.mp3"
+type = "audio"
+title = "SOXL Pro vertical promo segment 4"
+description = "Text-to-speech audio: Compare SOXL with built-in benchmarks, or enter another security supported by EODHD. See relative performance without losing the actual price."
+logical_id = "89f7f5ab-2a43-4e9a-807e-fa918120192e"
+
+[[outputs]]
+id = "6tjKh9ziOfQMGSGaC2Ds5"
+uri = "file://promo_assets_v3/voice_06.mp3"
+type = "audio"
+title = "SOXL Pro vertical promo segment 6"
+description = "Text-to-speech audio: Don't just chase the move. Measure its probability, timing, and risk. Explore SOXL Pro now at S O X L Pro dot X Y Z."
+logical_id = "31683e43-9c72-408d-9044-9d2c928c29b5"
+
+[[outputs]]
+id = "hIg5wZcLceprUpUrLpStW"
+uri = "file://promo_assets_v3/voice_01.mp3"
+type = "audio"
+title = "SOXL Pro vertical promo segment 1"
+description = "Text-to-speech audio: SOXL can move fast. Before you trade it, know the odds. SOXL Pro turns historical behavior into a clear probability, timeframe, and risk picture."
+logical_id = "eaf7a8cc-e021-4076-adde-79e46edf5597"
+
+[[outputs]]
+id = "Pd4Bkwi39o_tpWqJ4aLDL"
+uri = "file://promo_assets_v3/voice_05.mp3"
+type = "audio"
+title = "SOXL Pro vertical promo segment 5"
+description = "Text-to-speech audio: Trading calls? Compare strikes, expirations, premium at risk, and scenario-based reward before you commit capital."
+logical_id = "1e4daf7d-9b3e-4fd9-88ff-1148022ff225"
+
+[[outputs]]
+id = "BupHaaK_idAj85iP7gI_8"
+uri = "file://promo_assets_v3/voice_02.mp3"
+type = "audio"
+title = "SOXL Pro vertical promo segment 2"
+description = "Text-to-speech audio: Start with context. See where SOXL sits within its historical ranges, with longer periods carrying more weight."
+logical_id = "9b48109c-9608-496a-8c6e-55dcae8d44bd"
+
+[[outputs]]
+id = "jHTfCL6Z0OFiww-iEyMlf"
+uri = "file://promo_assets_v3/SOXLPRO_TikTok_Promo_v3.mp4"
+type = "video"
+title = "SOXL Pro — Rebuilt TikTok Promo"
+description = "A fully rebuilt 58-second vertical promo with verified 1080×1920 video, clear narration, real app screens, and no music."
+logical_id = "93e04dbc-ef5c-4f39-a0cb-144197161744"
+content_hash = "sha256:b4fead686744471eec8722b67504fdfbd55ce2daee25fd2b47afb91977a21835"
+size = 6066908
+mtime_ms = 1788453460948
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/93e04dbc-ef5c-4f39-a0cb-144197161744/539bbc63-ccd2-4ce7-821b-39e43f9380f3"
+storage_version_token = "1788453485395841"
+content_type = "video/mp4"
