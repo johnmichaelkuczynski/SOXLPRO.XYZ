@@ -14,6 +14,8 @@ SIGNAL_ORDER = ["STRONG BUY", "BUY", "DO NOTHING", "SELL", "STRONG SELL"]
 SIGNAL_MODELS = ("Composite", "SOXL-only", "QQQ-relative")
 SIGNAL_BOOTSTRAP_SAMPLES = 1000
 SIGNAL_CONFIDENCE_LEVEL = 0.95
+SIGNAL_MIN_REGIME_SAMPLES = 30
+SIGNAL_REGIMES = ("All regimes", "Bull", "Bear", "High volatility")
 
 
 def _range_percentile(values):
@@ -92,6 +94,7 @@ def walk_forward_signal_backtest(
     }
     result = pd.DataFrame(index=data.index)
     result["SOXL close"] = data.soxl
+    result["Market regime"] = classify_market_regimes(data.qqq)
     calibration_rows = []
 
     for start in range(min_training, len(data), recalibrate_every):
@@ -145,6 +148,26 @@ def walk_forward_signal_backtest(
         )
         result[f"{days}d drawdown"] = future_path.min(axis=1)
     return result.dropna(subset=["Composite"]), pd.DataFrame(calibration_rows)
+
+
+def classify_market_regimes(qqq_prices, trend_window=200, vol_window=21,
+                            vol_lookback=252, high_vol_quantile=0.75):
+    """Classify each close using only QQQ observations available through that date."""
+    qqq = pd.Series(qqq_prices, dtype=float).sort_index()
+    trend = qqq.rolling(trend_window, min_periods=trend_window).mean()
+    realized_vol = (
+        qqq.pct_change().rolling(vol_window, min_periods=vol_window).std(ddof=1)
+        * math.sqrt(TRADING_DAYS)
+    )
+    high_vol_cutoff = realized_vol.rolling(
+        vol_lookback, min_periods=max(60, vol_lookback // 2)
+    ).quantile(high_vol_quantile)
+    regime = pd.Series(pd.NA, index=qqq.index, dtype="object")
+    ready = trend.notna() & high_vol_cutoff.notna()
+    regime.loc[ready & (qqq >= trend)] = "Bull"
+    regime.loc[ready & (qqq < trend)] = "Bear"
+    regime.loc[ready & (realized_vol >= high_vol_cutoff)] = "High volatility"
+    return regime
 
 
 def _moving_block_bootstrap_indices(n, block_length, n_bootstrap, rng):
@@ -201,9 +224,19 @@ def _bootstrap_metric_stats(metric, full_values, mask, bootstrap_indices):
     sampled_values = full_values[bootstrap_indices]
     sampled_mask = mask[bootstrap_indices] & np.isfinite(sampled_values)
     if metric == "Median return":
-        return np.nanmedian(np.where(sampled_mask, sampled_values, np.nan), axis=1)
+        output = np.full(len(bootstrap_indices), np.nan)
+        valid = sampled_mask.any(axis=1)
+        output[valid] = np.nanmedian(
+            np.where(sampled_mask[valid], sampled_values[valid], np.nan), axis=1
+        )
+        return output
     if metric == "Worst drawdown":
-        return np.nanmin(np.where(sampled_mask, sampled_values, np.nan), axis=1)
+        output = np.full(len(bootstrap_indices), np.nan)
+        valid = sampled_mask.any(axis=1)
+        output[valid] = np.nanmin(
+            np.where(sampled_mask[valid], sampled_values[valid], np.nan), axis=1
+        )
+        return output
     counts = sampled_mask.sum(axis=1)
     sums = np.where(sampled_mask, sampled_values, 0.0).sum(axis=1)
     return np.divide(
@@ -227,6 +260,8 @@ def summarize_signal_backtest(
     n_bootstrap=SIGNAL_BOOTSTRAP_SAMPLES,
     confidence_level=SIGNAL_CONFIDENCE_LEVEL,
     random_seed=1729,
+    include_regimes=False,
+    min_regime_samples=SIGNAL_MIN_REGIME_SAMPLES,
 ):
     """Summarize outcomes with dependence-aware moving-block bootstrap inference."""
     rows = []
@@ -248,80 +283,103 @@ def summarize_signal_backtest(
             model: horizon_data[model].to_numpy()
             for model in SIGNAL_MODELS
         }
+        regime_masks = [("All regimes", np.ones(n, dtype=bool))]
+        if include_regimes and "Market regime" in results:
+            regimes = results.loc[horizon_data.index, "Market regime"].to_numpy()
+            regime_masks.extend(
+                (regime, regimes == regime) for regime in SIGNAL_REGIMES[1:]
+            )
 
-        bootstrap_means = {}
-        for model in SIGNAL_MODELS:
-            for signal in SIGNAL_ORDER:
-                mask = labels[model] == signal
-                sampled_mask = mask[bootstrap_indices]
-                sampled_returns = returns_all[bootstrap_indices]
-                counts = sampled_mask.sum(axis=1)
-                sums = np.where(sampled_mask, sampled_returns, 0.0).sum(axis=1)
-                bootstrap_means[(model, signal)] = np.divide(
-                    sums, counts, out=np.full(len(counts), np.nan), where=counts > 0
-                )
+        for regime, regime_mask in regime_masks:
+            bootstrap_means = {}
+            for model in SIGNAL_MODELS:
+                for signal in SIGNAL_ORDER:
+                    mask = (labels[model] == signal) & regime_mask
+                    sampled_mask = mask[bootstrap_indices]
+                    sampled_returns = returns_all[bootstrap_indices]
+                    counts = sampled_mask.sum(axis=1)
+                    sums = np.where(sampled_mask, sampled_returns, 0.0).sum(axis=1)
+                    bootstrap_means[(model, signal)] = np.divide(
+                        sums, counts, out=np.full(len(counts), np.nan), where=counts > 0
+                    )
 
-        for model in SIGNAL_MODELS:
-            for signal in SIGNAL_ORDER:
-                mask = labels[model] == signal
-                returns = returns_all[mask]
-                drawdown = drawdowns_all[mask]
-                buy_side = signal in ("BUY", "STRONG BUY")
-                sell_side = signal in ("SELL", "STRONG SELL")
-                metric_arrays = _signal_metric_arrays(
-                    returns, drawdown, buy_side, sell_side
-                )
-                false_all = np.full(n, np.nan)
-                false_all[mask] = metric_arrays["False-signal rate"]
-                metric_full_arrays = {
-                    "Median return": returns_all,
-                    "Average return": returns_all,
-                    "Positive rate": (returns_all > 0).astype(float),
-                    "Average drawdown": drawdowns_all,
-                    "Worst drawdown": drawdowns_all,
-                    "False-signal rate": false_all,
-                }
-                row = {
-                    "Model": model, "Signal": signal,
-                    "Holding period": f"{days}d", "Sample size": len(returns),
-                    "Bootstrap block": block_length,
-                }
-                sampled_mask = mask[bootstrap_indices]
-                for metric, values in metric_arrays.items():
-                    row[metric] = _metric_stat(metric, values)
-                    bootstrap_stats = _bootstrap_metric_stats(
-                        metric, metric_full_arrays[metric], mask,
-                        bootstrap_indices,
+            for model in SIGNAL_MODELS:
+                for signal in SIGNAL_ORDER:
+                    mask = (labels[model] == signal) & regime_mask
+                    returns = returns_all[mask]
+                    drawdown = drawdowns_all[mask]
+                    buy_side = signal in ("BUY", "STRONG BUY")
+                    sell_side = signal in ("SELL", "STRONG SELL")
+                    metric_arrays = _signal_metric_arrays(
+                        returns, drawdown, buy_side, sell_side
                     )
-                    low, high = _bootstrap_interval(
-                        bootstrap_stats, confidence_level
-                    )
-                    row[f"{metric} CI low"] = low
-                    row[f"{metric} CI high"] = high
-
-                mean_low = row["Average return CI low"]
-                mean_high = row["Average return CI high"]
-                row["Reliable vs zero"] = _reliability_label(mean_low, mean_high)
-                for baseline in SIGNAL_MODELS:
-                    if baseline == model:
-                        continue
-                    spread = (
-                        bootstrap_means[(model, signal)]
-                        - bootstrap_means[(baseline, signal)]
-                    )
-                    low, high = _bootstrap_interval(spread, confidence_level)
-                    prefix = f"Spread vs {baseline}"
-                    row[prefix] = (
-                        row["Average return"]
-                        - _metric_stat(
-                            "Average return",
-                            returns_all[labels[baseline] == signal],
+                    false_all = np.full(n, np.nan)
+                    false_all[mask] = metric_arrays["False-signal rate"]
+                    metric_full_arrays = {
+                        "Median return": returns_all,
+                        "Average return": returns_all,
+                        "Positive rate": (returns_all > 0).astype(float),
+                        "Average drawdown": drawdowns_all,
+                        "Worst drawdown": drawdowns_all,
+                        "False-signal rate": false_all,
+                    }
+                    row = {
+                        "Regime": regime, "Model": model, "Signal": signal,
+                        "Holding period": f"{days}d", "Sample size": len(returns),
+                        "Bootstrap block": block_length,
+                        "Evidence": (
+                            "Sufficient" if regime == "All regimes"
+                            or len(returns) >= int(min_regime_samples)
+                            else f"Insufficient (<{int(min_regime_samples)})"
+                        ),
+                    }
+                    for metric, values in metric_arrays.items():
+                        row[metric] = _metric_stat(metric, values)
+                        bootstrap_stats = _bootstrap_metric_stats(
+                            metric, metric_full_arrays[metric], mask,
+                            bootstrap_indices,
                         )
+                        low, high = _bootstrap_interval(
+                            bootstrap_stats, confidence_level
+                        )
+                        row[f"{metric} CI low"] = low
+                        row[f"{metric} CI high"] = high
+
+                    mean_low = row["Average return CI low"]
+                    mean_high = row["Average return CI high"]
+                    enough = (
+                        regime == "All regimes"
+                        or len(returns) >= int(min_regime_samples)
                     )
-                    row[f"{prefix} CI low"] = low
-                    row[f"{prefix} CI high"] = high
-                    row[f"Reliable vs {baseline}"] = _reliability_label(low, high)
-                rows.append(row)
+                    row["Reliable vs zero"] = (
+                        _reliability_label(mean_low, mean_high)
+                        if enough else "Insufficient data"
+                    )
+                    for baseline in SIGNAL_MODELS:
+                        if baseline == model:
+                            continue
+                        spread = (
+                            bootstrap_means[(model, signal)]
+                            - bootstrap_means[(baseline, signal)]
+                        )
+                        low, high = _bootstrap_interval(spread, confidence_level)
+                        prefix = f"Spread vs {baseline}"
+                        row[prefix] = (
+                            row["Average return"]
+                            - _metric_stat(
+                                "Average return",
+                                returns_all[
+                                    (labels[baseline] == signal) & regime_mask
+                                ],
+                            )
+                        )
+                        row[f"{prefix} CI low"] = low
+                        row[f"{prefix} CI high"] = high
+                        row[f"Reliable vs {baseline}"] = (
+                            _reliability_label(low, high)
+                            if enough else "Insufficient data"
+                        )
+                    rows.append(row)
     return pd.DataFrame(rows)
 
 

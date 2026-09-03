@@ -1454,7 +1454,7 @@ def _daily_signal_study_tab():
             results, calibration = walk_forward_signal_backtest(
                 soxl["adj_close"], qqq["adj_close"]
             )
-            summary = summarize_signal_backtest(results)
+            summary = summarize_signal_backtest(results, include_regimes=True)
         if results.empty:
             st.warning("Not enough aligned SOXL and QQQ history for an out-of-sample study.")
             return
@@ -1462,8 +1462,26 @@ def _daily_signal_study_tab():
             f"Evaluated {len(results):,} out-of-sample trading days from "
             f"{results.index.min():%Y-%m-%d} through {results.index.max():%Y-%m-%d}."
         )
-        horizon = st.selectbox("Holding period", ["1d", "5d", "10d", "21d", "63d"], index=3)
-        view = summary[summary["Holding period"] == horizon].copy()
+        controls = st.columns(2)
+        with controls[0]:
+            horizon = st.selectbox("Holding period", ["1d", "5d", "10d", "21d", "63d"], index=3)
+        with controls[1]:
+            regime = st.selectbox(
+                "Market regime", ["All regimes", "Bull", "Bear", "High volatility"],
+                index=0,
+                help="Bull/Bear use QQQ versus its trailing 200-day average. High volatility "
+                     "means trailing 21-day volatility is at or above its trailing one-year "
+                     "75th percentile and takes precedence.",
+            )
+        view = summary[
+            (summary["Holding period"] == horizon) & (summary["Regime"] == regime)
+        ].copy()
+        if regime != "All regimes":
+            regime_days = int((results["Market regime"] == regime).sum())
+            st.caption(
+                f"{regime_days:,} out-of-sample dates were classified as {regime.lower()}. "
+                "Rows with fewer than 30 signal observations are flagged as insufficient."
+            )
         metric_cols = [
             "Median return", "Average return", "Positive rate", "Average drawdown",
             "Worst drawdown", "False-signal rate",
@@ -1478,7 +1496,7 @@ def _daily_signal_study_tab():
                 axis=1,
             )
         display_cols = [
-            "Model", "Signal", "Sample size",
+            "Model", "Signal", "Sample size", "Evidence",
             *[f"{metric} (95% CI)" for metric in metric_cols],
             "Reliable vs zero",
         ]
@@ -1525,6 +1543,12 @@ def _daily_signal_study_tab():
   by at least 10%; otherwise the default or a wider neutral zone wins.
 - **Baselines:** SOXL-only is its trailing one-year range percentile. QQQ-relative
   is the trailing one-year percentile of the SOXL/QQQ price ratio.
+- **Market regimes:** Bull and Bear are determined by whether QQQ closes above or
+  below its trailing 200-session average. High volatility takes precedence when
+  trailing 21-session realized volatility is at or above the 75th percentile of
+  its trailing 252-session distribution. All inputs end on the classified date,
+  so future prices cannot change a past label. Regime rows with fewer than 30
+  signal observations are labeled Insufficient data.
 - **Metrics:** returns are close-to-close, drawdown is the worst close-to-close
   excursion during the holding period, and overlapping observations are shown
   because this study measures conditional outcomes rather than a tradable equity curve.

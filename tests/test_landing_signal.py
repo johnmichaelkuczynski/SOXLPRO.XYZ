@@ -15,7 +15,9 @@ from landing_signal import (
     price_range_percentile,
     signal_from_percentile,
 )
-from backtest_engine import walk_forward_signal_backtest, summarize_signal_backtest
+from backtest_engine import (
+    classify_market_regimes, walk_forward_signal_backtest, summarize_signal_backtest,
+)
 
 
 def _history(periods=4200):
@@ -172,6 +174,49 @@ class LandingSignalTests(unittest.TestCase):
         self.assertEqual(
             buy_5d["Reliable vs SOXL-only"], "Reliable positive"
         )
+
+    def test_market_regimes_use_trailing_data_only(self):
+        index = pd.bdate_range("2018-01-02", periods=700)
+        qqq = pd.Series(
+            100 * np.exp(np.cumsum(0.0004 + 0.01 * np.sin(np.arange(700) / 15))),
+            index=index,
+        )
+        first = classify_market_regimes(qqq)
+        changed = qqq.copy()
+        changed.iloc[600:] *= np.linspace(1, 4, 100)
+        second = classify_market_regimes(changed)
+        pd.testing.assert_series_equal(first.iloc[:600], second.iloc[:600])
+        self.assertTrue(first.dropna().isin(["Bull", "Bear", "High volatility"]).all())
+
+    def test_regime_summary_preserves_default_and_flags_small_samples(self):
+        index = pd.bdate_range("2020-01-02", periods=120)
+        results = pd.DataFrame(index=index)
+        pattern = np.resize(np.array(["BUY", "SELL", "DO NOTHING"]), len(index))
+        for model in ("Composite", "SOXL-only", "QQQ-relative"):
+            results[model] = pattern
+        results["Market regime"] = np.where(np.arange(len(index)) < 10, "Bear", "Bull")
+        results["1d return"] = np.where(pattern == "BUY", 0.03, -0.01)
+        results["1d drawdown"] = -0.02
+
+        default = summarize_signal_backtest(
+            results, holding_periods=(1,), n_bootstrap=100
+        )
+        self.assertEqual(set(default["Regime"]), {"All regimes"})
+
+        summary = summarize_signal_backtest(
+            results, holding_periods=(1,), n_bootstrap=100, include_regimes=True
+        )
+        self.assertEqual(
+            set(summary["Regime"]),
+            {"All regimes", "Bull", "Bear", "High volatility"},
+        )
+        bear_buy = summary[
+            (summary["Regime"] == "Bear")
+            & (summary["Model"] == "Composite")
+            & (summary["Signal"] == "BUY")
+        ].iloc[0]
+        self.assertEqual(bear_buy["Evidence"], "Insufficient (<30)")
+        self.assertEqual(bear_buy["Reliable vs zero"], "Insufficient data")
 
     def test_walk_forward_past_signals_do_not_change_when_future_changes(self):
         index = pd.bdate_range("2010-01-04", periods=1100)
