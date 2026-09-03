@@ -11,6 +11,9 @@ TRADING_DAYS = 252
 
 SIGNAL_HOLDING_PERIODS = (1, 5, 10, 21, 63)
 SIGNAL_ORDER = ["STRONG BUY", "BUY", "DO NOTHING", "SELL", "STRONG SELL"]
+SIGNAL_MODELS = ("Composite", "SOXL-only", "QQQ-relative")
+SIGNAL_BOOTSTRAP_SAMPLES = 1000
+SIGNAL_CONFIDENCE_LEVEL = 0.95
 
 
 def _range_percentile(values):
@@ -144,24 +147,181 @@ def walk_forward_signal_backtest(
     return result.dropna(subset=["Composite"]), pd.DataFrame(calibration_rows)
 
 
-def summarize_signal_backtest(results, holding_periods=SIGNAL_HOLDING_PERIODS):
+def _moving_block_bootstrap_indices(n, block_length, n_bootstrap, rng):
+    """Draw circular moving blocks so overlapping forward returns stay clustered."""
+    if n <= 0:
+        return np.empty((0, 0), dtype=int)
+    block_length = max(1, min(int(block_length), n))
+    blocks_needed = int(math.ceil(n / block_length))
+    starts = rng.integers(0, n, size=(n_bootstrap, blocks_needed))
+    offsets = np.arange(block_length)
+    return ((starts[..., None] + offsets) % n).reshape(n_bootstrap, -1)[:, :n]
+
+
+def _bootstrap_interval(values, confidence_level=SIGNAL_CONFIDENCE_LEVEL):
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return np.nan, np.nan
+    alpha = (1.0 - confidence_level) / 2.0
+    return tuple(np.quantile(values, [alpha, 1.0 - alpha]))
+
+
+def _signal_metric_arrays(returns, drawdowns, buy_side, sell_side):
+    false = (
+        (returns <= 0).astype(float) if buy_side
+        else (returns >= 0).astype(float) if sell_side
+        else np.full(len(returns), np.nan)
+    )
+    return {
+        "Median return": returns,
+        "Average return": returns,
+        "Positive rate": (returns > 0).astype(float),
+        "Average drawdown": drawdowns,
+        "Worst drawdown": drawdowns,
+        "False-signal rate": false,
+    }
+
+
+def _metric_stat(metric, values):
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return np.nan
+    if metric == "Median return":
+        return float(np.median(values))
+    if metric == "Worst drawdown":
+        return float(np.min(values))
+    return float(np.mean(values))
+
+
+def _bootstrap_metric_stats(metric, full_values, mask, bootstrap_indices):
+    if not mask.any():
+        return np.full(len(bootstrap_indices), np.nan)
+    sampled_values = full_values[bootstrap_indices]
+    sampled_mask = mask[bootstrap_indices] & np.isfinite(sampled_values)
+    if metric == "Median return":
+        return np.nanmedian(np.where(sampled_mask, sampled_values, np.nan), axis=1)
+    if metric == "Worst drawdown":
+        return np.nanmin(np.where(sampled_mask, sampled_values, np.nan), axis=1)
+    counts = sampled_mask.sum(axis=1)
+    sums = np.where(sampled_mask, sampled_values, 0.0).sum(axis=1)
+    return np.divide(
+        sums, counts, out=np.full(len(counts), np.nan), where=counts > 0
+    )
+
+
+def _reliability_label(low, high):
+    if not np.isfinite(low) or not np.isfinite(high):
+        return "Insufficient data"
+    if low > 0:
+        return "Reliable positive"
+    if high < 0:
+        return "Reliable negative"
+    return "Not reliable"
+
+
+def summarize_signal_backtest(
+    results,
+    holding_periods=SIGNAL_HOLDING_PERIODS,
+    n_bootstrap=SIGNAL_BOOTSTRAP_SAMPLES,
+    confidence_level=SIGNAL_CONFIDENCE_LEVEL,
+    random_seed=1729,
+):
+    """Summarize outcomes with dependence-aware moving-block bootstrap inference."""
     rows = []
-    for model in ("Composite", "SOXL-only", "QQQ-relative"):
-        for signal in SIGNAL_ORDER:
-            sample = results[results[model] == signal]
-            for days in holding_periods:
-                returns = sample[f"{days}d return"].dropna()
-                drawdown = sample.loc[returns.index, f"{days}d drawdown"]
+    rng = np.random.default_rng(random_seed)
+    for days in holding_periods:
+        return_col = f"{days}d return"
+        drawdown_col = f"{days}d drawdown"
+        horizon_data = results[
+            [*SIGNAL_MODELS, return_col, drawdown_col]
+        ].dropna(subset=[return_col]).copy()
+        n = len(horizon_data)
+        block_length = max(int(days), int(round(n ** (1.0 / 3.0)))) if n else 1
+        bootstrap_indices = _moving_block_bootstrap_indices(
+            n, block_length, int(n_bootstrap), rng
+        )
+        returns_all = horizon_data[return_col].to_numpy(dtype=float)
+        drawdowns_all = horizon_data[drawdown_col].to_numpy(dtype=float)
+        labels = {
+            model: horizon_data[model].to_numpy()
+            for model in SIGNAL_MODELS
+        }
+
+        bootstrap_means = {}
+        for model in SIGNAL_MODELS:
+            for signal in SIGNAL_ORDER:
+                mask = labels[model] == signal
+                sampled_mask = mask[bootstrap_indices]
+                sampled_returns = returns_all[bootstrap_indices]
+                counts = sampled_mask.sum(axis=1)
+                sums = np.where(sampled_mask, sampled_returns, 0.0).sum(axis=1)
+                bootstrap_means[(model, signal)] = np.divide(
+                    sums, counts, out=np.full(len(counts), np.nan), where=counts > 0
+                )
+
+        for model in SIGNAL_MODELS:
+            for signal in SIGNAL_ORDER:
+                mask = labels[model] == signal
+                returns = returns_all[mask]
+                drawdown = drawdowns_all[mask]
                 buy_side = signal in ("BUY", "STRONG BUY")
                 sell_side = signal in ("SELL", "STRONG SELL")
-                false = ((returns <= 0) if buy_side else (returns >= 0) if sell_side else pd.Series(False, index=returns.index))
-                rows.append({
-                    "Model": model, "Signal": signal, "Holding period": f"{days}d",
-                    "Sample size": len(returns), "Median return": returns.median(),
-                    "Average return": returns.mean(), "Positive rate": (returns > 0).mean(),
-                    "Average drawdown": drawdown.mean(), "Worst drawdown": drawdown.min(),
-                    "False-signal rate": false.mean() if (buy_side or sell_side) else np.nan,
-                })
+                metric_arrays = _signal_metric_arrays(
+                    returns, drawdown, buy_side, sell_side
+                )
+                false_all = np.full(n, np.nan)
+                false_all[mask] = metric_arrays["False-signal rate"]
+                metric_full_arrays = {
+                    "Median return": returns_all,
+                    "Average return": returns_all,
+                    "Positive rate": (returns_all > 0).astype(float),
+                    "Average drawdown": drawdowns_all,
+                    "Worst drawdown": drawdowns_all,
+                    "False-signal rate": false_all,
+                }
+                row = {
+                    "Model": model, "Signal": signal,
+                    "Holding period": f"{days}d", "Sample size": len(returns),
+                    "Bootstrap block": block_length,
+                }
+                sampled_mask = mask[bootstrap_indices]
+                for metric, values in metric_arrays.items():
+                    row[metric] = _metric_stat(metric, values)
+                    bootstrap_stats = _bootstrap_metric_stats(
+                        metric, metric_full_arrays[metric], mask,
+                        bootstrap_indices,
+                    )
+                    low, high = _bootstrap_interval(
+                        bootstrap_stats, confidence_level
+                    )
+                    row[f"{metric} CI low"] = low
+                    row[f"{metric} CI high"] = high
+
+                mean_low = row["Average return CI low"]
+                mean_high = row["Average return CI high"]
+                row["Reliable vs zero"] = _reliability_label(mean_low, mean_high)
+                for baseline in SIGNAL_MODELS:
+                    if baseline == model:
+                        continue
+                    spread = (
+                        bootstrap_means[(model, signal)]
+                        - bootstrap_means[(baseline, signal)]
+                    )
+                    low, high = _bootstrap_interval(spread, confidence_level)
+                    prefix = f"Spread vs {baseline}"
+                    row[prefix] = (
+                        row["Average return"]
+                        - _metric_stat(
+                            "Average return",
+                            returns_all[labels[baseline] == signal],
+                        )
+                    )
+                    row[f"{prefix} CI low"] = low
+                    row[f"{prefix} CI high"] = high
+                    row[f"Reliable vs {baseline}"] = _reliability_label(low, high)
+                rows.append(row)
     return pd.DataFrame(rows)
 
 

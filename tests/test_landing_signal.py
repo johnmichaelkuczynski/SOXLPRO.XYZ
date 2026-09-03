@@ -140,7 +140,38 @@ class LandingSignalTests(unittest.TestCase):
         self.assertTrue({
             "Sample size", "Median return", "Average return", "Positive rate",
             "Average drawdown", "Worst drawdown", "False-signal rate",
+            "Average return CI low", "Average return CI high",
+            "Reliable vs zero", "Spread vs SOXL-only",
+            "Spread vs QQQ-relative", "Reliable vs SOXL-only",
+            "Reliable vs QQQ-relative",
         }.issubset(summary.columns))
+
+    def test_signal_inference_uses_blocks_and_detects_clear_separation(self):
+        index = pd.bdate_range("2020-01-02", periods=240)
+        results = pd.DataFrame(index=index)
+        pattern = np.resize(np.array(["BUY", "SELL", "DO NOTHING"]), len(index))
+        results["Composite"] = pattern
+        results["SOXL-only"] = np.resize(
+            np.array(["SELL", "BUY", "DO NOTHING"]), len(index)
+        )
+        results["QQQ-relative"] = results["SOXL-only"]
+        for days in (1, 5):
+            results[f"{days}d return"] = np.where(pattern == "BUY", 0.08, -0.04)
+            results[f"{days}d drawdown"] = np.where(pattern == "BUY", -0.01, -0.08)
+
+        summary = summarize_signal_backtest(
+            results, holding_periods=(1, 5), n_bootstrap=200
+        )
+        buy_5d = summary[
+            (summary["Model"] == "Composite")
+            & (summary["Signal"] == "BUY")
+            & (summary["Holding period"] == "5d")
+        ].iloc[0]
+        self.assertGreaterEqual(buy_5d["Bootstrap block"], 5)
+        self.assertEqual(buy_5d["Reliable vs zero"], "Reliable positive")
+        self.assertEqual(
+            buy_5d["Reliable vs SOXL-only"], "Reliable positive"
+        )
 
     def test_walk_forward_past_signals_do_not_change_when_future_changes(self):
         index = pd.bdate_range("2010-01-04", periods=1100)

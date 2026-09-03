@@ -1464,17 +1464,51 @@ def _daily_signal_study_tab():
         )
         horizon = st.selectbox("Holding period", ["1d", "5d", "10d", "21d", "63d"], index=3)
         view = summary[summary["Holding period"] == horizon].copy()
-        percent_cols = [
+        metric_cols = [
             "Median return", "Average return", "Positive rate", "Average drawdown",
             "Worst drawdown", "False-signal rate",
         ]
+        for metric in metric_cols:
+            view[f"{metric} (95% CI)"] = view.apply(
+                lambda row: (
+                    f"{row[metric]:.2%} "
+                    f"({row[f'{metric} CI low']:.2%} to "
+                    f"{row[f'{metric} CI high']:.2%})"
+                ) if pd.notna(row[f"{metric} CI low"]) else "—",
+                axis=1,
+            )
+        display_cols = [
+            "Model", "Signal", "Sample size",
+            *[f"{metric} (95% CI)" for metric in metric_cols],
+            "Reliable vs zero",
+        ]
         st.dataframe(
-            view, hide_index=True, use_container_width=True,
-            column_config={col: st.column_config.NumberColumn(format="%.2%%") for col in percent_cols},
+            view[display_cols], hide_index=True, use_container_width=True,
         )
         st.caption(
             "False signal = non-positive forward return after Buy/Strong Buy, or "
-            "non-negative return after Sell/Strong Sell. It is not assigned to Do Nothing."
+            "non-negative return after Sell/Strong Sell. It is not assigned to Do Nothing. "
+            "“Reliable” means the dependence-aware 95% interval excludes zero."
+        )
+        st.markdown("##### Composite signal separation from both baselines")
+        comparisons = view[view["Model"] == "Composite"].copy()
+        for baseline in ("SOXL-only", "QQQ-relative"):
+            prefix = f"Spread vs {baseline}"
+            comparisons[f"{prefix} (95% CI)"] = comparisons.apply(
+                lambda row: (
+                    f"{row[prefix]:+.2%} "
+                    f"({row[f'{prefix} CI low']:+.2%} to "
+                    f"{row[f'{prefix} CI high']:+.2%})"
+                ) if pd.notna(row[f"{prefix} CI low"]) else "—",
+                axis=1,
+            )
+        st.dataframe(
+            comparisons[[
+                "Signal",
+                "Spread vs SOXL-only (95% CI)", "Reliable vs SOXL-only",
+                "Spread vs QQQ-relative (95% CI)", "Reliable vs QQQ-relative",
+            ]],
+            hide_index=True, use_container_width=True,
         )
         st.markdown("##### Walk-forward calibration audit")
         st.dataframe(calibration, hide_index=True, use_container_width=True)
@@ -1494,5 +1528,14 @@ def _daily_signal_study_tab():
 - **Metrics:** returns are close-to-close, drawdown is the worst close-to-close
   excursion during the holding period, and overlapping observations are shown
   because this study measures conditional outcomes rather than a tradable equity curve.
+- **Uncertainty and reliability:** 95% confidence intervals use a circular
+  moving-block bootstrap with 1,000 deterministic resamples. Blocks are at least
+  as long as the selected holding period (and otherwise use the sample-size
+  cube-root rule), so overlapping returns and nearby market regimes remain
+  clustered rather than being treated as independent observations.
+- **Comparisons:** average-return spreads are recomputed inside each bootstrap
+  resample on the same dates for the signal category and each baseline. A result
+  is labeled Reliable positive or Reliable negative only when its full 95%
+  interval is above or below zero; otherwise it is labeled Not reliable.
                 """
             )
