@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import pandas as pd
 import numpy as np
@@ -10,6 +11,20 @@ POLYGON_KEY = os.environ.get("POLYGON_API_KEY", "")
 
 EQUITY_MAX_YEARS = 16
 OPTIONS_MAX_YEARS = 4
+
+
+def normalize_eodhd_symbol(symbol, default_exchange="US"):
+    """Validate a user-entered EODHD symbol and add the default US exchange."""
+    value = str(symbol or "").strip().upper()
+    if not value:
+        raise ValueError("Enter a ticker symbol.")
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,29}", value):
+        raise ValueError(
+            "Use an EODHD ticker such as SBR, PLL, VOD.LSE, or VIX.INDX."
+        )
+    if "." not in value:
+        value = f"{value}.{default_exchange}"
+    return value
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -36,6 +51,22 @@ def get_equity_history(symbol="SOXL", years=EQUITY_MAX_YEARS, suffix=".US"):
     df["ret"] = df["adj_close"].pct_change()
     df["log_ret"] = np.log(df["adj_close"] / df["adj_close"].shift(1))
     return df
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_custom_benchmark_history(symbol):
+    """Load a validated EODHD symbol as an app-compatible Close series."""
+    code = normalize_eodhd_symbol(symbol)
+    base, exchange = code.rsplit(".", 1)
+    df = get_equity_history(base, suffix=f".{exchange}")
+    if df.empty:
+        return pd.DataFrame()
+    source = "adj_close" if "adj_close" in df.columns else "close"
+    result = pd.DataFrame(
+        {"Close": pd.to_numeric(df[source], errors="coerce")},
+        index=df.index,
+    )
+    return result.replace([np.inf, -np.inf], np.nan).dropna()
 
 
 @st.cache_data(ttl=86400, show_spinner=False)

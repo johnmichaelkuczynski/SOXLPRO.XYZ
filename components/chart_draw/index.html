@@ -182,6 +182,10 @@ window.addEventListener("message", function(event) {
       btc_dates: args.btc_dates || [],
       btc_prices: args.btc_prices || [],
       btc_actual: args.btc_actual || [],
+      custom_label: args.custom_label || '',
+      custom_dates: args.custom_dates || [],
+      custom_prices: args.custom_prices || [],
+      custom_actual: args.custom_actual || [],
       future_end: args.future_end,
       chart_height: args.chart_height || 900
     };
@@ -525,7 +529,8 @@ function renderChart() {
   var hasSOX = chartData.sox_dates && chartData.sox_dates.length > 0;
   var hasGUSH = chartData.gush_dates && chartData.gush_dates.length > 0;
   var hasBTC = chartData.btc_dates && chartData.btc_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX || hasGUSH || hasBTC;
+  var hasCustom = chartData.custom_dates && chartData.custom_dates.length > 0;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX || hasGUSH || hasBTC || hasCustom;
 
   traces.push({
     x: chartData.dates, y: chartData.prices,
@@ -620,6 +625,17 @@ function renderChart() {
       line: {color: '#F7931A', width: 1.8},
       yaxis: 'y',
       hovertemplate: 'BTC: %{x|%Y-%m-%d}<br>$%{customdata:,.2f}<extra></extra>'
+    });
+  }
+
+  if (hasCustom) {
+    traces.push({
+      x: chartData.custom_dates, y: chartData.custom_prices,
+      customdata: chartData.custom_actual,
+      mode: 'lines', name: chartData.custom_label,
+      line: {color: '#37474F', width: 2.2, dash: 'dash'},
+      yaxis: 'y',
+      hovertemplate: chartData.custom_label + ': %{x|%Y-%m-%d}<br>$%{customdata:,.2f}<extra></extra>'
     });
   }
 
@@ -720,6 +736,11 @@ function renderChart() {
     var btcValidPrices = chartData.btc_prices.filter(function(p){return p>0;});
     priceMin = Math.min(priceMin, Math.min.apply(null, btcValidPrices));
     priceMax = Math.max(priceMax, Math.max.apply(null, btcValidPrices));
+  }
+  if (hasCustom) {
+    var customValidPrices = chartData.custom_prices.filter(function(p){return p>0;});
+    priceMin = Math.min(priceMin, Math.min.apply(null, customValidPrices));
+    priceMax = Math.max(priceMax, Math.max.apply(null, customValidPrices));
   }
 
   var layout = {

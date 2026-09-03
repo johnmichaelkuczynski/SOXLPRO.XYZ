@@ -9,6 +9,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from chart_payload import clean_chart_points, normalize_overlay
+from data_providers import get_custom_benchmark_history, normalize_eodhd_symbol
 from strategy_builder import generate_strategy, parse_strategy_json, render_strategy_html, STRATEGY_CSS
 from vol_surface import render_vol_surface_tab
 from call_risk_reward import render_call_risk_reward_tab
@@ -100,6 +101,8 @@ if "show_gush" not in st.session_state:
     st.session_state.show_gush = False
 if "show_btc" not in st.session_state:
     st.session_state.show_btc = False
+if "custom_benchmark" not in st.session_state:
+    st.session_state.custom_benchmark = None
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 
@@ -475,6 +478,59 @@ with tab_chart:
             st.session_state.show_btc = not st.session_state.show_btc
             st.rerun()
 
+    with st.form("custom_benchmark_form"):
+        custom_input_col, custom_submit_col = st.columns([5, 1])
+        with custom_input_col:
+            custom_input = st.text_input(
+                "Custom EODHD benchmark",
+                value=st.session_state.custom_benchmark or "",
+                placeholder="Enter SBR, PLL, or an EODHD code such as VOD.LSE",
+                help=(
+                    "Plain tickers use the US exchange. To use another market, "
+                    "enter the full EODHD code, such as VOD.LSE."
+                ),
+            )
+        with custom_submit_col:
+            st.write("")
+            add_custom = st.form_submit_button(
+                "Compare",
+                type="primary",
+                width="stretch",
+            )
+
+    if add_custom:
+        try:
+            requested_code = normalize_eodhd_symbol(custom_input)
+            requested_data = get_custom_benchmark_history(requested_code)
+            if requested_data.empty:
+                st.error(
+                    f"EODHD returned no price history for {requested_code}. "
+                    "Check the ticker and exchange code."
+                )
+            else:
+                st.session_state.custom_benchmark = requested_code
+                st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+        except Exception:
+            st.error(
+                "EODHD could not load that benchmark right now. "
+                "Check the ticker and try again."
+            )
+
+    if st.session_state.custom_benchmark:
+        active_col, remove_col = st.columns([5, 1])
+        active_col.caption(
+            f"Custom benchmark active: **{st.session_state.custom_benchmark}**"
+        )
+        if remove_col.button(
+            "Remove benchmark",
+            key="remove_custom_benchmark",
+            width="stretch",
+        ):
+            st.session_state.custom_benchmark = None
+            st.rerun()
+
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
     dates_list, prices_list = clean_chart_points(data.index, data["Close"])
 
@@ -566,6 +622,25 @@ with tab_chart:
         except Exception:
             pass
 
+    custom_dates_list = []
+    custom_prices_list = []
+    custom_actual_list = []
+    custom_benchmark_label = st.session_state.custom_benchmark or ""
+    if custom_benchmark_label:
+        try:
+            custom_data = get_custom_benchmark_history(custom_benchmark_label)
+            if not custom_data.empty:
+                (
+                    custom_dates_list,
+                    custom_prices_list,
+                    custom_actual_list,
+                ) = normalize_overlay(data, custom_data)
+        except Exception:
+            st.warning(
+                f"The custom benchmark {custom_benchmark_label} is temporarily "
+                "unavailable from EODHD."
+            )
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,
@@ -593,6 +668,10 @@ with tab_chart:
         btc_dates=btc_dates_list,
         btc_prices=btc_prices_list,
         btc_actual=btc_actual_list,
+        custom_label=custom_benchmark_label,
+        custom_dates=custom_dates_list,
+        custom_prices=custom_prices_list,
+        custom_actual=custom_actual_list,
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=560,
@@ -658,6 +737,10 @@ with tab_chart:
                         "end": analyze_end,
                         "data_points": len(window_data),
                         "start_price": round(window_data["Close"].iloc[0], 2),
+                        "period_low": round(window_data["Close"].min(), 2),
+                        "period_low_date": window_data["Close"].idxmin().strftime("%Y-%m-%d"),
+                        "period_high": round(window_data["Close"].max(), 2),
+                        "period_high_date": window_data["Close"].idxmax().strftime("%Y-%m-%d"),
                         "end_price": round(window_data["Close"].iloc[-1], 2),
                         "period_return": round((window_data["Close"].iloc[-1] - window_data["Close"].iloc[0]) / window_data["Close"].iloc[0] * 100, 1),
                         "predictions": predictions
@@ -797,20 +880,31 @@ with tab_chart:
 
         ret_color = "#2E7D32" if ar['period_return'] >= 0 else "#D32F2F"
         summary_html = f"""
-        <div style="display:flex; gap:12px; margin-bottom:16px;">
-          <div style="flex:1; background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #1E88E5;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+                    gap:12px; margin-bottom:16px;">
+          <div style="background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #1E88E5;">
             <div style="font-size:12px; color:#888;">Start Price</div>
             <div style="font-size:22px; font-weight:700;">${ar['start_price']}</div>
           </div>
-          <div style="flex:1; background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #1E88E5;">
+          <div style="background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #D32F2F;">
+            <div style="font-size:12px; color:#888;">Period Low</div>
+            <div style="font-size:22px; font-weight:700; color:#D32F2F;">${ar['period_low']}</div>
+            <div style="font-size:11px; color:#888; margin-top:2px;">{ar['period_low_date']}</div>
+          </div>
+          <div style="background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #2E7D32;">
+            <div style="font-size:12px; color:#888;">Period High</div>
+            <div style="font-size:22px; font-weight:700; color:#2E7D32;">${ar['period_high']}</div>
+            <div style="font-size:11px; color:#888; margin-top:2px;">{ar['period_high_date']}</div>
+          </div>
+          <div style="background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #1E88E5;">
             <div style="font-size:12px; color:#888;">End Price</div>
             <div style="font-size:22px; font-weight:700;">${ar['end_price']}</div>
           </div>
-          <div style="flex:1; background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid {ret_color};">
-            <div style="font-size:12px; color:#888;">Period Return</div>
+          <div style="background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid {ret_color};">
+            <div style="font-size:12px; color:#888;">Total Return</div>
             <div style="font-size:22px; font-weight:700; color:{ret_color};">{ar['period_return']:+.1f}%</div>
           </div>
-          <div style="flex:1; background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #666;">
+          <div style="background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; border-left:4px solid #666;">
             <div style="font-size:12px; color:#888;">Data Points</div>
             <div style="font-size:22px; font-weight:700;">{ar['data_points']}</div>
           </div>
