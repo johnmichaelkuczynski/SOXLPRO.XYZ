@@ -50,3 +50,13 @@ trim a lead-in (`-ss N` before `-i`) so the clip starts on real content. Scale t
 per bash call (warm+record of 2 views exceeds 120s). Clean up after: delete the temp
 recorder/capture scripts, remove the capture workflow, and uninstall recording-only
 deps (playwright pip + chromium & its xorg/gtk nix libs) — none are needed at runtime.
+
+## Confirmed SOXL Pro promo direction
+**Rule:** A clean 16:9 dark-navy infographic slideshow with crisp typography, restrained
+motion, app screenshots, and confident voiceover works well for SOXL Pro; music is optional.
+
+**Why:** The user explicitly confirmed this probability-not-guesswork treatment was
+“excellent” and “perfect.”
+
+**How to apply:** Reuse this visual and editorial direction for future SOXL Pro promos
+unless the user requests a different style or platform format.
