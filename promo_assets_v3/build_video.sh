@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PAD=0.20
-SPEED=1.08
+SPEED=1.12
 FPS=30
 FINAL="SOXLPRO_TikTok_Promo_v3.mp4"
 TEMP="${FINAL%.mp4}.tmp.mp4"

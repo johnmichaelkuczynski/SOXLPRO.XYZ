@@ -258,12 +258,44 @@ logical_id = "9b48109c-9608-496a-8c6e-55dcae8d44bd"
 id = "jHTfCL6Z0OFiww-iEyMlf"
 uri = "file://promo_assets_v3/SOXLPRO_TikTok_Promo_v3.mp4"
 type = "video"
-title = "SOXL Pro — Rebuilt TikTok Promo"
-description = "A fully rebuilt 58-second vertical promo with verified 1080×1920 video, clear narration, real app screens, and no music."
+title = "SOXL Pro TikTok Promo — Corrected Pronunciation"
+description = "Corrected 58.5-second vertical export. Every spoken SOXL is pronounced Ess Oh Ex Ell."
 logical_id = "93e04dbc-ef5c-4f39-a0cb-144197161744"
-content_hash = "sha256:b4fead686744471eec8722b67504fdfbd55ce2daee25fd2b47afb91977a21835"
-size = 6066908
-mtime_ms = 1788453460948
-storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/93e04dbc-ef5c-4f39-a0cb-144197161744/539bbc63-ccd2-4ce7-821b-39e43f9380f3"
-storage_version_token = "1788453485395841"
+content_hash = "sha256:9a982de4e961ab3077ea273517493f0b05cf15670fe510b8f06d73b604c09837"
+size = 6086240
+mtime_ms = 1788454618715
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/93e04dbc-ef5c-4f39-a0cb-144197161744/855b2561-2d1a-4c81-a282-af52ae6ef190"
+storage_version_token = "1788454631182187"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "Z6I9V3xbPtFmLCVmIyTsn"
+uri = "file://promo_assets_v3/voice_01_2.mp3"
+type = "audio"
+title = "Corrected SOXL pronunciation segment 01"
+description = "Text-to-speech audio: Ess Oh Ex Ell can move fast. Before you trade it, know the odds. Ess Oh Ex Ell Pro turns historical behavior into a clear probability, timeframe, and risk picture."
+logical_id = "5c384ee7-74f1-4038-b5fa-57009d50d740"
+
+[[outputs]]
+id = "1u84jp1KgKik7CgNTt51F"
+uri = "file://promo_assets_v3/voice_02_2.mp3"
+type = "audio"
+title = "Corrected SOXL pronunciation segment 02"
+description = "Text-to-speech audio: Start with context. See where Ess Oh Ex Ell sits within its historical ranges, with longer periods carrying more weight."
+logical_id = "1e38f91b-8c64-4440-b75f-771863637a64"
+
+[[outputs]]
+id = "--6sgb-ow1FQ6y00irPl0"
+uri = "file://promo_assets_v3/voice_06_2.mp3"
+type = "audio"
+title = "Corrected SOXL pronunciation segment 06"
+description = "Text-to-speech audio: Don't just chase the move. Measure its probability, timing, and risk. Explore Ess Oh Ex Ell Pro now at Ess Oh Ex Ell Pro dot X Y Z."
+logical_id = "509735f1-a8c3-4e9a-8dc5-e2a9f1a6a106"
+
+[[outputs]]
+id = "SjfPslUzGgwcprW-RO4I5"
+uri = "file://promo_assets_v3/voice_04_2.mp3"
+type = "audio"
+title = "Corrected SOXL pronunciation segment 04"
+description = "Text-to-speech audio: Compare Ess Oh Ex Ell with built-in benchmarks, or enter another security supported by E O D H D. See relative performance without losing the actual price."
+logical_id = "fb4a163a-cbb6-4d86-b24b-1bc69d91b868"

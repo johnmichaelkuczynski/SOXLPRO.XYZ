@@ -55,8 +55,11 @@ deps (playwright pip + chromium & its xorg/gtk nix libs) — none are needed at 
 **Rule:** A clean 16:9 dark-navy infographic slideshow with crisp typography, restrained
 motion, app screenshots, and confident voiceover works well for SOXL Pro; music is optional.
 
+In narration, pronounce SOXL as the individual letters “Ess Oh Ex Ell,” never as a word.
+
 **Why:** The user explicitly confirmed this probability-not-guesswork treatment was
 “excellent” and “perfect.”
 
 **How to apply:** Reuse this visual and editorial direction for future SOXL Pro promos
-unless the user requests a different style or platform format.
+unless the user requests a different style or platform format. Spell the ticker
+phonetically in every text-to-speech script.
