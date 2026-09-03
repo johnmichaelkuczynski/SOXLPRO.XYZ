@@ -22,6 +22,7 @@ from quality_control import render_quality_control_tab
 from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
+from top_market_snapshot import render_market_snapshot
 
 
 def _inject_google_site_verification():
@@ -231,6 +232,13 @@ except Exception as e:
     st.error(f"Failed to fetch SOXL data: {e}")
     st.stop()
 
+try:
+    quote = fetch_soxl_quote()
+except Exception:
+    quote = None
+
+render_market_snapshot(data, quote=quote)
+
 logo_path = Path("attached_assets/zhi_logoc_1787826573212.png")
 logo_data_uri = (
     "data:image/png;base64,"
@@ -276,11 +284,6 @@ def get_price_at_offset(df, days_ago):
         return df.loc[mask, "Close"].iloc[-1]
     return None
 
-
-try:
-    quote = fetch_soxl_quote()
-except Exception:
-    quote = None
 
 last_close = data["Close"].iloc[-1]
 if quote and quote.get("price"):
