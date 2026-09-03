@@ -12,6 +12,7 @@ from landing_signal import (
     composite_signal,
     compute_timeframe_readings,
     condition_from_percentile,
+    display_signal_label,
     price_range_percentile,
     signal_from_percentile,
 )
@@ -30,6 +31,17 @@ def _history(periods=4200):
 
 
 class LandingSignalTests(unittest.TestCase):
+    def test_user_facing_signal_labels_preserve_threshold_meanings(self):
+        expected = {
+            "STRONG BUY": "BUY",
+            "BUY": "POSSIBLE BUY",
+            "DO NOTHING": "DO NOTHING",
+            "SELL": "POSSIBLE SELL",
+            "STRONG SELL": "SELL",
+        }
+        for internal, displayed in expected.items():
+            self.assertEqual(display_signal_label(internal), displayed)
+
     def test_formula_uses_current_min_and_max(self):
         percentile, current, low, high = price_range_percentile([10, 30, 50])
         self.assertEqual(percentile, 100.0)

@@ -42,6 +42,19 @@ SIGNAL_COLORS = {
     "STRONG BUY": "#047857",
 }
 
+SIGNAL_DISPLAY_LABELS = {
+    "STRONG BUY": "BUY",
+    "BUY": "POSSIBLE BUY",
+    "DO NOTHING": "DO NOTHING",
+    "SELL": "POSSIBLE SELL",
+    "STRONG SELL": "SELL",
+    "INSUFFICIENT HISTORY": "INSUFFICIENT HISTORY",
+}
+
+
+def display_signal_label(signal):
+    return SIGNAL_DISPLAY_LABELS.get(signal, signal)
+
 
 def completed_close_history(price_data, now=None):
     """Return SOXL closes through the latest completed regular session."""
@@ -158,13 +171,14 @@ def composite_signal(readings, weights=None, thresholds=DEFAULT_THRESHOLDS):
 def _signal_card(percentile, signal, close_date):
     marker = float(np.clip(percentile, 0.0, 100.0))
     color = SIGNAL_COLORS.get(signal, "#64748b")
+    display_signal = display_signal_label(signal)
     return f"""
     <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px 22px;
                 background:#ffffff;margin:8px 0 12px;">
       <div style="font-size:.78rem;color:#64748b;letter-spacing:.09em;
                   font-weight:800;">TODAY'S SOXL SIGNAL</div>
       <div style="font-size:2.25rem;font-weight:850;color:{color};margin:2px 0;">
-        {signal}
+        {display_signal}
       </div>
       <div style="font-size:.94rem;color:#475569;margin-bottom:14px;">
         Composite historical-range percentile:
@@ -186,8 +200,8 @@ def _signal_card(percentile, signal, close_date):
       <div style="display:grid;grid-template-columns:15% 20% 30% 20% 15%;
                   margin-top:7px;font-size:.68rem;font-weight:750;color:#475569;
                   text-align:center;">
-        <span>STRONG BUY</span><span>BUY</span><span>DO NOTHING</span>
-        <span>SELL</span><span>STRONG SELL</span>
+        <span>BUY</span><span>POSSIBLE BUY</span><span>DO NOTHING</span>
+        <span>POSSIBLE SELL</span><span>SELL</span>
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:4px;
                   color:#94a3b8;font-size:.68rem;">
@@ -253,9 +267,9 @@ For every timeframe:
 **Condition labels:** Oversold below 20%; Neutral from 20% through 80%;
 Overbought above 80%.
 
-**Composite signal:** Strong Buy from 0% to below 15%; Buy from 15% to below
-35%; Do Nothing from 35% to below 65%; Sell from 65% to below 85%; Strong Sell
-from 85% through 100%.
+**Composite signal:** Buy from 0% to below 15%; Possible Buy from 15% to below
+35%; Do Nothing from 35% to below 65%; Possible Sell from 65% to below 85%;
+Sell from 85% through 100%.
 
 The dashboard uses completed daily closing prices beginning in 2010. It is a
 historical mean-reversion indicator, not a guarantee or personalized investment
