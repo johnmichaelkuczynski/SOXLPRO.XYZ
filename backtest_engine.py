@@ -382,7 +382,41 @@ def summarize_signal_backtest(
                     rows.append(row)
     return pd.DataFrame(rows)
 
+def build_signal_reliability_report_rows(summary):
+    """Build a portable, long-form table of Daily Signal Study evidence."""
+    metric_cols = (
+        "Median return", "Average return", "Positive rate",
+        "Average drawdown", "Worst drawdown", "False-signal rate",
+    )
+    report_rows = []
+    for _, row in summary.iterrows():
+        for metric in metric_cols:
+            report_rows.append({
+                "Series": f"{row['Model']} — {row['Signal']}",
+                "Evidence": metric,
+                "Sample size": row["Sample size"],
+                "Point estimate": row[metric],
+                "95% CI low": row[f"{metric} CI low"],
+                "95% CI high": row[f"{metric} CI high"],
+                "Reliability": (
+                    row["Reliable vs zero"]
+                    if metric == "Average return" else "Not assessed"
+                ),
+            })
 
+        if row["Model"] == "Composite":
+            for baseline in ("SOXL-only", "QQQ-relative"):
+                prefix = f"Spread vs {baseline}"
+                report_rows.append({
+                    "Series": f"Composite — {row['Signal']}",
+                    "Evidence": f"Average return spread vs {baseline}",
+                    "Sample size": row["Sample size"],
+                    "Point estimate": row[prefix],
+                    "95% CI low": row[f"{prefix} CI low"],
+                    "95% CI high": row[f"{prefix} CI high"],
+                    "Reliability": row[f"Reliable vs {baseline}"],
+                })
+    return report_rows
 def _norm_cdf(x):
     """Standard normal CDF using math.erf — no scipy dependency."""
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
@@ -1169,4 +1203,3 @@ def build_report_pdf(title, params, methodology, stats_rows, date_range=None):
 def safe_filename(title):
     keep = [c if c.isalnum() or c in "-_" else "_" for c in title]
     return "".join(keep).strip("_") or "backtest"
-

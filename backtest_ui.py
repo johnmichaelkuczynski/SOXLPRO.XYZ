@@ -17,6 +17,7 @@ from backtest_engine import (
     soxl_allocation_engine, simulate_allocation_engine, ALLOCATION_DEFAULTS,
     simulate_call_sleeve_engine, CALL_SLEEVE_DEFAULTS, compute_risk_metrics,
     walk_forward_signal_backtest, summarize_signal_backtest,
+    build_signal_reliability_report_rows,
 )
 from plotly.subplots import make_subplots
 from datetime import datetime as _dt2
@@ -1527,6 +1528,33 @@ def _daily_signal_study_tab():
                 "Spread vs QQQ-relative (95% CI)", "Reliable vs QQQ-relative",
             ]],
             hide_index=True, use_container_width=True,
+        )
+        methodology = (
+            "Strict walk-forward reconstruction: each signal uses only prices available "
+            "on that date. After three training years, settings are selected using outcomes "
+            "known at the training cutoff and frozen for the next 252 sessions. Returns are "
+            "close-to-close; drawdown is the worst close-to-close excursion during the "
+            f"selected {horizon} holding period. Dependence-aware 95% confidence intervals "
+            "use a circular moving-block bootstrap with 1,000 deterministic resamples. "
+            f"Blocks are at least the selected holding period ({horizon}) and otherwise use "
+            "the sample-size cube-root rule, preserving clusters from overlapping returns "
+            "and nearby market regimes. Composite-versus-baseline average-return spreads "
+            "are recomputed within each bootstrap resample on matched dates. Reliability is "
+            "positive or negative only when the full 95% interval excludes zero."
+        )
+        report_rows = build_signal_reliability_report_rows(view)
+        _render_download_buttons(
+            "Daily Signal Study reliability evidence",
+            params={
+                "selected_holding_period": horizon,
+                "confidence_level": "95%",
+                "bootstrap_resamples": "1,000 deterministic",
+                "bootstrap_block_sessions": int(view["Bootstrap block"].iloc[0]),
+            },
+            methodology=methodology,
+            stats_rows=report_rows,
+            date_range=(results.index.min().date(), results.index.max().date()),
+            key_suffix=f"_daily_signal_{horizon}",
         )
         st.markdown("##### Walk-forward calibration audit")
         st.dataframe(calibration, hide_index=True, use_container_width=True)

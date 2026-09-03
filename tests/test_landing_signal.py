@@ -16,7 +16,10 @@ from landing_signal import (
     signal_from_percentile,
 )
 from backtest_engine import (
-    classify_market_regimes, walk_forward_signal_backtest, summarize_signal_backtest,
+    build_signal_reliability_report_rows,
+    classify_market_regimes,
+    summarize_signal_backtest,
+    walk_forward_signal_backtest,
 )
 
 
@@ -174,6 +177,23 @@ class LandingSignalTests(unittest.TestCase):
         self.assertEqual(
             buy_5d["Reliable vs SOXL-only"], "Reliable positive"
         )
+
+        report_rows = build_signal_reliability_report_rows(
+            summary[summary["Holding period"] == "5d"]
+        )
+        average_return = next(
+            row for row in report_rows
+            if row["Series"] == "Composite — BUY"
+            and row["Evidence"] == "Average return"
+        )
+        spread = next(
+            row for row in report_rows
+            if row["Series"] == "Composite — BUY"
+            and row["Evidence"] == "Average return spread vs SOXL-only"
+        )
+        self.assertEqual(average_return["Reliability"], "Reliable positive")
+        self.assertIn("95% CI low", average_return)
+        self.assertEqual(spread["Reliability"], "Reliable positive")
 
     def test_market_regimes_use_trailing_data_only(self):
         index = pd.bdate_range("2018-01-02", periods=700)
