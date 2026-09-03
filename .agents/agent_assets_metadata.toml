@@ -299,3 +299,73 @@ type = "audio"
 title = "Corrected SOXL pronunciation segment 04"
 description = "Text-to-speech audio: Compare Ess Oh Ex Ell with built-in benchmarks, or enter another security supported by E O D H D. See relative performance without losing the actual price."
 logical_id = "fb4a163a-cbb6-4d86-b24b-1bc69d91b868"
+
+[[outputs]]
+id = "HR3r3hlYaXYdqL6CFl1XW"
+uri = "file://promo_assets_v4/voice_03.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 3"
+description = "Text-to-speech audio: But there is a solution. We call it trade-vesting."
+logical_id = "5c2f81e8-80af-49b9-8691-3ce29884fc2d"
+
+[[outputs]]
+id = "2hgwuNcQXD0UZAuq3XSuS"
+uri = "file://promo_assets_v4/voice_04.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 4"
+description = "Text-to-speech audio: Take a highly volatile, mean-reverting stock with deep roots in a stable and growing industry."
+logical_id = "7515e912-ffa3-4b1a-99dc-468858412b33"
+
+[[outputs]]
+id = "ztftJBkVjqbznBxpCl9Xb"
+uri = "file://promo_assets_v4/voice_05.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 5"
+description = "Text-to-speech audio: Then use call options to amplify gains. Of course, you have to be directionally correct."
+logical_id = "ad63a04c-049b-42a7-86d5-1ebe82fd9c58"
+
+[[outputs]]
+id = "NbIY2KYQKz6J8mHLGMk_u"
+uri = "file://promo_assets_v4/voice_07.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 7"
+description = "Text-to-speech audio: We have solved this problem for one security. Let us show you how at: Ess Oh Ex Ell dot Ex Why Zee."
+logical_id = "e4395463-89f1-4773-8fef-d7353c565f98"
+
+[[outputs]]
+id = "ePuKCKKdzgucH5GEKmZM-"
+uri = "file://promo_assets_v4/voice_01.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 1"
+description = "Text-to-speech audio: Traders only make real money when they have inside information, which you don't."
+logical_id = "0ca2c68b-67f9-42e1-a921-2de66776bc23"
+
+[[outputs]]
+id = "xZy0MQiLiBq0gvFY_T-Sq"
+uri = "file://promo_assets_v4/voice_02.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 2"
+description = "Text-to-speech audio: Investors only make money if you have money."
+logical_id = "6a5b32f5-e99e-4860-ab65-daaa2045d369"
+
+[[outputs]]
+id = "vBjKV4l6ef23z5xbNltMb"
+uri = "file://promo_assets_v4/voice_06.mp3"
+type = "audio"
+title = "Trade-vesting promo narration 6"
+description = "Text-to-speech audio: And you can only buy in when you have an ambiguous buy signal."
+logical_id = "8d04b6cc-d7e5-4cb4-843d-5e33c5eff756"
+
+[[outputs]]
+id = "bIsHeFMGjXQnJBkC-YB5t"
+uri = "file://promo_assets_v4/SOXL_Trade_Vesting_Promo.mp4"
+type = "video"
+title = "SOXL Trade-Vesting Promo"
+description = "A completely new 36-second 16:9 promotional video in 720p, using the supplied script and the pronunciation Ess Oh Ex Ell dot Ex Why Zee."
+logical_id = "d6ca9a30-07a2-496a-919b-e92dfe8abdef"
+content_hash = "sha256:b3fe11d5b3fffa73182ba8370abdc8d7d13d4554578db41bec5aeb2d6f238df3"
+size = 3469944
+mtime_ms = 1788456073717
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/d6ca9a30-07a2-496a-919b-e92dfe8abdef/695aa1e5-9e88-4529-8749-80b0a239b4e5"
+storage_version_token = "1788456097476924"
+content_type = "video/mp4"
