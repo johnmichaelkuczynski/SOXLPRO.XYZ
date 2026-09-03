@@ -266,7 +266,7 @@ with col_title:
 with col_contact:
     st.link_button(
         "Contact Us",
-        "mailto:zhi@zhisystems.org",
+        "mailto:contact@zhisystems.ai",
         width="stretch",
     )
 with col_refresh:
@@ -1746,7 +1746,7 @@ with tab_diag:
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding:24px 0; "
     "border-top:1px solid #d1d5db; font-size:16px;'>"
-    "<a href='mailto:zhi@zhisystems.org' "
+    "<a href='mailto:contact@zhisystems.ai' "
     "style='display:inline-block; color:#ffffff; background:#2563eb; "
     "font-weight:700; text-decoration:none; padding:10px 22px; "
     "border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.18);'>Contact Us</a>"
