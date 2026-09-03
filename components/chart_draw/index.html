@@ -35,7 +35,8 @@
      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
    }
-  #chart-container { position: relative; width: 100%; }
+  #chart-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; }
+  #chart-container { position: relative; width: 100%; min-width: 100%; }
   #chart { width: 100%; }
   #select-overlay {
     display: none;
@@ -54,6 +55,14 @@
     display: none;
     pointer-events: none;
   }
+  #trend-tooltip {
+    display: none; position: absolute; z-index: 120; pointer-events: none;
+    min-width: 235px; padding: 10px 12px; border-radius: 8px;
+    color: #f8fafc; background: rgba(15, 23, 42, 0.96);
+    box-shadow: 0 5px 18px rgba(15, 23, 42, 0.28);
+    font-size: 13px; line-height: 1.45;
+  }
+  #trend-tooltip strong { display: block; color: #fff; margin-bottom: 3px; }
   #analyze-bar {
     display: none;
     padding: 10px 12px; margin: 6px 2px;
@@ -105,14 +114,22 @@
     <input id="heightSlider" type="range" min="520" max="1400" step="40" value="900" oninput="setChartHeight(this.value)">
     <span id="heightValue">900 px</span>
   </label>
+  <label class="height-control" for="widthSlider">
+    Chart width
+    <input id="widthSlider" type="range" min="100" max="300" step="10" value="100" oninput="setChartWidth(this.value)">
+    <span id="widthValue">100%</span>
+  </label>
   <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
-  <span id="status">Drag left/right to scroll &#8226; Scroll wheel to zoom</span>
+  <span id="status">Drag to scroll &#8226; Wheel to zoom &#8226; Hover trend lines for projected date and price</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
-<div id="chart-container">
-  <div id="chart"></div>
-  <div id="select-overlay" aria-hidden="true"></div>
-  <div id="select-highlight"></div>
+<div id="chart-scroll">
+  <div id="chart-container">
+    <div id="chart"></div>
+    <div id="select-overlay" aria-hidden="true"></div>
+    <div id="select-highlight"></div>
+    <div id="trend-tooltip" role="tooltip"></div>
+  </div>
 </div>
 <div id="keyboard-selection" aria-labelledby="keyboard-selection-heading">
   <span id="keyboard-selection-heading">Keyboard period selection</span>
@@ -134,8 +151,10 @@
 <script>
 var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
 var chartDiv = document.getElementById('chart');
+var chartContainer = document.getElementById('chart-container');
 var selectOverlay = document.getElementById('select-overlay');
 var selectHighlight = document.getElementById('select-highlight');
+var trendTooltip = document.getElementById('trend-tooltip');
 var currentMode = 'pan';
 var lines = [];
 var chartData = null;
@@ -143,6 +162,8 @@ var rendered = false;
 var knownShapeCount = 0;
 var scaleMode = 'log';
 var currentChartHeight = 900;
+var currentChartWidth = 100;
+var plotlyEventsBound = false;
 
 var selecting = false;
 var selectStartX = 0;
@@ -249,7 +270,7 @@ function setMode(mode) {
     clearSelection();
   }
 
-  var statusText = 'Drag left/right to scroll \u2022 Scroll wheel to zoom \u2022 Double-click a line to delete it';
+  var statusText = 'Drag to scroll \u2022 Wheel to zoom \u2022 Hover trend lines for projected date and price \u2022 Double-click a line to delete it';
   if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line \u2022 Double-click a line to delete it';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
   document.getElementById('status').textContent = statusText;
@@ -311,10 +332,7 @@ function setScale(mode) {
   linearBtn.classList.toggle('active', mode === 'linear');
   logBtn.setAttribute('aria-pressed', mode === 'log' ? 'true' : 'false');
   linearBtn.setAttribute('aria-pressed', mode === 'linear' ? 'true' : 'false');
-  Plotly.relayout(chartDiv, {
-    'yaxis.type': mode,
-    'yaxis.range': yAxisRange()
-  });
+  renderChart();
   announce((mode === 'log' ? 'Logarithmic' : 'Linear') + ' price scale selected.');
 }
 
@@ -325,6 +343,24 @@ function setChartHeight(value) {
     setFrameHeight(document.body.scrollHeight + 20);
   });
 }
+
+function setChartWidth(value) {
+  currentChartWidth = Math.max(100, Math.min(300, Number(value) || 100));
+  var scroll = document.getElementById('chart-scroll');
+  var container = document.getElementById('chart-container');
+  var width = Math.round(scroll.clientWidth * currentChartWidth / 100);
+  document.getElementById('widthValue').textContent = currentChartWidth + '%';
+  container.style.width = currentChartWidth + '%';
+  Plotly.relayout(chartDiv, {width: width}).then(function() {
+    setFrameHeight(document.body.scrollHeight + 20);
+  });
+  announce('Chart width set to ' + currentChartWidth + ' percent. Scroll horizontally to inspect the full chart.');
+}
+
+window.addEventListener('resize', function() {
+  if (!chartData) return;
+  setChartWidth(currentChartWidth);
+});
 
 function resetView() {
   if (!chartData) return;
@@ -395,6 +431,118 @@ function msToDateStr(ms) {
   var d = new Date(ms);
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+
+function trendPoints(startMs, endMs, startY, transformedSlope) {
+  var span = endMs - startMs;
+  var pointCount = Math.min(
+    500,
+    Math.max(2, Math.ceil(Math.abs(span) / (14 * 86400000)) + 1)
+  );
+  var dates = [];
+  var prices = [];
+  for (var point = 0; point < pointCount; point++) {
+    var fraction = point / (pointCount - 1);
+    var timestamp = startMs + span * fraction;
+    var startTransformed = scaleMode === 'log' ? Math.log10(startY) : startY;
+    var transformedPrice = startTransformed + transformedSlope * (timestamp - startMs);
+    var price = scaleMode === 'log' ? Math.pow(10, transformedPrice) : transformedPrice;
+    if (price > 0 && Number.isFinite(price)) {
+      dates.push(new Date(timestamp));
+      prices.push(price);
+    }
+  }
+  return {dates: dates, prices: prices};
+}
+
+function formatProjectedDate(timestamp) {
+  return new Date(timestamp).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric'
+  });
+}
+
+function lineTimestamp(line, point) {
+  var milliseconds = line['x' + point + '_ms'];
+  if (Number.isFinite(milliseconds)) return milliseconds;
+  return new Date(line['x' + point]).getTime();
+}
+
+function inspectTrendLine(event) {
+  if (currentMode === 'select' || lines.length === 0) {
+    trendTooltip.style.display = 'none';
+    return;
+  }
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis || !layout.yaxis || !layout._size) return;
+  var plotArea = layout._size;
+  var chartRect = chartDiv.getBoundingClientRect();
+  var mouseX = event.clientX - chartRect.left;
+  var mouseY = event.clientY - chartRect.top;
+  if (
+    mouseX < plotArea.l || mouseX > plotArea.l + plotArea.w ||
+    mouseY < plotArea.t || mouseY > plotArea.t + plotArea.h
+  ) {
+    trendTooltip.style.display = 'none';
+    return;
+  }
+
+  var xRange = layout.xaxis.range;
+  var x0 = typeof xRange[0] === 'string' ? new Date(xRange[0]).getTime() : xRange[0];
+  var x1 = typeof xRange[1] === 'string' ? new Date(xRange[1]).getTime() : xRange[1];
+  var xFraction = (mouseX - plotArea.l) / plotArea.w;
+  var timestamp = x0 + xFraction * (x1 - x0);
+  var yRange = layout.yaxis.range;
+  var ySpan = yRange[1] - yRange[0];
+  var futureMs = new Date(chartData.future_end).getTime();
+  var nearest = null;
+
+  for (var index = 0; index < lines.length; index++) {
+    var line = lines[index];
+    var lineStart = lineTimestamp(line, 1);
+    var lineEnd = lineTimestamp(line, 2);
+    var lineSpan = lineEnd - lineStart;
+    if (!lineSpan || line.y1 <= 0 || line.y2 <= 0) continue;
+    var earliest = Math.min(lineStart, lineEnd) - 63072000000;
+    if (timestamp < earliest || timestamp > futureMs) continue;
+
+    var transformedStart = scaleMode === 'log' ? Math.log10(line.y1) : line.y1;
+    var transformedEnd = scaleMode === 'log' ? Math.log10(line.y2) : line.y2;
+    var slope = (transformedEnd - transformedStart) / lineSpan;
+    var transformedPrice = transformedStart + slope * (timestamp - lineStart);
+    var price = scaleMode === 'log' ? Math.pow(10, transformedPrice) : transformedPrice;
+    if (!Number.isFinite(price) || price <= 0) continue;
+
+    var yFraction = (transformedPrice - yRange[0]) / ySpan;
+    var projectedY = plotArea.t + (1 - yFraction) * plotArea.h;
+    var distance = Math.abs(mouseY - projectedY);
+    if (!nearest || distance < nearest.distance) {
+      nearest = {index: index, price: price, distance: distance};
+    }
+  }
+
+  if (!nearest) {
+    trendTooltip.style.display = 'none';
+    return;
+  }
+
+  trendTooltip.innerHTML =
+    '<strong>Trend line ' + (nearest.index + 1) + ' projection</strong>' +
+    '<div>Projected date: ' + formatProjectedDate(timestamp) + '</div>' +
+    '<div>Projected SOXL price: $' + nearest.price.toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    }) + '</div>';
+  trendTooltip.style.display = 'block';
+  var tooltipWidth = 255;
+  var left = Math.min(mouseX + 16, chartRect.width - tooltipWidth - 8);
+  var top = mouseY > 100 ? mouseY - 88 : mouseY + 18;
+  trendTooltip.style.left = Math.max(8, left) + 'px';
+  trendTooltip.style.top = Math.max(8, top) + 'px';
+}
+
+chartContainer.addEventListener('pointermove', inspectTrendLine, true);
+chartContainer.addEventListener('mousemove', inspectTrendLine, true);
+chartContainer.addEventListener('mouseleave', function() {
+  trendTooltip.style.display = 'none';
+});
 
 function pxToDate(px) {
   var layout = chartDiv._fullLayout;
@@ -533,8 +681,8 @@ chartDiv.addEventListener('dblclick', function(e) {
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
     if (!ln.y1 || !ln.y2 || ln.y1 <= 0 || ln.y2 <= 0) continue;
-    var lx1 = ln.x1_ms, ly1 = scaleMode === 'log' ? Math.log10(ln.y1) : ln.y1;
-    var lx2 = ln.x2_ms, ly2 = scaleMode === 'log' ? Math.log10(ln.y2) : ln.y2;
+    var lx1 = lineTimestamp(ln, 1), ly1 = scaleMode === 'log' ? Math.log10(ln.y1) : ln.y1;
+    var lx2 = lineTimestamp(ln, 2), ly2 = scaleMode === 'log' ? Math.log10(ln.y2) : ln.y2;
     var dt = lx2 - lx1;
     if (dt === 0) continue;
     var slope = (ly2 - ly1) / dt;
@@ -556,7 +704,7 @@ chartDiv.addEventListener('dblclick', function(e) {
   }
 }, true);
 
-chartDiv.addEventListener('plotly_relayout', function(eventData) {
+function handlePlotlyRelayout(eventData) {
   if (currentMode !== 'draw' || !eventData) return;
 
   var hasShapeKey = false;
@@ -579,13 +727,8 @@ chartDiv.addEventListener('plotly_relayout', function(eventData) {
   var y0 = lastShape.y0;
   var y1 = lastShape.y1;
 
-  if (chartDiv.layout.yaxis && chartDiv.layout.yaxis.type === 'log') {
-    y0 = Math.pow(10, y0);
-    y1 = Math.pow(10, y1);
-  }
-
   if (Math.abs(x1_ms - x0_ms) < 86400000) return;
-  if (y0 <= 0 || y1 <= 0) return;
+  if (!Number.isFinite(y0) || !Number.isFinite(y1) || y0 <= 0 || y1 <= 0) return;
 
   lines.push({
     x1_ms: x0_ms, y1: y0,
@@ -597,7 +740,7 @@ chartDiv.addEventListener('plotly_relayout', function(eventData) {
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
-});
+}
 
 function renderChart() {
   if (!chartData) return;
@@ -733,13 +876,17 @@ function renderChart() {
     var transformedY2 = scaleMode === 'log' ? Math.log10(y2) : y2;
     var transformedSlope = (transformedY2 - transformedY1) / dt;
     var color = COLORS[i % COLORS.length];
+    var segmentStart = Math.min(x1, x2);
+    var segmentEnd = Math.max(x1, x2);
+    var segmentStartY = segmentStart === x1 ? y1 : y2;
+    var segment = trendPoints(segmentStart, segmentEnd, segmentStartY, transformedSlope);
 
     traces.push({
-      x: [new Date(x1), new Date(x2)], y: [y1, y2],
+      x: segment.dates, y: segment.prices,
       mode: 'lines+markers', showlegend: false,
       line: {color: color, width: 2.5},
-      marker: {size: 6, color: color},
-      hovertemplate: 'Line ' + (i+1) + '<br>%{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+      marker: {size: 14, color: 'rgba(0,0,0,0)'},
+      hovertemplate: '<b>Trend line ' + (i+1) + '</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<extra></extra>'
     });
 
     var fwdEnd = Math.max(x1, x2);
@@ -748,12 +895,14 @@ function renderChart() {
     var fwdTransformedY = fwdStart + transformedSlope * (futureMs - fwdEnd);
     var fwdY = scaleMode === 'log' ? Math.pow(10, fwdTransformedY) : fwdTransformedY;
     if (fwdY > 0 && Number.isFinite(fwdY) && (scaleMode !== 'log' || (fwdTransformedY > -3 && fwdTransformedY < 6))) {
+      var forward = trendPoints(fwdEnd, futureMs, fwdY0, transformedSlope);
       traces.push({
-        x: [new Date(fwdEnd), new Date(futureMs)],
-        y: [fwdY0, fwdY],
-        mode: 'lines', showlegend: false,
+        x: forward.dates,
+        y: forward.prices,
+        mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
-        hoverinfo: 'skip'
+        marker: {size: 14, color: 'rgba(0,0,0,0)'},
+        hovertemplate: '<b>Trend line ' + (i+1) + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<extra></extra>'
       });
     }
 
@@ -764,12 +913,14 @@ function renderChart() {
     var backTransformedY = backStart + transformedSlope * (backMs - backEnd);
     var backY = scaleMode === 'log' ? Math.pow(10, backTransformedY) : backTransformedY;
     if (backY > 0 && Number.isFinite(backY) && (scaleMode !== 'log' || (backTransformedY > -3 && backTransformedY < 6))) {
+      var backward = trendPoints(backMs, backEnd, backY, transformedSlope);
       traces.push({
-        x: [new Date(backMs), new Date(backEnd)],
-        y: [backY, backY0],
-        mode: 'lines', showlegend: false,
+        x: backward.dates,
+        y: backward.prices,
+        mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
-        hoverinfo: 'skip'
+        marker: {size: 14, color: 'rgba(0,0,0,0)'},
+        hovertemplate: '<b>Trend line ' + (i+1) + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<extra></extra>'
       });
     }
   }
@@ -806,11 +957,13 @@ function renderChart() {
       fixedrange: false
     },
     template: 'plotly_white',
+    width: Math.round(document.getElementById('chart-scroll').clientWidth * currentChartWidth / 100),
     height: currentChartHeight,
     margin: {l: 65, r: 20, t: 10, b: 40},
     showlegend: hasOverlay,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
-    hovermode: 'x unified',
+    hovermode: 'closest',
+    hoverdistance: 20,
     dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
     newshape: {
       line: { color: '#888', width: 2 }
@@ -828,7 +981,12 @@ function renderChart() {
     modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape']
   };
 
-  Plotly.react(chartDiv, traces, layout, config);
+  Plotly.react(chartDiv, traces, layout, config).then(function() {
+    if (!plotlyEventsBound && typeof chartDiv.on === 'function') {
+      chartDiv.on('plotly_relayout', handlePlotlyRelayout);
+      plotlyEventsBound = true;
+    }
+  });
   knownShapeCount = 0;
   document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
 }
