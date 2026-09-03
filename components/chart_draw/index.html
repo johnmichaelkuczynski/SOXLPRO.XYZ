@@ -152,6 +152,7 @@
 var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
 var chartDiv = document.getElementById('chart');
 var chartContainer = document.getElementById('chart-container');
+var chartScroll = document.getElementById('chart-scroll');
 var selectOverlay = document.getElementById('select-overlay');
 var selectHighlight = document.getElementById('select-highlight');
 var trendTooltip = document.getElementById('trend-tooltip');
@@ -531,10 +532,16 @@ function inspectTrendLine(event) {
       minimumFractionDigits: 2, maximumFractionDigits: 2
     }) + '</div>';
   trendTooltip.style.display = 'block';
-  var tooltipWidth = 255;
-  var left = Math.min(mouseX + 16, chartRect.width - tooltipWidth - 8);
+  var tooltipWidth = trendTooltip.offsetWidth || 270;
+  var visibleLeft = chartScroll.scrollLeft;
+  var visibleRight = visibleLeft + chartScroll.clientWidth;
+  var left = mouseX + 16;
+  if (left + tooltipWidth > visibleRight - 8) {
+    left = mouseX - tooltipWidth - 16;
+  }
+  left = Math.max(visibleLeft + 8, Math.min(left, visibleRight - tooltipWidth - 8));
   var top = mouseY > 100 ? mouseY - 88 : mouseY + 18;
-  trendTooltip.style.left = Math.max(8, left) + 'px';
+  trendTooltip.style.left = left + 'px';
   trendTooltip.style.top = Math.max(8, top) + 'px';
 }
 
