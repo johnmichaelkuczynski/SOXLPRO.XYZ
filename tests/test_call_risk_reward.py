@@ -66,6 +66,10 @@ def _sample_chain():
 
 
 class CallRiskRewardTests(unittest.TestCase):
+    def test_non_finite_spot_returns_no_metrics(self):
+        raw = _sample_chain()
+        self.assertTrue(prepare_call_metrics(raw, np.nan).empty)
+
     def test_heatmap_row_puts_strike_first_and_labels_it(self):
         row = pd.Series({
             "risk_score": 68.4,

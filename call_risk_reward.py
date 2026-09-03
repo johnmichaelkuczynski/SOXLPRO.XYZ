@@ -112,7 +112,7 @@ def prepare_call_metrics(raw_chain, spot, scenarios=DEFAULT_SCENARIOS):
     is expiration value minus today's ask premium, with no early sale or IV
     assumption hidden in the result.
     """
-    if raw_chain is None or raw_chain.empty or spot <= 0:
+    if raw_chain is None or raw_chain.empty or not np.isfinite(spot) or spot <= 0:
         return pd.DataFrame()
 
     calls = raw_chain[raw_chain["kind"] == "c"].copy()

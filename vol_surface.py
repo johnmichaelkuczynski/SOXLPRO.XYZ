@@ -262,6 +262,9 @@ def fit_per_expiry_spline(df):
 
 
 def filter_local_outliers(df, k=5, lo=0.5, hi=2.0):
+    required = ["moneyness", "dte", "iv"]
+    finite_mask = np.isfinite(df[required].to_numpy(dtype=float)).all(axis=1)
+    df = df.loc[finite_mask].copy()
     if len(df) < k + 1:
         return df
     money_scale = 0.05

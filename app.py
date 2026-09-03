@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from chart_payload import clean_chart_points, normalize_overlay
 from strategy_builder import generate_strategy, parse_strategy_json, render_strategy_html, STRATEGY_CSS
 from vol_surface import render_vol_surface_tab
 from call_risk_reward import render_call_risk_reward_tab
@@ -475,25 +476,7 @@ with tab_chart:
             st.rerun()
 
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
-    dates_list = [d.strftime("%Y-%m-%d") for d in data.index]
-    prices_list = data["Close"].tolist()
-
-    def normalize_overlay(soxl_df, overlay_df):
-        """Rescale an overlay series to SOXL's price at their first common
-        date so relative performance is comparable on one axis. Returns
-        (dates, scaled_prices, actual_prices)."""
-        common_idx = soxl_df.index.intersection(overlay_df.index)
-        actual = overlay_df["Close"].tolist()
-        dates = [d.strftime("%Y-%m-%d") for d in overlay_df.index]
-        if len(common_idx) == 0:
-            return dates, actual, actual
-        first_common = common_idx[0]
-        soxl_start = float(soxl_df.loc[first_common, "Close"])
-        ov_start = float(overlay_df.loc[first_common, "Close"])
-        if not (np.isfinite(soxl_start) and np.isfinite(ov_start)) or soxl_start <= 0 or ov_start <= 0:
-            return dates, actual, actual
-        scale = soxl_start / ov_start
-        return dates, [p * scale for p in actual], actual
+    dates_list, prices_list = clean_chart_points(data.index, data["Close"])
 
     qqq_dates_list = []
     qqq_prices_list = []
