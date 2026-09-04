@@ -56,10 +56,12 @@ deps (playwright pip + chromium & its xorg/gtk nix libs) — none are needed at 
 motion, app screenshots, and confident voiceover works well for SOXL Pro; music is optional.
 
 In narration, pronounce SOXL as the individual letters “Ess Oh Ex Ell,” never as a word.
+Keep phonetic spelling in the TTS script only—never print a pronunciation guide onscreen.
 
 **Why:** The user explicitly confirmed this probability-not-guesswork treatment was
 “excellent” and “perfect.”
 
 **How to apply:** Reuse this visual and editorial direction for future SOXL Pro promos
 unless the user requests a different style or platform format. Spell the ticker
-phonetically in every text-to-speech script.
+phonetically in every text-to-speech script, while displaying only the public URL
+SOXLPRO.XYZ in the finished visual.
