@@ -9,24 +9,29 @@
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; position: relative; }
   #toolbar {
     display: flex; position: absolute; z-index: 300; right: 12px; top: 12px;
-    width: 214px; gap: 7px; align-items: stretch; padding: 10px;
+    width: 250px; gap: 7px; align-items: stretch; padding: 10px;
     flex-direction: column; background: rgba(248,250,252,0.97);
     border: 2px solid #475569; border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow: auto;
-    resize: both; min-width: 180px; max-width: 420px; min-height: 220px;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow-y: auto; overflow-x: hidden;
+    resize: none; min-width: 220px; max-width: 420px; min-height: 220px;
+    scrollbar-gutter: stable;
   }
-  #toolbar::after {
-    content: "RESIZE";
-    position: sticky; display: block; bottom: 0; margin: 2px -4px -5px auto;
-    width: max-content; padding: 2px 4px; color: #475569; background: #e2e8f0;
-    border-radius: 3px; font-size: 9px; font-weight: 900; pointer-events: none;
+  .rail-resize-handle { position: absolute; z-index: 320; background: rgba(21,101,192,0.24); }
+  .rail-resize-handle:hover { background: rgba(21,101,192,0.68); }
+  .rail-resize-n, .rail-resize-s { height: 10px; cursor: ns-resize; }
+  .rail-resize-e, .rail-resize-w { width: 10px; cursor: ew-resize; }
+  .rail-resize-ne, .rail-resize-nw, .rail-resize-se, .rail-resize-sw {
+    width: 16px; height: 16px; border: 2px solid #fff; background: #1565C0;
   }
+  .rail-resize-ne, .rail-resize-sw { cursor: nesw-resize; }
+  .rail-resize-nw, .rail-resize-se { cursor: nwse-resize; }
   #rail-handle {
-    display: flex; align-items: center; justify-content: space-between; gap: 5px;
+    display: flex; position: sticky; z-index: 20; top: -10px;
+    align-items: center; justify-content: space-between; gap: 4px; flex-shrink: 0;
     margin: -10px -10px 1px; padding: 8px 9px; color: #fff; background: #334155;
     border-radius: 8px 8px 0 0; cursor: move; user-select: none; touch-action: none;
   }
-  #rail-handle strong { font-size: 12px; letter-spacing: 0.03em; }
+  #rail-handle strong { font-size: 11px; letter-spacing: 0.03em; white-space: nowrap; }
   .rail-move-btn {
     border: 1px solid #94a3b8; border-radius: 4px; background: #fff; color: #0f172a;
     cursor: pointer; padding: 3px 6px; font-weight: 900; line-height: 1;
@@ -35,6 +40,13 @@
     display: none; position: absolute; z-index: 301; right: 8px; top: 12px;
     border: 2px solid #334155; border-radius: 7px; background: #fff; color: #0f172a;
     padding: 8px 10px; font-weight: 900; cursor: pointer;
+  }
+  #panel-parking-area {
+    position: relative; height: 520px; margin-top: 12px;
+    border: 2px dashed #94a3b8; border-radius: 10px;
+    background: rgba(226,232,240,0.35); color: #64748b;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 18px; font-size: 13px; font-weight: 800;
   }
   .tbtn {
     padding: 7px 18px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;
@@ -169,8 +181,9 @@
 <div id="toolbar">
   <div id="rail-handle">
     <button class="rail-move-btn" onclick="dockControlRail('left', event)" title="Dock controls left">&#8592;</button>
-    <strong>DRAG TO MOVE • RESIZE CORNER</strong>
+    <strong>MOVE PANEL • RESIZE ANY EDGE</strong>
     <button class="rail-move-btn" onclick="dockControlRail('right', event)" title="Dock controls right">&#8594;</button>
+    <button class="rail-move-btn" onclick="parkControlRail(event)" title="Move controls below chart">&#8595;</button>
     <button class="rail-move-btn" onclick="collapseControlRail(event)" title="Collapse controls">&#8722;</button>
   </div>
   <strong style="text-align:center;color:#0f172a;">CHART CONTROLS</strong>
@@ -225,6 +238,16 @@
     <button class="analyze-clear" onclick="clearSelection()">&#10005; Clear</button>
   </div>
 </div>
+<div id="rail-resize-handles" aria-hidden="true">
+  <div class="rail-resize-handle rail-resize-n" data-direction="n"></div>
+  <div class="rail-resize-handle rail-resize-s" data-direction="s"></div>
+  <div class="rail-resize-handle rail-resize-e" data-direction="e"></div>
+  <div class="rail-resize-handle rail-resize-w" data-direction="w"></div>
+  <div class="rail-resize-handle rail-resize-ne" data-direction="ne"></div>
+  <div class="rail-resize-handle rail-resize-nw" data-direction="nw"></div>
+  <div class="rail-resize-handle rail-resize-se" data-direction="se"></div>
+  <div class="rail-resize-handle rail-resize-sw" data-direction="sw"></div>
+</div>
 <div id="chart-scroll">
   <div id="chart-container">
     <div id="chart"></div>
@@ -249,6 +272,7 @@
   </div>
 </div>
 <div id="line-list"></div>
+<div id="panel-parking-area">CONTROL PANEL PARKING AREA — DRAG THE PANEL HERE</div>
 
 <script>
 var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
@@ -276,6 +300,7 @@ var contextLineIndex = -1;
 var toolbarEl = document.getElementById('toolbar');
 var railDock = 'right';
 var railFreeLeft = null;
+var railFreeTop = null;
 var railTopOffset = 0;
 var railCollapsed = false;
 
@@ -296,7 +321,20 @@ function positionRightControlRail() {
   var bounds = visibleRailBounds();
   var availableHeight = bounds.bottom - bounds.top;
   var railHeight = Math.min(toolbarEl.scrollHeight, availableHeight);
-  var top = Math.max(bounds.top, Math.min(bounds.top + railTopOffset, bounds.bottom - railHeight));
+  var top;
+  if (railDock === 'free' || railDock === 'bottom') {
+    var parkingArea = document.getElementById('panel-parking-area');
+    var requiredParkingHeight = toolbarEl.offsetHeight + 60;
+    if (parkingArea.offsetHeight < requiredParkingHeight) {
+      parkingArea.style.height = requiredParkingHeight + 'px';
+    }
+    var documentBottom = parkingArea.offsetTop + parkingArea.offsetHeight;
+    railFreeTop = Math.max(8, Math.min(railFreeTop || 8, documentBottom - toolbarEl.offsetHeight - 8));
+    top = railFreeTop;
+    availableHeight = Math.max(220, documentBottom - top - 8);
+  } else {
+    top = Math.max(bounds.top, Math.min(bounds.top + railTopOffset, bounds.bottom - railHeight));
+  }
   toolbarEl.style.top = top + 'px';
   toolbarEl.style.maxHeight = Math.max(180, availableHeight) + 'px';
   if (railDock === 'left') {
@@ -321,19 +359,81 @@ function positionRightControlRail() {
     tab.style.left = 'auto';
     tab.style.right = '8px';
   }
+  positionRailResizeHandles();
+}
+
+function positionRailResizeHandles() {
+  var handles = document.getElementById('rail-resize-handles');
+  if (railCollapsed || toolbarEl.style.display === 'none') {
+    handles.style.display = 'none';
+    return;
+  }
+  handles.style.display = 'block';
+  var rect = toolbarEl.getBoundingClientRect();
+  var positions = {
+    n:  {left: rect.left + 14, top: rect.top - 5, width: rect.width - 28, height: 10},
+    s:  {left: rect.left + 14, top: rect.bottom - 5, width: rect.width - 28, height: 10},
+    e:  {left: rect.right - 5, top: rect.top + 14, width: 10, height: rect.height - 28},
+    w:  {left: rect.left - 5, top: rect.top + 14, width: 10, height: rect.height - 28},
+    ne: {left: rect.right - 8, top: rect.top - 8, width: 16, height: 16},
+    nw: {left: rect.left - 8, top: rect.top - 8, width: 16, height: 16},
+    se: {left: rect.right - 8, top: rect.bottom - 8, width: 16, height: 16},
+    sw: {left: rect.left - 8, top: rect.bottom - 8, width: 16, height: 16}
+  };
+  Object.keys(positions).forEach(function(direction) {
+    var handle = handles.querySelector('[data-direction="' + direction + '"]');
+    var box = positions[direction];
+    handle.style.left = box.left + 'px';
+    handle.style.top = box.top + 'px';
+    handle.style.width = Math.max(10, box.width) + 'px';
+    handle.style.height = Math.max(10, box.height) + 'px';
+  });
 }
 
 function dockControlRail(side, event) {
   if (event) event.stopPropagation();
+  if (railCollapsed) showControlRail();
   railDock = side;
+  railFreeTop = null;
   railTopOffset = 0;
   positionRightControlRail();
+}
+
+function parkControlRail(event) {
+  if (event) event.stopPropagation();
+  if (railCollapsed) showControlRail();
+  var parkingArea = document.getElementById('panel-parking-area');
+  railDock = 'bottom';
+  railFreeLeft = Math.max(12, document.documentElement.clientWidth - toolbarEl.offsetWidth - 24);
+  railFreeTop = parkingArea.offsetTop + 18;
+  positionRightControlRail();
+  setFrameHeight(document.body.scrollHeight + 20);
+  try {
+    if (window.frameElement && window.parent) {
+      var frameRect = window.frameElement.getBoundingClientRect();
+      window.parent.scrollBy({top: frameRect.top + railFreeTop - 80, behavior: 'smooth'});
+    }
+  } catch (error) {}
+}
+
+function resetControlRailSize(event) {
+  if (event) event.stopPropagation();
+  if (railCollapsed) showControlRail();
+  toolbarEl.style.width = '250px';
+  toolbarEl.style.height = 'auto';
+  railDock = 'right';
+  railFreeLeft = null;
+  railFreeTop = null;
+  railTopOffset = 54;
+  positionRightControlRail();
+  announce('Chart controls restored to normal size on the right.');
 }
 
 function collapseControlRail(event) {
   if (event) event.stopPropagation();
   railCollapsed = true;
   toolbarEl.style.display = 'none';
+  document.getElementById('rail-resize-handles').style.display = 'none';
   document.getElementById('rail-collapsed-tab').style.display = 'block';
   positionRightControlRail();
 }
@@ -351,13 +451,19 @@ document.getElementById('rail-handle').addEventListener('pointerdown', function(
   var startX = event.clientX;
   var startY = event.clientY;
   var startRect = toolbarEl.getBoundingClientRect();
-  var boundsAtStart = visibleRailBounds();
 
   function moveRail(moveEvent) {
     railDock = 'free';
     railFreeLeft = startRect.left + moveEvent.clientX - startX;
-    railTopOffset = startRect.top + moveEvent.clientY - startY - boundsAtStart.top;
+    railFreeTop = startRect.top + moveEvent.clientY - startY;
     positionRightControlRail();
+    try {
+      if (window.parent && window.frameElement) {
+        var pointerInParent = window.frameElement.getBoundingClientRect().top + moveEvent.clientY;
+        if (pointerInParent > window.parent.innerHeight - 45) window.parent.scrollBy(0, 24);
+        if (pointerInParent < 45) window.parent.scrollBy(0, -24);
+      }
+    } catch (error) {}
   }
   function stopMoving() {
     document.removeEventListener('pointermove', moveRail);
@@ -365,6 +471,55 @@ document.getElementById('rail-handle').addEventListener('pointerdown', function(
   }
   document.addEventListener('pointermove', moveRail);
   document.addEventListener('pointerup', stopMoving);
+});
+
+document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
+  handle.addEventListener('pointerdown', function(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    var direction = handle.dataset.direction;
+    var startX = event.clientX;
+    var startY = event.clientY;
+    var startRect = toolbarEl.getBoundingClientRect();
+    railDock = 'free';
+    railFreeLeft = startRect.left;
+    railFreeTop = startRect.top;
+
+    function resizeRail(moveEvent) {
+      var dx = moveEvent.clientX - startX;
+      var dy = moveEvent.clientY - startY;
+      var width = startRect.width;
+      var height = startRect.height;
+      var left = startRect.left;
+      var top = startRect.top;
+
+      if (direction.indexOf('e') !== -1) width = Math.max(220, Math.min(420, startRect.width + dx));
+      if (direction.indexOf('w') !== -1) {
+        width = Math.max(220, Math.min(420, startRect.width - dx));
+        left = startRect.right - width;
+      }
+      if (direction.indexOf('s') !== -1) height = Math.max(220, startRect.height + dy);
+      if (direction.indexOf('n') !== -1) {
+        height = Math.max(220, startRect.height - dy);
+        top = startRect.bottom - height;
+      }
+
+      left = Math.max(8, Math.min(left, document.documentElement.clientWidth - width - 8));
+      top = Math.max(8, top);
+      railFreeLeft = left;
+      railFreeTop = top;
+      toolbarEl.style.width = width + 'px';
+      toolbarEl.style.height = height + 'px';
+      positionRightControlRail();
+    }
+
+    function stopResizing() {
+      document.removeEventListener('pointermove', resizeRail);
+      document.removeEventListener('pointerup', stopResizing);
+    }
+    document.addEventListener('pointermove', resizeRail);
+    document.addEventListener('pointerup', stopResizing);
+  });
 });
 
 window.addEventListener('resize', positionRightControlRail);

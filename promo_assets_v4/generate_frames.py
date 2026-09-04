@@ -69,7 +69,7 @@ def wrap(draw, text, text_font, max_width):
 def chrome(img, scene, accent):
     d = ImageDraw.Draw(img, "RGBA")
     d.rounded_rectangle((44, 28, 203, 65), radius=18, outline=accent, width=2)
-    d.text((64, 37), "SOXL.XYZ", font=F_LOGO, fill=WHITE)
+    d.text((64, 37), "SOXLPRO.XYZ", font=F_LOGO, fill=WHITE)
     d.line((44, 661, 1236, 661), fill=(255, 255, 255, 22), width=1)
     d.text((44, 679), "TRADE-VESTING", font=F_SMALL, fill=accent)
     d.text((1150, 679), f"{scene:02d}/07", font=F_SMALL, fill=MUTED)
@@ -232,7 +232,7 @@ headline(
 mini_chart(d, (790, 170, 1196, 455), GREEN, 31, 1.05)
 d.line((790, 398, 1196, 398), fill=(*ORANGE, 150), width=2)
 d.rounded_rectangle((846, 493, 1143, 570), radius=18, fill=(*GREEN, 20), outline=GREEN, width=3)
-label = "AMBIGUOUS BUY SIGNAL"
+label = "UNAMBIGUOUS BUY SIGNAL"
 tw = d.textlength(label, font=font(18, True))
 d.text(((1986 - tw) / 2, 521), label, font=font(18, True), fill=BLACK)
 save(img, 6, ORANGE)
@@ -244,7 +244,7 @@ d.text((44, 116), "ONE SECURITY.", font=font(66, True), fill=WHITE)
 d.text((44, 196), "ONE SOLVED SYSTEM.", font=font(66, True), fill=GREEN)
 d.text((46, 308), "Let us show you how.", font=font(32), fill=MUTED)
 d.rounded_rectangle((44, 408, 1236, 576), radius=28, fill=(0, 0, 0, 175), outline=GREEN, width=3)
-url = "SOXL.XYZ"
+url = "SOXLPRO.XYZ"
 tw = d.textlength(url, font=font(83, True))
 d.text(((W - tw) / 2, 442), url, font=font(83, True), fill=WHITE)
 d.text((486, 548), "ESS  OH  EX  ELL", font=F_SMALL, fill=GREEN)
