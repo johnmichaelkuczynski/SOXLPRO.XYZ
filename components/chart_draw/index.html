@@ -9,12 +9,17 @@
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; position: relative; }
   #toolbar {
     display: flex; position: absolute; z-index: 300; right: 12px; top: 12px;
-    width: 250px; gap: 7px; align-items: stretch; padding: 10px;
-    flex-direction: column; background: rgba(248,250,252,0.97);
+    width: 250px; height: 720px; padding: 0;
+    background: rgba(248,250,252,0.97);
     border: 2px solid #475569; border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow-y: auto; overflow-x: hidden;
-    resize: none; min-width: 220px; max-width: 420px; min-height: 220px;
-    scrollbar-gutter: stable;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow: hidden;
+    resize: none; min-width: 140px; max-width: 520px; min-height: 140px;
+    cursor: move; touch-action: none;
+  }
+  #rail-content {
+    display: flex; position: absolute; left: 0; top: 0; width: 250px;
+    gap: 7px; align-items: stretch; padding: 10px; flex-direction: column;
+    transform-origin: top left;
   }
   .rail-resize-handle { position: absolute; z-index: 320; background: rgba(21,101,192,0.24); }
   .rail-resize-handle:hover { background: rgba(21,101,192,0.68); }
@@ -26,7 +31,7 @@
   .rail-resize-ne, .rail-resize-sw { cursor: nesw-resize; }
   .rail-resize-nw, .rail-resize-se { cursor: nwse-resize; }
   #rail-handle {
-    display: flex; position: sticky; z-index: 20; top: -10px;
+    display: flex; position: relative; z-index: 20;
     align-items: center; justify-content: space-between; gap: 4px; flex-shrink: 0;
     margin: -10px -10px 1px; padding: 8px 9px; color: #fff; background: #334155;
     border-radius: 8px 8px 0 0; cursor: move; user-select: none; touch-action: none;
@@ -179,6 +184,7 @@
 <body>
 <button id="rail-collapsed-tab" onclick="showControlRail()">SHOW CONTROLS</button>
 <div id="toolbar">
+ <div id="rail-content">
   <div id="rail-handle">
     <button class="rail-move-btn" onclick="dockControlRail('left', event)" title="Dock controls left">&#8592;</button>
     <strong>MOVE PANEL • RESIZE ANY EDGE</strong>
@@ -237,6 +243,7 @@
     <button class="analyze-btn" onclick="analyzeSelection()">Analyze This Period</button>
     <button class="analyze-clear" onclick="clearSelection()">&#10005; Clear</button>
   </div>
+ </div>
 </div>
 <div id="rail-resize-handles" aria-hidden="true">
   <div class="rail-resize-handle rail-resize-n" data-direction="n"></div>
@@ -298,6 +305,7 @@ var hoveredLineIndex = -1;
 var hoveredLineDistance = Infinity;
 var contextLineIndex = -1;
 var toolbarEl = document.getElementById('toolbar');
+var railContentEl = document.getElementById('rail-content');
 var railDock = 'right';
 var railFreeLeft = null;
 var railFreeTop = null;
@@ -336,7 +344,7 @@ function positionRightControlRail() {
     top = Math.max(bounds.top, Math.min(bounds.top + railTopOffset, bounds.bottom - railHeight));
   }
   toolbarEl.style.top = top + 'px';
-  toolbarEl.style.maxHeight = Math.max(180, availableHeight) + 'px';
+  toolbarEl.style.maxHeight = Math.max(140, availableHeight) + 'px';
   if (railDock === 'left') {
     toolbarEl.style.left = '12px';
     toolbarEl.style.right = 'auto';
@@ -359,7 +367,19 @@ function positionRightControlRail() {
     tab.style.left = 'auto';
     tab.style.right = '8px';
   }
+  fitRailContent();
   positionRailResizeHandles();
+}
+
+function fitRailContent() {
+  railContentEl.style.transform = 'none';
+  var naturalWidth = 250;
+  var naturalHeight = Math.max(1, railContentEl.scrollHeight);
+  var scale = Math.min(
+    toolbarEl.clientWidth / naturalWidth,
+    toolbarEl.clientHeight / naturalHeight
+  );
+  railContentEl.style.transform = 'scale(' + Math.max(0.1, scale) + ')';
 }
 
 function positionRailResizeHandles() {
@@ -420,7 +440,7 @@ function resetControlRailSize(event) {
   if (event) event.stopPropagation();
   if (railCollapsed) showControlRail();
   toolbarEl.style.width = '250px';
-  toolbarEl.style.height = 'auto';
+  toolbarEl.style.height = '720px';
   railDock = 'right';
   railFreeLeft = null;
   railFreeTop = null;
@@ -445,17 +465,30 @@ function showControlRail() {
   positionRightControlRail();
 }
 
-document.getElementById('rail-handle').addEventListener('pointerdown', function(event) {
-  if (event.target.closest('button')) return;
+var suppressPanelClick = false;
+toolbarEl.addEventListener('click', function(event) {
+  if (!suppressPanelClick) return;
   event.preventDefault();
+  event.stopImmediatePropagation();
+  suppressPanelClick = false;
+}, true);
+
+toolbarEl.addEventListener('pointerdown', function(event) {
+  if (event.button !== 0) return;
   var startX = event.clientX;
   var startY = event.clientY;
   var startRect = toolbarEl.getBoundingClientRect();
+  var moving = false;
 
   function moveRail(moveEvent) {
+    var dx = moveEvent.clientX - startX;
+    var dy = moveEvent.clientY - startY;
+    if (!moving && Math.hypot(dx, dy) < 6) return;
+    moving = true;
+    moveEvent.preventDefault();
     railDock = 'free';
-    railFreeLeft = startRect.left + moveEvent.clientX - startX;
-    railFreeTop = startRect.top + moveEvent.clientY - startY;
+    railFreeLeft = startRect.left + dx;
+    railFreeTop = startRect.top + dy;
     positionRightControlRail();
     try {
       if (window.parent && window.frameElement) {
@@ -466,6 +499,7 @@ document.getElementById('rail-handle').addEventListener('pointerdown', function(
     } catch (error) {}
   }
   function stopMoving() {
+    if (moving) suppressPanelClick = true;
     document.removeEventListener('pointermove', moveRail);
     document.removeEventListener('pointerup', stopMoving);
   }
@@ -493,14 +527,14 @@ document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
       var left = startRect.left;
       var top = startRect.top;
 
-      if (direction.indexOf('e') !== -1) width = Math.max(220, Math.min(420, startRect.width + dx));
+      if (direction.indexOf('e') !== -1) width = Math.max(140, Math.min(520, startRect.width + dx));
       if (direction.indexOf('w') !== -1) {
-        width = Math.max(220, Math.min(420, startRect.width - dx));
+        width = Math.max(140, Math.min(520, startRect.width - dx));
         left = startRect.right - width;
       }
-      if (direction.indexOf('s') !== -1) height = Math.max(220, startRect.height + dy);
+      if (direction.indexOf('s') !== -1) height = Math.max(140, startRect.height + dy);
       if (direction.indexOf('n') !== -1) {
-        height = Math.max(220, startRect.height - dy);
+        height = Math.max(140, startRect.height - dy);
         top = startRect.bottom - height;
       }
 

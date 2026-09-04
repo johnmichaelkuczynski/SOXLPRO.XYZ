@@ -360,12 +360,96 @@ logical_id = "8d04b6cc-d7e5-4cb4-843d-5e33c5eff756"
 id = "bIsHeFMGjXQnJBkC-YB5t"
 uri = "file://promo_assets_v4/SOXL_Trade_Vesting_Promo.mp4"
 type = "video"
-title = "SOXL Trade-Vesting Promo"
-description = "Existing video render. This is the version from before the requested URL and narration corrections were rebuilt."
+title = "Corrected SOXLPRO Trade-Vesting Promo"
+description = "Fully rebuilt 38-second video. URL: SOXLPRO.XYZ. Narration: You can only buy when you have an unambiguous buy signal."
 logical_id = "d6ca9a30-07a2-496a-919b-e92dfe8abdef"
-content_hash = "sha256:b3fe11d5b3fffa73182ba8370abdc8d7d13d4554578db41bec5aeb2d6f238df3"
-size = 3469944
-mtime_ms = 1788456073717
-storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/d6ca9a30-07a2-496a-919b-e92dfe8abdef/f5732d3c-50ba-4d59-bf74-e07b8f5f8323"
-storage_version_token = "1788547738543646"
+content_hash = "sha256:0cee360c7f4b0f66b50f2bc880c2b0bb6f515c78bb52bad8976f99fbdf5c7550"
+size = 3400183
+mtime_ms = 1788548464053
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/d6ca9a30-07a2-496a-919b-e92dfe8abdef/997d3944-fc45-4274-9b00-588f39247059"
+storage_version_token = "1788548492094591"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "FD2YExx5qr7e2YVHCJP26"
+uri = "file://promo_assets_v4/voice_01_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 1"
+description = "Text-to-speech audio: Information is the edge. And the information advantage is rarely yours."
+logical_id = "989cf74d-37cc-4873-8657-4d87814d37a3"
+
+[[outputs]]
+id = "IdJ5n-yWEKiE_tC0PI_p7"
+uri = "file://promo_assets_v4/voice_03_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 3"
+description = "Text-to-speech audio: Trade-vesting offers a third path: a disciplined way to combine a durable thesis with tactical entries."
+logical_id = "4803a886-9537-4917-81ee-4dd42aa40f9e"
+
+[[outputs]]
+id = "XxN-L8DaJPv7nuCEGijVb"
+uri = "file://promo_assets_v4/voice_04_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 4"
+description = "Text-to-speech audio: The instrument must be volatile, mean-reverting, and rooted in a growing industry."
+logical_id = "bb413c9d-ea1f-440f-a63c-7deab0f3490a"
+
+[[outputs]]
+id = "lqea4CfAcJ3Dk0zwaXH_b"
+uri = "file://promo_assets_v4/voice_02_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 2"
+description = "Text-to-speech audio: Capital makes capital. Small positions can make even correct ideas feel insignificant."
+logical_id = "efe5d3b6-e1b0-41e7-ae27-2ed646d0c1e0"
+
+[[outputs]]
+id = "l8vnXEE2Il9HtkLg5VMJt"
+uri = "file://promo_assets_v4/voice_07_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 7"
+description = "Text-to-speech audio: Learn more at Ess Oh Ex Ell, Pee Are Oh, dot Ex Why Zee."
+logical_id = "2c44e364-7e58-4d87-9fd1-201311af9819"
+
+[[outputs]]
+id = "n4TnuTxyRpks2kSQghCjx"
+uri = "file://promo_assets_v4/voice_05_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 5"
+description = "Text-to-speech audio: Calls can magnify the move, but directional accuracy still decides whether leverage helps or hurts."
+logical_id = "997013c2-83c8-4927-85a1-00009577a2c3"
+
+[[outputs]]
+id = "-affV5I1dQA5UllUdd53S"
+uri = "file://promo_assets_v4/voice_06_2.mp3"
+type = "audio"
+title = "SOXL Pro trade vesting scene 6"
+description = "Text-to-speech audio: You can only buy when you have an unambiguous buy signal."
+logical_id = "33bd8056-5292-4474-b091-8fc0b659866c"
+
+[[outputs]]
+id = "INUW-vbis98QI8VWkn3S4"
+uri = "file://promo_assets_v4/SOXLPRO_Trade_Vesting_Promo_CORRECTED.mp4"
+type = "video"
+title = "SOXLPRO Trade-Vesting Promo — Corrected New File"
+description = "Cache-busted corrected render. Final frame verified as SOXLPRO.XYZ; narration uses unambiguous buy signal."
+logical_id = "f86a0571-3173-4655-ad8c-834b1abcca52"
+content_hash = "sha256:0cee360c7f4b0f66b50f2bc880c2b0bb6f515c78bb52bad8976f99fbdf5c7550"
+size = 3400183
+mtime_ms = 1788548511455
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/f86a0571-3173-4655-ad8c-834b1abcca52/c9dc7630-95d4-4a24-bd49-be10f13d0247"
+storage_version_token = "1788548523302855"
+content_type = "video/mp4"
+
+[[outputs]]
+id = "hE6RFvEx_cSToziBjOP3v"
+uri = "file://promo_assets_v4/SOXLPRO_Trade_Vesting_Promo_FINAL.mp4"
+type = "video"
+title = "SOXLPRO Trade-Vesting Promo — Final"
+description = "Final corrected render: SOXLPRO.XYZ displayed without any visual pronunciation guide; narration retains the requested spoken pronunciation and unambiguous buy signal."
+logical_id = "176bb293-9a82-4c9f-a6be-aa2c450d0801"
+content_hash = "sha256:8960332fbd8ad4eb07cc0f2cf74f6c570dbdbb73f0c3d7bc0748df3b9513bb84"
+size = 3393064
+mtime_ms = 1788548565267
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/176bb293-9a82-4c9f-a6be-aa2c450d0801/d5e61ac2-3e8f-4b51-aefa-79a4ab36c646"
+storage_version_token = "1788548577302361"
 content_type = "video/mp4"

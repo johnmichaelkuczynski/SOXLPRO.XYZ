@@ -68,7 +68,7 @@ def wrap(draw, text, text_font, max_width):
 
 def chrome(img, scene, accent):
     d = ImageDraw.Draw(img, "RGBA")
-    d.rounded_rectangle((44, 28, 203, 65), radius=18, outline=accent, width=2)
+    d.rounded_rectangle((44, 28, 232, 65), radius=18, outline=accent, width=2)
     d.text((64, 37), "SOXLPRO.XYZ", font=F_LOGO, fill=WHITE)
     d.line((44, 661, 1236, 661), fill=(255, 255, 255, 22), width=1)
     d.text((44, 679), "TRADE-VESTING", font=F_SMALL, fill=accent)
@@ -247,5 +247,4 @@ d.rounded_rectangle((44, 408, 1236, 576), radius=28, fill=(0, 0, 0, 175), outlin
 url = "SOXLPRO.XYZ"
 tw = d.textlength(url, font=font(83, True))
 d.text(((W - tw) / 2, 442), url, font=font(83, True), fill=WHITE)
-d.text((486, 548), "ESS  OH  EX  ELL", font=F_SMALL, fill=GREEN)
 save(img, 7, GREEN)
