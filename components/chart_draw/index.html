@@ -21,6 +21,24 @@
     gap: 7px; align-items: stretch; padding: 10px; flex-direction: column;
     transform-origin: top left;
   }
+  #rail-content.wide-layout {
+    display: grid; width: 650px; grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-flow: row; gap: 7px 10px; align-content: start;
+  }
+  #rail-content.wide-layout #rail-handle,
+  #rail-content.wide-layout #status,
+  #rail-content.wide-layout #announcement,
+  #rail-content.wide-layout #analyze-bar {
+    grid-column: 1 / -1;
+  }
+  #rail-content.wide-layout #keyboard-selection {
+    grid-column: 1 / -1;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  #rail-content.wide-layout #keyboard-selection > span,
+  #rail-content.wide-layout #keyboard-selection > button {
+    grid-column: 1 / -1;
+  }
   .rail-resize-handle { position: absolute; z-index: 320; background: rgba(21,101,192,0.24); }
   .rail-resize-handle:hover { background: rgba(21,101,192,0.68); }
   .rail-resize-n, .rail-resize-s { height: 10px; cursor: ns-resize; }
@@ -373,7 +391,10 @@ function positionRightControlRail() {
 
 function fitRailContent() {
   railContentEl.style.transform = 'none';
-  var naturalWidth = 250;
+  var useWideLayout = toolbarEl.clientWidth >= 320 &&
+    toolbarEl.clientWidth / Math.max(1, toolbarEl.clientHeight) >= 1.05;
+  railContentEl.classList.toggle('wide-layout', useWideLayout);
+  var naturalWidth = useWideLayout ? 650 : 250;
   var naturalHeight = Math.max(1, railContentEl.scrollHeight);
   var scale = Math.min(
     toolbarEl.clientWidth / naturalWidth,
@@ -484,6 +505,10 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     var dx = moveEvent.clientX - startX;
     var dy = moveEvent.clientY - startY;
     if (!moving && Math.hypot(dx, dy) < 6) return;
+    if (!moving) {
+      toolbarEl.style.width = startRect.width + 'px';
+      toolbarEl.style.height = startRect.height + 'px';
+    }
     moving = true;
     moveEvent.preventDefault();
     railDock = 'free';
