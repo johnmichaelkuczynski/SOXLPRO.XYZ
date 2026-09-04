@@ -18,7 +18,11 @@
   .tbtn:disabled { opacity: 0.45; cursor: not-allowed; background: #f5f5f5; }
    .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
    .tbtn.danger:hover { background: #B71C1C; color: #fff; }
-   .tbtn.danger.active { background: #B71C1C; color: #fff; border-color: #B71C1C; }
+  #undoBtn {
+    background: #6D28D9; color: #fff; border: 2px solid #5B21B6;
+    font-weight: 800; padding: 8px 18px;
+  }
+  #undoBtn:hover { background: #5B21B6; color: #fff; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
   .scale-group {
     display: inline-flex; align-items: center; gap: 0; border: 1px solid #bbb;
@@ -32,14 +36,25 @@
     font-size: 13px; color: #334155;
   }
   .height-control input { width: 150px; cursor: ns-resize; }
+  .height-control select {
+    border: 0; background: transparent; color: #0f172a; font-weight: 700;
+    cursor: pointer; outline: none;
+  }
   #heightValue { min-width: 48px; font-weight: 700; color: #0f172a; }
    .sr-only {
      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
    }
-  #chart-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; }
+  #chart-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; position: relative; }
   #chart-container { position: relative; width: 100%; min-width: 100%; }
   #chart { width: 100%; }
+  #quick-fit {
+    position: absolute; z-index: 145; top: 14px; left: 76px;
+    cursor: pointer; border: 2px solid #0D47A1; border-radius: 7px;
+    background: #1565C0; color: #fff; padding: 8px 13px;
+    font-size: 12px; font-weight: 900; box-shadow: 0 3px 10px rgba(15,23,42,0.24);
+  }
+  #quick-fit:hover { background: #0D47A1; }
   #select-overlay {
     display: none;
     position: absolute;
@@ -65,6 +80,24 @@
     font-size: 13px; line-height: 1.45;
   }
   #trend-tooltip strong { display: block; color: #fff; margin-bottom: 3px; }
+  #cursor-tools {
+    display: none; position: absolute; z-index: 160; width: 250px;
+    padding: 10px; border: 1px solid #94a3b8; border-radius: 9px;
+    background: rgba(255,255,255,0.98); box-shadow: 0 8px 24px rgba(15,23,42,0.28);
+    color: #0f172a; font-size: 13px;
+  }
+  #cursor-tools strong { display: block; margin-bottom: 8px; }
+  .cursor-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cursor-actions button {
+    cursor: pointer; border: 1px solid #64748b; border-radius: 6px;
+    background: #fff; color: #0f172a; padding: 7px 10px; font-weight: 700;
+  }
+  .cursor-actions button:hover { background: #e2e8f0; }
+  .cursor-actions .cursor-danger { color: #fff; background: #b91c1c; border-color: #991b1b; }
+  .cursor-actions .cursor-primary { color: #fff; background: #1565C0; border-color: #0D47A1; }
+  #cursor-line-actions { display: none; margin-top: 9px; padding-top: 9px; border-top: 1px solid #cbd5e1; }
+  #cursor-line-actions label { display: block; margin-bottom: 5px; font-weight: 700; }
+  #cursor-extend-date { width: 100%; padding: 6px; margin-bottom: 7px; border: 1px solid #94a3b8; border-radius: 5px; }
   #analyze-bar {
     display: none;
     padding: 10px 12px; margin: 6px 2px;
@@ -83,12 +116,12 @@
   }
   .analyze-clear:hover { background: #BBDEFB; }
   #line-list { padding: 4px 2px; }
-  .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
+  .line-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; color: #555; flex-wrap: wrap; }
   .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-    .ldel { cursor: pointer; color: #fff; border: 1px solid #B71C1C; border-radius: 5px; background: #B71C1C; font-size: 12px; font-weight: 700; padding: 5px 10px; }
-   .ldel:hover { background: #8E0000; }
    .lext { cursor: pointer; color: #fff; border: 1px solid #1565C0; border-radius: 5px; background: #1565C0; font-size: 12px; font-weight: 700; padding: 5px 10px; }
    .lext:hover, .lext.active { background: #0D47A1; }
+   .extend-date { padding: 5px 7px; border: 1px solid #9fb3c8; border-radius: 5px; color: #102a43; background: #fff; }
+   .extend-label { font-weight: 700; color: #334e68; margin-left: auto; }
    #keyboard-selection {
      display: none; align-items: end; gap: 10px; flex-wrap: wrap;
      padding: 8px 12px; margin: 6px 2px; background: #f8f9fa;
@@ -106,15 +139,24 @@
 </head>
 <body>
 <div id="toolbar">
-  <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
-  <button class="tbtn danger" id="eraseBtn" aria-pressed="false" onclick="toggleErase()" disabled>&#9003; Erase Line</button>
-  <button class="tbtn" id="undoBtn" onclick="undoLastAction()" disabled>&#8630; Undo</button>
+  <button class="tbtn" id="undoBtn" onclick="undoLastAction()" aria-label="Undo last line change">&#8630; Undo Last Line Change</button>
+  <button class="tbtn active" id="drawBtn" aria-pressed="true" onclick="toggleDraw()">[ ] Stop Drawing</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <span class="scale-group" role="group" aria-label="Price scale">
     <button class="tbtn active" id="logScaleBtn" aria-pressed="true" onclick="setScale('log')">Log Scale</button>
     <button class="tbtn" id="linearScaleBtn" aria-pressed="false" onclick="setScale('linear')">Linear Scale</button>
   </span>
+  <label class="height-control" for="futureHorizon">
+    Future horizon
+    <select id="futureHorizon" onchange="setFutureHorizon(this.value)">
+      <option value="5" selected>5 years</option>
+      <option value="10">10 years</option>
+      <option value="20">20 years</option>
+      <option value="30">30 years</option>
+      <option value="50">50 years</option>
+    </select>
+  </label>
   <label class="height-control" for="heightSlider">
     Chart height
     <input id="heightSlider" type="range" min="520" max="1400" step="40" value="900" oninput="setChartHeight(this.value)">
@@ -125,16 +167,31 @@
     <input id="widthSlider" type="range" min="100" max="300" step="10" value="100" oninput="setChartWidth(this.value)">
     <span id="widthValue">100%</span>
   </label>
-  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Delete All Lines</button>
-  <span id="status">Drag to scroll &#8226; Wheel to zoom &#8226; Hover trend lines for projected date and price</span>
+  <span id="status"><strong>CLICK AND DRAG ANYWHERE ON THE CHART TO DRAW A LINE</strong> &#8226; Double-click a line to erase it</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
 <div id="chart-scroll">
   <div id="chart-container">
+    <button id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
     <div id="chart"></div>
     <div id="select-overlay" aria-hidden="true"></div>
     <div id="select-highlight"></div>
     <div id="trend-tooltip" role="tooltip"></div>
+    <div id="cursor-tools" role="menu" aria-label="Trend line tools">
+      <strong id="cursor-tools-title">Chart tools</strong>
+      <div class="cursor-actions">
+        <button class="cursor-primary" onclick="startDrawingHere(event)">Draw line</button>
+        <button onclick="undoFromCursor(event)">Undo</button>
+      </div>
+      <div id="cursor-line-actions">
+        <label for="cursor-extend-date">Extend nearby line to</label>
+        <input id="cursor-extend-date" type="date">
+        <div class="cursor-actions">
+          <button class="cursor-primary" onclick="extendFromCursor(event)">Extend</button>
+          <button class="cursor-danger" onclick="eraseFromCursor(event)">Erase line</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 <div id="keyboard-selection" aria-labelledby="keyboard-selection-heading">
@@ -162,7 +219,8 @@ var chartScroll = document.getElementById('chart-scroll');
 var selectOverlay = document.getElementById('select-overlay');
 var selectHighlight = document.getElementById('select-highlight');
 var trendTooltip = document.getElementById('trend-tooltip');
-var currentMode = 'pan';
+var cursorTools = document.getElementById('cursor-tools');
+var currentMode = 'draw';
 var lines = [];
 var chartData = null;
 var rendered = false;
@@ -171,10 +229,11 @@ var scaleMode = 'log';
 var currentChartHeight = 900;
 var currentChartWidth = 100;
 var plotlyEventsBound = false;
+var futureHorizonYears = 5;
 var undoStack = [];
 var hoveredLineIndex = -1;
 var hoveredLineDistance = Infinity;
-var extendingLineIndex = -1;
+var contextLineIndex = -1;
 
 var selecting = false;
 var selectStartX = 0;
@@ -266,16 +325,12 @@ sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
 function setMode(mode) {
   currentMode = mode;
   var drawBtn = document.getElementById('drawBtn');
-  var eraseBtn = document.getElementById('eraseBtn');
   var selectBtn = document.getElementById('selectBtn');
   drawBtn.classList.toggle('active', mode === 'draw');
-  eraseBtn.classList.toggle('active', mode === 'erase');
   selectBtn.classList.toggle('active', mode === 'select');
   drawBtn.setAttribute('aria-pressed', mode === 'draw' ? 'true' : 'false');
-  eraseBtn.setAttribute('aria-pressed', mode === 'erase' ? 'true' : 'false');
   selectBtn.setAttribute('aria-pressed', mode === 'select' ? 'true' : 'false');
   drawBtn.textContent = mode === 'draw' ? '[ ] Stop Drawing' : '\u270E Draw Line';
-  eraseBtn.textContent = mode === 'erase' ? '[ ] Stop Erasing' : '\u232B Erase Line';
   selectBtn.textContent = mode === 'select' ? '[ ] Stop Selecting' : '\u25A2 Select Period';
 
   selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
@@ -285,18 +340,12 @@ function setMode(mode) {
     clearSelection();
   }
 
-  var statusText = 'Drag to scroll \u2022 Wheel to zoom \u2022 Hover trend lines for projected date and price \u2022 Double-click a line to delete it';
-  if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line \u2022 Double-click a line to delete it';
-  if (mode === 'erase') statusText = 'Click any trend line once to erase it \u2022 Use Undo to restore it';
-  if (mode === 'extend') statusText = 'Click farther left or right on the chart to extend the selected line along its existing slope';
+  var statusText = 'Right-click for Draw, Extend, Erase, and Undo \u2022 Double-click a line to erase it';
+  if (mode === 'draw') statusText = 'Click and drag to draw a line \u2022 Right-click near the cursor for other line tools';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
   document.getElementById('status').textContent = statusText;
   var modeAnnouncement = mode === 'draw'
     ? 'Draw Line mode enabled.'
-    : mode === 'erase'
-      ? 'Erase Line mode enabled.'
-    : mode === 'extend'
-      ? 'Extend Line mode enabled.'
     : mode === 'select'
       ? 'Select Period mode enabled.'
       : 'Chart navigation mode enabled.';
@@ -308,18 +357,96 @@ function setMode(mode) {
     'newshape.line.color': '#888',
     'newshape.line.width': 2
   });
+  if (mode === 'draw') fitSoxlPrices();
 }
 
 function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
-function toggleErase() { setMode(currentMode === 'erase' ? 'pan' : 'erase'); }
 function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
 
-function startExtendLine(index) {
-  if (index < 0 || index >= lines.length) return;
-  extendingLineIndex = index;
-  setMode('extend');
-  renderLineList();
-  announce('Line ' + (index + 1) + ' selected. Click farther left or right on the chart to extend it.');
+function suggestedExtensionDate(line) {
+  var latest = new Date(Math.max(lineTimestamp(line, 1), lineTimestamp(line, 2)));
+  latest.setFullYear(latest.getFullYear() + 20);
+  return msToDateStr(latest.getTime());
+}
+
+function extendLineFromInput(index) {
+  var input = document.getElementById('extend-date-' + index);
+  if (!input || !input.value) {
+    announce('Choose a future date for Line ' + (index + 1) + '.');
+    return;
+  }
+  extendLineToDate(index, new Date(input.value + 'T12:00:00').getTime());
+}
+
+function hideCursorTools() {
+  cursorTools.style.display = 'none';
+  contextLineIndex = -1;
+}
+
+function startDrawingHere(event) {
+  event.stopPropagation();
+  hideCursorTools();
+  setMode('draw');
+}
+
+function undoFromCursor(event) {
+  event.stopPropagation();
+  hideCursorTools();
+  undoLastAction();
+}
+
+function extendFromCursor(event) {
+  event.stopPropagation();
+  if (contextLineIndex < 0) return;
+  var value = document.getElementById('cursor-extend-date').value;
+  if (!value) return;
+  var lineIndex = contextLineIndex;
+  hideCursorTools();
+  extendLineToDate(lineIndex, new Date(value + 'T12:00:00').getTime());
+}
+
+function eraseFromCursor(event) {
+  event.stopPropagation();
+  if (contextLineIndex < 0) return;
+  var lineIndex = contextLineIndex;
+  hideCursorTools();
+  deleteLine(lineIndex);
+}
+
+function openCursorTools(event) {
+  if (currentMode === 'select') return;
+  event.preventDefault();
+  event.stopPropagation();
+  inspectTrendLine(event);
+  contextLineIndex = hoveredLineDistance <= 45 ? hoveredLineIndex : -1;
+
+  var lineActions = document.getElementById('cursor-line-actions');
+  var title = document.getElementById('cursor-tools-title');
+  if (contextLineIndex >= 0) {
+    title.textContent = 'Trend line ' + (contextLineIndex + 1) + ' tools';
+    lineActions.style.display = 'block';
+    document.getElementById('cursor-extend-date').value = suggestedExtensionDate(lines[contextLineIndex]);
+  } else {
+    title.textContent = 'Chart tools';
+    lineActions.style.display = 'none';
+  }
+
+  cursorTools.style.display = 'block';
+  var containerRect = chartContainer.getBoundingClientRect();
+  var localX = event.clientX - containerRect.left;
+  var localY = event.clientY - containerRect.top;
+  var menuWidth = cursorTools.offsetWidth || 250;
+  var menuHeight = cursorTools.offsetHeight || 150;
+  var visibleLeft = chartScroll.scrollLeft;
+  var visibleRight = visibleLeft + chartScroll.clientWidth;
+  var left = localX + 12;
+  if (left + menuWidth > visibleRight - 8) left = localX - menuWidth - 12;
+  left = Math.max(visibleLeft + 8, Math.min(left, visibleRight - menuWidth - 8));
+  var top = localY + 12;
+  if (top + menuHeight > chartContainer.clientHeight - 8) top = localY - menuHeight - 12;
+  cursorTools.style.left = left + 'px';
+  cursorTools.style.top = Math.max(8, top) + 'px';
+  trendTooltip.style.display = 'none';
 }
 
 function allVisiblePrices() {
@@ -339,6 +466,27 @@ function allVisiblePrices() {
   return values;
 }
 
+function getFutureEndMs() {
+  if (!chartData || !chartData.dates || chartData.dates.length === 0) {
+    var today = new Date();
+    today.setFullYear(today.getFullYear() + futureHorizonYears);
+    return today.getTime();
+  }
+  var lastDate = new Date(chartData.dates[chartData.dates.length - 1]);
+  lastDate.setFullYear(lastDate.getFullYear() + futureHorizonYears);
+  return lastDate.getTime();
+}
+
+function getFutureEnd() {
+  return msToDateStr(getFutureEndMs());
+}
+
+function setFutureHorizon(value) {
+  futureHorizonYears = Math.max(5, Math.min(50, Number(value) || 30));
+  renderChart();
+  announce('Future projection horizon set to ' + futureHorizonYears + ' years.');
+}
+
 function yAxisRange() {
   var values = allVisiblePrices();
   if (values.length === 0) return null;
@@ -351,6 +499,34 @@ function yAxisRange() {
   var span = Math.max(priceMax - priceMin, priceMax * 0.02, 0.01);
   var pad = span * 0.06;
   return [Math.max(0, priceMin - pad), priceMax + pad];
+}
+
+function soxlYAxisRange() {
+  if (!chartData || !chartData.prices) return yAxisRange();
+  var values = chartData.prices.filter(function(value) {
+    return Number.isFinite(value) && value > 0;
+  });
+  if (values.length === 0) return yAxisRange();
+  var priceMin = Math.min.apply(null, values);
+  var priceMax = Math.max.apply(null, values);
+  if (scaleMode === 'log') {
+    return [Math.log10(priceMin) - 0.12, Math.log10(priceMax) + 0.12];
+  }
+  var span = Math.max(priceMax - priceMin, priceMax * 0.02, 0.01);
+  return [Math.max(0, priceMin - span * 0.06), priceMax + span * 0.06];
+}
+
+function fitSoxlPrices(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (!chartData) return;
+  Plotly.relayout(chartDiv, {
+    'yaxis.type': scaleMode,
+    'yaxis.range': soxlYAxisRange()
+  });
+  announce('Chart fitted to the SOXL price range.');
 }
 
 function setScale(mode) {
@@ -381,6 +557,7 @@ function setChartWidth(value) {
   var width = Math.round(scroll.clientWidth * currentChartWidth / 100);
   document.getElementById('widthValue').textContent = currentChartWidth + '%';
   container.style.width = currentChartWidth + '%';
+  document.getElementById('quick-fit').style.left = (scroll.scrollLeft + 76) + 'px';
   Plotly.relayout(chartDiv, {width: width}).then(function() {
     setFrameHeight(document.body.scrollHeight + 20);
   });
@@ -392,10 +569,14 @@ window.addEventListener('resize', function() {
   setChartWidth(currentChartWidth);
 });
 
+chartScroll.addEventListener('scroll', function() {
+  document.getElementById('quick-fit').style.left = (chartScroll.scrollLeft + 76) + 'px';
+});
+
 function resetView() {
   if (!chartData) return;
   Plotly.relayout(chartDiv, {
-    'xaxis.range': [chartData.dates[0], chartData.future_end],
+    'xaxis.range': [chartData.dates[0], getFutureEnd()],
     'yaxis.type': scaleMode,
     'yaxis.range': yAxisRange()
   });
@@ -434,7 +615,11 @@ function saveUndoState() {
 }
 
 function undoLastAction() {
-  if (undoStack.length === 0) return;
+  if (undoStack.length === 0) {
+    announce('There is no line change to undo yet.');
+    document.getElementById('status').textContent = 'Nothing to undo yet \u2022 Draw, erase, extend, or delete a line first';
+    return;
+  }
   lines = undoStack.pop();
   knownShapeCount = 0;
   renderChart();
@@ -452,11 +637,7 @@ document.addEventListener('keydown', function(event) {
 });
 
 function updateLineActionButtons() {
-  var hasLines = lines.length > 0;
-  document.getElementById('undoBtn').disabled = undoStack.length === 0;
-  document.getElementById('eraseBtn').disabled = !hasLines;
-  document.getElementById('clearBtn').style.display = hasLines ? '' : 'none';
-  if (!hasLines && currentMode === 'erase') setMode('pan');
+  document.getElementById('undoBtn').classList.toggle('active', undoStack.length > 0);
 }
 
 function clearSelection() {
@@ -516,7 +697,7 @@ function trendPoints(startMs, endMs, startY, transformedSlope) {
     var startTransformed = scaleMode === 'log' ? Math.log10(startY) : startY;
     var transformedPrice = startTransformed + transformedSlope * (timestamp - startMs);
     var price = scaleMode === 'log' ? Math.pow(10, transformedPrice) : transformedPrice;
-    if (price > 0 && Number.isFinite(price)) {
+    if (price > 0 && price < 1e12 && Number.isFinite(price)) {
       dates.push(new Date(timestamp));
       prices.push(price);
     }
@@ -581,8 +762,6 @@ function extendLineToDate(index, timestamp) {
   line['x' + replacePoint + '_ms'] = timestamp;
   line['x' + replacePoint] = msToDateStr(timestamp);
   line['y' + replacePoint] = price;
-  extendingLineIndex = -1;
-  setMode('pan');
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
@@ -616,7 +795,7 @@ function inspectTrendLine(event) {
   var timestamp = x0 + xFraction * (x1 - x0);
   var yRange = layout.yaxis.range;
   var ySpan = yRange[1] - yRange[0];
-  var futureMs = new Date(chartData.future_end).getTime();
+  var futureMs = getFutureEndMs();
   var nearest = null;
 
   for (var index = 0; index < lines.length; index++) {
@@ -658,7 +837,7 @@ function inspectTrendLine(event) {
     '<div>Projected SOXL price: $' + nearest.price.toLocaleString('en-US', {
       minimumFractionDigits: 2, maximumFractionDigits: 2
     }) + '</div>' +
-    (currentMode === 'erase' ? '<div><b>Click to erase this line</b></div>' : '');
+    '<div><b>Double-click this line to erase it</b></div>';
   trendTooltip.style.display = 'block';
   var tooltipWidth = trendTooltip.offsetWidth || 270;
   var visibleLeft = chartScroll.scrollLeft;
@@ -682,20 +861,14 @@ chartContainer.addEventListener('mouseleave', function() {
 });
 
 chartContainer.addEventListener('click', function(event) {
-  if (currentMode === 'extend' && extendingLineIndex >= 0) {
-    var timestamp = eventToChartTimestamp(event);
-    if (timestamp === null) return;
-    event.preventDefault();
-    event.stopPropagation();
-    extendLineToDate(extendingLineIndex, timestamp);
-    return;
-  }
-  if (currentMode === 'erase' && hoveredLineIndex >= 0 && hoveredLineDistance <= 35) {
-    event.preventDefault();
-    event.stopPropagation();
-    deleteLine(hoveredLineIndex);
-  }
+  if (!cursorTools.contains(event.target)) hideCursorTools();
 }, true);
+
+chartContainer.addEventListener('contextmenu', openCursorTools, true);
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') hideCursorTools();
+});
 
 function pxToDate(px) {
   var layout = chartDiv._fullLayout;
@@ -829,7 +1002,7 @@ chartDiv.addEventListener('dblclick', function(e) {
 
   var bestIdx = -1;
   var bestDist = Infinity;
-  var threshold = 0.05;
+  var threshold = 0.10;
 
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
@@ -1015,7 +1188,7 @@ function renderChart() {
     });
   }
 
-  var futureMs = new Date(chartData.future_end).getTime();
+  var futureMs = getFutureEndMs();
 
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
@@ -1045,8 +1218,8 @@ function renderChart() {
     var fwdStart = scaleMode === 'log' ? Math.log10(fwdY0) : fwdY0;
     var fwdTransformedY = fwdStart + transformedSlope * (futureMs - fwdEnd);
     var fwdY = scaleMode === 'log' ? Math.pow(10, fwdTransformedY) : fwdTransformedY;
-    if (fwdY > 0 && Number.isFinite(fwdY) && (scaleMode !== 'log' || (fwdTransformedY > -3 && fwdTransformedY < 6))) {
-      var forward = trendPoints(fwdEnd, futureMs, fwdY0, transformedSlope);
+    var forward = trendPoints(fwdEnd, futureMs, fwdY0, transformedSlope);
+    if (forward.dates.length > 1) {
       traces.push({
         x: forward.dates,
         y: forward.prices,
@@ -1063,8 +1236,8 @@ function renderChart() {
     var backStart = scaleMode === 'log' ? Math.log10(backY0) : backY0;
     var backTransformedY = backStart + transformedSlope * (backMs - backEnd);
     var backY = scaleMode === 'log' ? Math.pow(10, backTransformedY) : backTransformedY;
-    if (backY > 0 && Number.isFinite(backY) && (scaleMode !== 'log' || (backTransformedY > -3 && backTransformedY < 6))) {
-      var backward = trendPoints(backMs, backEnd, backY, transformedSlope);
+    var backward = trendPoints(backMs, backEnd, backY, transformedSlope);
+    if (backward.dates.length > 1) {
       traces.push({
         x: backward.dates,
         y: backward.prices,
@@ -1097,7 +1270,7 @@ function renderChart() {
     },
     xaxis: {
       type: 'date',
-      range: [chartData.dates[0], chartData.future_end],
+      range: [chartData.dates[0], getFutureEnd()],
       title: '', gridcolor: '#eee',
       tickformatstops: [
         {dtickrange: [null, 86400000], value: '%b %d, %Y'},
@@ -1129,7 +1302,7 @@ function renderChart() {
   var config = {
     scrollZoom: currentMode !== 'select',
     displayModeBar: currentMode !== 'select',
-    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape']
+    modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape', 'autoScale2d', 'resetScale2d']
   };
 
   Plotly.react(chartDiv, traces, layout, config).then(function() {
@@ -1139,7 +1312,6 @@ function renderChart() {
     }
   });
   knownShapeCount = 0;
-  document.getElementById('clearBtn').style.display = lines.length > 0 ? '' : 'none';
 }
 
 function renderLineList() {
@@ -1153,8 +1325,9 @@ function renderLineList() {
     html += '<div class="line-row">'
       + '<span class="line-dot" style="background:' + color + '"></span>'
       + '<span>Line ' + (i+1) + ': ' + ln.x1 + ' ($' + ln.y1.toFixed(2) + ') \u2192 ' + ln.x2 + ' ($' + ln.y2.toFixed(2) + ')</span>'
-      + '<button class="lext' + (currentMode === 'extend' && extendingLineIndex === i ? ' active' : '') + '" aria-label="Extend line ' + (i+1) + '" onclick="startExtendLine(' + i + ')">Extend</button>'
-      + '<button class="ldel" aria-label="Delete line ' + (i+1) + '" onclick="deleteLine(' + i + ')">Delete</button>'
+      + '<label class="extend-label" for="extend-date-' + i + '">Extend to</label>'
+      + '<input class="extend-date" id="extend-date-' + i + '" type="date" value="' + suggestedExtensionDate(ln) + '">'
+      + '<button class="lext" aria-label="Extend line ' + (i+1) + ' to selected date" onclick="extendLineFromInput(' + i + ')">Extend</button>'
       + '</div>';
   }
   el.innerHTML = html;
