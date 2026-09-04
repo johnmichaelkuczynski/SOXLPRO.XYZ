@@ -15,8 +15,10 @@
   }
   .tbtn:hover { background: #f0f0f0; }
   .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
+  .tbtn:disabled { opacity: 0.45; cursor: not-allowed; background: #f5f5f5; }
    .tbtn.danger { color: #B71C1C; border-color: #B71C1C; }
    .tbtn.danger:hover { background: #B71C1C; color: #fff; }
+   .tbtn.danger.active { background: #B71C1C; color: #fff; border-color: #B71C1C; }
   #status { font-size: 13px; color: #555; margin-left: 8px; }
   .scale-group {
     display: inline-flex; align-items: center; gap: 0; border: 1px solid #bbb;
@@ -83,8 +85,10 @@
   #line-list { padding: 4px 2px; }
   .line-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; color: #555; }
   .line-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-   .ldel { cursor: pointer; color: #B71C1C; border: none; background: none; font-size: 15px; padding: 2px 6px; }
-  .ldel:hover { background: #fee; border-radius: 4px; }
+    .ldel { cursor: pointer; color: #fff; border: 1px solid #B71C1C; border-radius: 5px; background: #B71C1C; font-size: 12px; font-weight: 700; padding: 5px 10px; }
+   .ldel:hover { background: #8E0000; }
+   .lext { cursor: pointer; color: #fff; border: 1px solid #1565C0; border-radius: 5px; background: #1565C0; font-size: 12px; font-weight: 700; padding: 5px 10px; }
+   .lext:hover, .lext.active { background: #0D47A1; }
    #keyboard-selection {
      display: none; align-items: end; gap: 10px; flex-wrap: wrap;
      padding: 8px 12px; margin: 6px 2px; background: #f8f9fa;
@@ -103,6 +107,8 @@
 <body>
 <div id="toolbar">
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
+  <button class="tbtn danger" id="eraseBtn" aria-pressed="false" onclick="toggleErase()" disabled>&#9003; Erase Line</button>
+  <button class="tbtn" id="undoBtn" onclick="undoLastAction()" disabled>&#8630; Undo</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Select Period</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <span class="scale-group" role="group" aria-label="Price scale">
@@ -119,7 +125,7 @@
     <input id="widthSlider" type="range" min="100" max="300" step="10" value="100" oninput="setChartWidth(this.value)">
     <span id="widthValue">100%</span>
   </label>
-  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Clear All</button>
+  <button class="tbtn danger" id="clearBtn" onclick="clearAll()" style="display:none">&#128465; Delete All Lines</button>
   <span id="status">Drag to scroll &#8226; Wheel to zoom &#8226; Hover trend lines for projected date and price</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
 </div>
@@ -165,6 +171,10 @@ var scaleMode = 'log';
 var currentChartHeight = 900;
 var currentChartWidth = 100;
 var plotlyEventsBound = false;
+var undoStack = [];
+var hoveredLineIndex = -1;
+var hoveredLineDistance = Infinity;
+var extendingLineIndex = -1;
 
 var selecting = false;
 var selectStartX = 0;
@@ -256,12 +266,16 @@ sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
 function setMode(mode) {
   currentMode = mode;
   var drawBtn = document.getElementById('drawBtn');
+  var eraseBtn = document.getElementById('eraseBtn');
   var selectBtn = document.getElementById('selectBtn');
   drawBtn.classList.toggle('active', mode === 'draw');
+  eraseBtn.classList.toggle('active', mode === 'erase');
   selectBtn.classList.toggle('active', mode === 'select');
   drawBtn.setAttribute('aria-pressed', mode === 'draw' ? 'true' : 'false');
+  eraseBtn.setAttribute('aria-pressed', mode === 'erase' ? 'true' : 'false');
   selectBtn.setAttribute('aria-pressed', mode === 'select' ? 'true' : 'false');
   drawBtn.textContent = mode === 'draw' ? '[ ] Stop Drawing' : '\u270E Draw Line';
+  eraseBtn.textContent = mode === 'erase' ? '[ ] Stop Erasing' : '\u232B Erase Line';
   selectBtn.textContent = mode === 'select' ? '[ ] Stop Selecting' : '\u25A2 Select Period';
 
   selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
@@ -273,10 +287,16 @@ function setMode(mode) {
 
   var statusText = 'Drag to scroll \u2022 Wheel to zoom \u2022 Hover trend lines for projected date and price \u2022 Double-click a line to delete it';
   if (mode === 'draw') statusText = 'Click and drag on the chart to draw a line \u2022 Double-click a line to delete it';
+  if (mode === 'erase') statusText = 'Click any trend line once to erase it \u2022 Use Undo to restore it';
+  if (mode === 'extend') statusText = 'Click farther left or right on the chart to extend the selected line along its existing slope';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
   document.getElementById('status').textContent = statusText;
   var modeAnnouncement = mode === 'draw'
     ? 'Draw Line mode enabled.'
+    : mode === 'erase'
+      ? 'Erase Line mode enabled.'
+    : mode === 'extend'
+      ? 'Extend Line mode enabled.'
     : mode === 'select'
       ? 'Select Period mode enabled.'
       : 'Chart navigation mode enabled.';
@@ -291,7 +311,16 @@ function setMode(mode) {
 }
 
 function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
+function toggleErase() { setMode(currentMode === 'erase' ? 'pan' : 'erase'); }
 function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
+
+function startExtendLine(index) {
+  if (index < 0 || index >= lines.length) return;
+  extendingLineIndex = index;
+  setMode('extend');
+  renderLineList();
+  announce('Line ' + (index + 1) + ' selected. Click farther left or right on the chart to extend it.');
+}
 
 function allVisiblePrices() {
   if (!chartData) return [];
@@ -373,6 +402,8 @@ function resetView() {
 }
 
 function clearAll() {
+  if (lines.length === 0) return;
+  saveUndoState();
   lines = [];
   knownShapeCount = 0;
   clearSelection();
@@ -383,11 +414,49 @@ function clearAll() {
 }
 
 function deleteLine(idx) {
+  if (idx < 0 || idx >= lines.length) return;
+  saveUndoState();
   lines.splice(idx, 1);
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
   announce('Line ' + (idx + 1) + ' deleted.');
+}
+
+function cloneLines(source) {
+  return source.map(function(line) { return Object.assign({}, line); });
+}
+
+function saveUndoState() {
+  undoStack.push(cloneLines(lines));
+  if (undoStack.length > 50) undoStack.shift();
+  updateLineActionButtons();
+}
+
+function undoLastAction() {
+  if (undoStack.length === 0) return;
+  lines = undoStack.pop();
+  knownShapeCount = 0;
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+  announce('Last line action undone.');
+}
+
+document.addEventListener('keydown', function(event) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+    if (undoStack.length === 0) return;
+    event.preventDefault();
+    undoLastAction();
+  }
+});
+
+function updateLineActionButtons() {
+  var hasLines = lines.length > 0;
+  document.getElementById('undoBtn').disabled = undoStack.length === 0;
+  document.getElementById('eraseBtn').disabled = !hasLines;
+  document.getElementById('clearBtn').style.display = hasLines ? '' : 'none';
+  if (!hasLines && currentMode === 'erase') setMode('pan');
 }
 
 function clearSelection() {
@@ -467,6 +536,60 @@ function lineTimestamp(line, point) {
   return new Date(line['x' + point]).getTime();
 }
 
+function eventToChartTimestamp(event) {
+  var layout = chartDiv._fullLayout;
+  if (!layout || !layout.xaxis || !layout._size) return null;
+  var plotArea = layout._size;
+  var chartRect = chartDiv.getBoundingClientRect();
+  var mouseX = event.clientX - chartRect.left;
+  if (mouseX < plotArea.l || mouseX > plotArea.l + plotArea.w) return null;
+  var xRange = layout.xaxis.range;
+  var rangeStart = typeof xRange[0] === 'string' ? new Date(xRange[0]).getTime() : xRange[0];
+  var rangeEnd = typeof xRange[1] === 'string' ? new Date(xRange[1]).getTime() : xRange[1];
+  return rangeStart + ((mouseX - plotArea.l) / plotArea.w) * (rangeEnd - rangeStart);
+}
+
+function extendLineToDate(index, timestamp) {
+  if (index < 0 || index >= lines.length || !Number.isFinite(timestamp)) return false;
+  var line = lines[index];
+  var start = lineTimestamp(line, 1);
+  var end = lineTimestamp(line, 2);
+  var earliest = Math.min(start, end);
+  var latest = Math.max(start, end);
+  if (timestamp >= earliest && timestamp <= latest) {
+    announce('Click beyond either endpoint to extend Line ' + (index + 1) + '.');
+    return false;
+  }
+
+  var transformedStart = scaleMode === 'log' ? Math.log10(line.y1) : line.y1;
+  var transformedEnd = scaleMode === 'log' ? Math.log10(line.y2) : line.y2;
+  var slope = (transformedEnd - transformedStart) / (end - start);
+  var transformedPrice = transformedStart + slope * (timestamp - start);
+  var price = scaleMode === 'log' ? Math.pow(10, transformedPrice) : transformedPrice;
+  if (!Number.isFinite(price) || price <= 0) {
+    announce('That extension would produce an invalid price.');
+    return false;
+  }
+
+  saveUndoState();
+  var replacePoint;
+  if (timestamp < earliest) {
+    replacePoint = start <= end ? 1 : 2;
+  } else {
+    replacePoint = start >= end ? 1 : 2;
+  }
+  line['x' + replacePoint + '_ms'] = timestamp;
+  line['x' + replacePoint] = msToDateStr(timestamp);
+  line['y' + replacePoint] = price;
+  extendingLineIndex = -1;
+  setMode('pan');
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+  announce('Line ' + (index + 1) + ' extended to ' + msToDateStr(timestamp) + '.');
+  return true;
+}
+
 function inspectTrendLine(event) {
   if (currentMode === 'select' || lines.length === 0) {
     trendTooltip.style.display = 'none';
@@ -521,16 +644,21 @@ function inspectTrendLine(event) {
   }
 
   if (!nearest) {
+    hoveredLineIndex = -1;
+    hoveredLineDistance = Infinity;
     trendTooltip.style.display = 'none';
     return;
   }
 
+  hoveredLineIndex = nearest.index;
+  hoveredLineDistance = nearest.distance;
   trendTooltip.innerHTML =
     '<strong>Trend line ' + (nearest.index + 1) + ' projection</strong>' +
     '<div>Projected date: ' + formatProjectedDate(timestamp) + '</div>' +
     '<div>Projected SOXL price: $' + nearest.price.toLocaleString('en-US', {
       minimumFractionDigits: 2, maximumFractionDigits: 2
-    }) + '</div>';
+    }) + '</div>' +
+    (currentMode === 'erase' ? '<div><b>Click to erase this line</b></div>' : '');
   trendTooltip.style.display = 'block';
   var tooltipWidth = trendTooltip.offsetWidth || 270;
   var visibleLeft = chartScroll.scrollLeft;
@@ -548,8 +676,26 @@ function inspectTrendLine(event) {
 chartContainer.addEventListener('pointermove', inspectTrendLine, true);
 chartContainer.addEventListener('mousemove', inspectTrendLine, true);
 chartContainer.addEventListener('mouseleave', function() {
+  hoveredLineIndex = -1;
+  hoveredLineDistance = Infinity;
   trendTooltip.style.display = 'none';
 });
+
+chartContainer.addEventListener('click', function(event) {
+  if (currentMode === 'extend' && extendingLineIndex >= 0) {
+    var timestamp = eventToChartTimestamp(event);
+    if (timestamp === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    extendLineToDate(extendingLineIndex, timestamp);
+    return;
+  }
+  if (currentMode === 'erase' && hoveredLineIndex >= 0 && hoveredLineDistance <= 35) {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteLine(hoveredLineIndex);
+  }
+}, true);
 
 function pxToDate(px) {
   var layout = chartDiv._fullLayout;
@@ -704,10 +850,7 @@ chartDiv.addEventListener('dblclick', function(e) {
   if (bestIdx >= 0) {
     e.stopPropagation();
     e.preventDefault();
-    lines.splice(bestIdx, 1);
-    renderChart();
-    renderLineList();
-    setComponentValue({action: "set_all", lines: lines});
+    deleteLine(bestIdx);
   }
 }, true);
 
@@ -737,6 +880,7 @@ function handlePlotlyRelayout(eventData) {
   if (Math.abs(x1_ms - x0_ms) < 86400000) return;
   if (!Number.isFinite(y0) || !Number.isFinite(y1) || y0 <= 0 || y1 <= 0) return;
 
+  saveUndoState();
   lines.push({
     x1_ms: x0_ms, y1: y0,
     x2_ms: x1_ms, y2: y1,
@@ -1000,6 +1144,7 @@ function renderChart() {
 
 function renderLineList() {
   var el = document.getElementById('line-list');
+  updateLineActionButtons();
   if (lines.length === 0) { el.innerHTML = ''; return; }
   var html = '';
   for (var i = 0; i < lines.length; i++) {
@@ -1008,7 +1153,8 @@ function renderLineList() {
     html += '<div class="line-row">'
       + '<span class="line-dot" style="background:' + color + '"></span>'
       + '<span>Line ' + (i+1) + ': ' + ln.x1 + ' ($' + ln.y1.toFixed(2) + ') \u2192 ' + ln.x2 + ' ($' + ln.y2.toFixed(2) + ')</span>'
-      + '<button class="ldel" onclick="deleteLine(' + i + ')">\u2715</button>'
+      + '<button class="lext' + (currentMode === 'extend' && extendingLineIndex === i ? ' active' : '') + '" aria-label="Extend line ' + (i+1) + '" onclick="startExtendLine(' + i + ')">Extend</button>'
+      + '<button class="ldel" aria-label="Delete line ' + (i+1) + '" onclick="deleteLine(' + i + ')">Delete</button>'
       + '</div>';
   }
   el.innerHTML = html;
