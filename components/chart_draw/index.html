@@ -12,7 +12,29 @@
     width: 214px; gap: 7px; align-items: stretch; padding: 10px;
     flex-direction: column; background: rgba(248,250,252,0.97);
     border: 2px solid #475569; border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow: auto;
+    resize: both; min-width: 180px; max-width: 420px; min-height: 220px;
+  }
+  #toolbar::after {
+    content: "RESIZE";
+    position: sticky; display: block; bottom: 0; margin: 2px -4px -5px auto;
+    width: max-content; padding: 2px 4px; color: #475569; background: #e2e8f0;
+    border-radius: 3px; font-size: 9px; font-weight: 900; pointer-events: none;
+  }
+  #rail-handle {
+    display: flex; align-items: center; justify-content: space-between; gap: 5px;
+    margin: -10px -10px 1px; padding: 8px 9px; color: #fff; background: #334155;
+    border-radius: 8px 8px 0 0; cursor: move; user-select: none; touch-action: none;
+  }
+  #rail-handle strong { font-size: 12px; letter-spacing: 0.03em; }
+  .rail-move-btn {
+    border: 1px solid #94a3b8; border-radius: 4px; background: #fff; color: #0f172a;
+    cursor: pointer; padding: 3px 6px; font-weight: 900; line-height: 1;
+  }
+  #rail-collapsed-tab {
+    display: none; position: absolute; z-index: 301; right: 8px; top: 12px;
+    border: 2px solid #334155; border-radius: 7px; background: #fff; color: #0f172a;
+    padding: 8px 10px; font-weight: 900; cursor: pointer;
   }
   .tbtn {
     padding: 7px 18px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;
@@ -58,7 +80,7 @@
      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
    }
   #chart-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; position: relative; }
-  #chart-container { position: relative; width: 100%; min-width: 100%; }
+  #chart-container { position: relative; width: 100%; min-width: 50%; }
   #chart { width: 100%; }
   #select-overlay {
     display: none;
@@ -143,7 +165,14 @@
 </style>
 </head>
 <body>
+<button id="rail-collapsed-tab" onclick="showControlRail()">SHOW CONTROLS</button>
 <div id="toolbar">
+  <div id="rail-handle">
+    <button class="rail-move-btn" onclick="dockControlRail('left', event)" title="Dock controls left">&#8592;</button>
+    <strong>DRAG TO MOVE • RESIZE CORNER</strong>
+    <button class="rail-move-btn" onclick="dockControlRail('right', event)" title="Dock controls right">&#8594;</button>
+    <button class="rail-move-btn" onclick="collapseControlRail(event)" title="Collapse controls">&#8722;</button>
+  </div>
   <strong style="text-align:center;color:#0f172a;">CHART CONTROLS</strong>
   <button class="tbtn" id="undoBtn" onclick="undoLastAction()" aria-label="Undo last line change">&#8630; Undo Last Line Change</button>
   <button class="tbtn active" id="drawBtn" aria-pressed="true" onclick="toggleDraw()">[ ] Stop Drawing</button>
@@ -169,13 +198,13 @@
     </select>
   </label>
   <label class="height-control" for="heightSlider">
-    Chart height
-    <input id="heightSlider" type="range" min="520" max="1400" step="40" value="900" oninput="setChartHeight(this.value)">
+    Vertical size
+    <input id="heightSlider" type="range" min="300" max="1400" step="25" value="900" oninput="setChartHeight(this.value)">
     <span id="heightValue">900 px</span>
   </label>
   <label class="height-control" for="widthSlider">
-    Chart width
-    <input id="widthSlider" type="range" min="100" max="300" step="10" value="100" oninput="setChartWidth(this.value)">
+    Horizontal size
+    <input id="widthSlider" type="range" min="50" max="300" step="10" value="100" oninput="setChartWidth(this.value)">
     <span id="widthValue">100%</span>
   </label>
   <div id="keyboard-selection" aria-labelledby="keyboard-selection-heading">
@@ -245,27 +274,98 @@ var hoveredLineIndex = -1;
 var hoveredLineDistance = Infinity;
 var contextLineIndex = -1;
 var toolbarEl = document.getElementById('toolbar');
+var railDock = 'right';
+var railFreeLeft = null;
+var railTopOffset = 0;
+var railCollapsed = false;
 
-function positionRightControlRail() {
-  var top = 12;
-  var availableHeight = window.innerHeight - 24;
+function visibleRailBounds() {
+  var bounds = {top: 12, bottom: window.innerHeight - 12};
   try {
     if (window.frameElement && window.parent) {
       var frameRect = window.frameElement.getBoundingClientRect();
-      var parentHeight = window.parent.innerHeight;
-      var visibleTop = Math.max(12, -frameRect.top + 12);
-      var visibleBottom = Math.min(document.documentElement.clientHeight - 12, parentHeight - frameRect.top - 12);
-      if (visibleBottom > visibleTop) {
-        top = visibleTop;
-        availableHeight = visibleBottom - visibleTop;
-      }
+      bounds.top = Math.max(12, -frameRect.top + 12);
+      bounds.bottom = Math.min(document.documentElement.clientHeight - 12, window.parent.innerHeight - frameRect.top - 12);
     }
-  } catch (error) {
-    top = 12;
-  }
-  toolbarEl.style.top = Math.max(12, top) + 'px';
-  toolbarEl.style.maxHeight = Math.max(180, availableHeight) + 'px';
+  } catch (error) {}
+  if (bounds.bottom <= bounds.top) bounds.bottom = bounds.top + 180;
+  return bounds;
 }
+
+function positionRightControlRail() {
+  var bounds = visibleRailBounds();
+  var availableHeight = bounds.bottom - bounds.top;
+  var railHeight = Math.min(toolbarEl.scrollHeight, availableHeight);
+  var top = Math.max(bounds.top, Math.min(bounds.top + railTopOffset, bounds.bottom - railHeight));
+  toolbarEl.style.top = top + 'px';
+  toolbarEl.style.maxHeight = Math.max(180, availableHeight) + 'px';
+  if (railDock === 'left') {
+    toolbarEl.style.left = '12px';
+    toolbarEl.style.right = 'auto';
+  } else if (railDock === 'right') {
+    toolbarEl.style.left = 'auto';
+    toolbarEl.style.right = '12px';
+  } else {
+    var maxLeft = Math.max(8, document.documentElement.clientWidth - toolbarEl.offsetWidth - 8);
+    railFreeLeft = Math.max(8, Math.min(railFreeLeft || 8, maxLeft));
+    toolbarEl.style.left = railFreeLeft + 'px';
+    toolbarEl.style.right = 'auto';
+  }
+
+  var tab = document.getElementById('rail-collapsed-tab');
+  tab.style.top = bounds.top + 'px';
+  if (railDock === 'left') {
+    tab.style.left = '8px';
+    tab.style.right = 'auto';
+  } else {
+    tab.style.left = 'auto';
+    tab.style.right = '8px';
+  }
+}
+
+function dockControlRail(side, event) {
+  if (event) event.stopPropagation();
+  railDock = side;
+  railTopOffset = 0;
+  positionRightControlRail();
+}
+
+function collapseControlRail(event) {
+  if (event) event.stopPropagation();
+  railCollapsed = true;
+  toolbarEl.style.display = 'none';
+  document.getElementById('rail-collapsed-tab').style.display = 'block';
+  positionRightControlRail();
+}
+
+function showControlRail() {
+  railCollapsed = false;
+  document.getElementById('rail-collapsed-tab').style.display = 'none';
+  toolbarEl.style.display = 'flex';
+  positionRightControlRail();
+}
+
+document.getElementById('rail-handle').addEventListener('pointerdown', function(event) {
+  if (event.target.closest('button')) return;
+  event.preventDefault();
+  var startX = event.clientX;
+  var startY = event.clientY;
+  var startRect = toolbarEl.getBoundingClientRect();
+  var boundsAtStart = visibleRailBounds();
+
+  function moveRail(moveEvent) {
+    railDock = 'free';
+    railFreeLeft = startRect.left + moveEvent.clientX - startX;
+    railTopOffset = startRect.top + moveEvent.clientY - startY - boundsAtStart.top;
+    positionRightControlRail();
+  }
+  function stopMoving() {
+    document.removeEventListener('pointermove', moveRail);
+    document.removeEventListener('pointerup', stopMoving);
+  }
+  document.addEventListener('pointermove', moveRail);
+  document.addEventListener('pointerup', stopMoving);
+});
 
 window.addEventListener('resize', positionRightControlRail);
 try {
@@ -273,6 +373,11 @@ try {
   window.parent.addEventListener('resize', positionRightControlRail);
 } catch (error) {}
 setTimeout(positionRightControlRail, 0);
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(function() {
+    if (!railCollapsed) positionRightControlRail();
+  }).observe(toolbarEl);
+}
 
 var selecting = false;
 var selectStartX = 0;
@@ -582,7 +687,7 @@ function setScale(mode) {
 }
 
 function setChartHeight(value) {
-  currentChartHeight = Math.max(520, Math.min(1400, Number(value) || 900));
+  currentChartHeight = Math.max(300, Math.min(1400, Number(value) || 900));
   document.getElementById('heightValue').textContent = currentChartHeight + ' px';
   Plotly.relayout(chartDiv, {height: currentChartHeight}).then(function() {
     setFrameHeight(document.body.scrollHeight + 20);
@@ -590,7 +695,7 @@ function setChartHeight(value) {
 }
 
 function setChartWidth(value) {
-  currentChartWidth = Math.max(100, Math.min(300, Number(value) || 100));
+  currentChartWidth = Math.max(50, Math.min(300, Number(value) || 100));
   var scroll = document.getElementById('chart-scroll');
   var container = document.getElementById('chart-container');
   var width = Math.round(scroll.clientWidth * currentChartWidth / 100);
