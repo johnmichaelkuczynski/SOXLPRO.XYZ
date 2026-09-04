@@ -253,7 +253,45 @@ def _reliability_label(low, high):
         return "Reliable negative"
     return "Not reliable"
 
+def build_regime_consistency_summary(summary, holding_period):
+    """Pivot regime reliability into a compact, accessible signal matrix."""
+    regimes = list(SIGNAL_REGIMES[1:])
+    labels = {
+        "Reliable positive": "↑ Reliable positive",
+        "Reliable negative": "↓ Reliable negative",
+        "Not reliable": "○ Not reliable",
+        "Insufficient data": "? Insufficient evidence",
+    }
+    required = {
+        "Holding period", "Regime", "Model", "Signal", "Reliable vs zero",
+    }
+    if summary.empty or not required.issubset(summary.columns):
+        return pd.DataFrame(columns=["Model", "Signal", *regimes])
 
+    selected = summary[
+        (summary["Holding period"] == holding_period)
+        & summary["Regime"].isin(regimes)
+    ].copy()
+    if selected.empty:
+        return pd.DataFrame(columns=["Model", "Signal", *regimes])
+
+    selected["Consistency"] = selected["Reliable vs zero"].map(labels).fillna(
+        "? Insufficient evidence"
+    )
+    matrix = selected.pivot(
+        index=["Model", "Signal"], columns="Regime", values="Consistency"
+    ).reindex(columns=regimes)
+    matrix = matrix.fillna("? Insufficient evidence").reset_index()
+    matrix.columns.name = None
+    model_order = {model: position for position, model in enumerate(SIGNAL_MODELS)}
+    signal_order = {signal: position for position, signal in enumerate(SIGNAL_ORDER)}
+    matrix["_model_order"] = matrix["Model"].map(model_order)
+    matrix["_signal_order"] = matrix["Signal"].map(signal_order)
+    return (
+        matrix.sort_values(["_model_order", "_signal_order"])
+        .drop(columns=["_model_order", "_signal_order"])
+        .reset_index(drop=True)
+    )
 def summarize_signal_backtest(
     results,
     holding_periods=SIGNAL_HOLDING_PERIODS,

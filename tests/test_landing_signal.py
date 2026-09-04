@@ -17,6 +17,7 @@ from landing_signal import (
     signal_from_percentile,
 )
 from backtest_engine import (
+    build_regime_consistency_summary,
     build_signal_reliability_report_rows,
     classify_market_regimes,
     summarize_signal_backtest,
@@ -249,6 +250,53 @@ class LandingSignalTests(unittest.TestCase):
         ].iloc[0]
         self.assertEqual(bear_buy["Evidence"], "Insufficient (<30)")
         self.assertEqual(bear_buy["Reliable vs zero"], "Insufficient data")
+
+    def test_regime_consistency_summary_is_scoped_and_text_labeled(self):
+        rows = []
+        states = {
+            "Bull": "Reliable positive",
+            "Bear": "Reliable negative",
+            "High volatility": "Not reliable",
+        }
+        for horizon in ("5d", "21d"):
+            for regime, state in states.items():
+                rows.append({
+                    "Holding period": horizon,
+                    "Regime": regime,
+                    "Model": "Composite",
+                    "Signal": "BUY",
+                    "Reliable vs zero": (
+                        "Insufficient data"
+                        if horizon == "5d" and regime == "Bear"
+                        else state
+                    ),
+                })
+        matrix = build_regime_consistency_summary(pd.DataFrame(rows), "5d")
+
+        self.assertEqual(
+            matrix.columns.tolist(),
+            ["Model", "Signal", "Bull", "Bear", "High volatility"],
+        )
+        self.assertEqual(len(matrix), 1)
+        self.assertEqual(matrix.iloc[0]["Bull"], "↑ Reliable positive")
+        self.assertEqual(matrix.iloc[0]["Bear"], "? Insufficient evidence")
+        self.assertEqual(matrix.iloc[0]["High volatility"], "○ Not reliable")
+
+    def test_regime_consistency_summary_fills_missing_regimes(self):
+        summary = pd.DataFrame([{
+            "Holding period": "21d",
+            "Regime": "Bull",
+            "Model": "Composite",
+            "Signal": "SELL",
+            "Reliable vs zero": "Reliable negative",
+        }])
+        matrix = build_regime_consistency_summary(summary, "21d")
+
+        self.assertEqual(matrix.iloc[0]["Bull"], "↓ Reliable negative")
+        self.assertEqual(matrix.iloc[0]["Bear"], "? Insufficient evidence")
+        self.assertEqual(
+            matrix.iloc[0]["High volatility"], "? Insufficient evidence"
+        )
 
     def test_walk_forward_past_signals_do_not_change_when_future_changes(self):
         index = pd.bdate_range("2010-01-04", periods=1100)

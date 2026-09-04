@@ -18,6 +18,7 @@ from backtest_engine import (
     simulate_call_sleeve_engine, CALL_SLEEVE_DEFAULTS, compute_risk_metrics,
     walk_forward_signal_backtest, summarize_signal_backtest,
     build_signal_reliability_report_rows,
+    build_regime_consistency_summary,
 )
 from plotly.subplots import make_subplots
 from datetime import datetime as _dt2
@@ -1474,6 +1475,15 @@ def _daily_signal_study_tab():
                      "means trailing 21-day volatility is at or above its trailing one-year "
                      "75th percentile and takes precedence.",
             )
+        consistency = build_regime_consistency_summary(summary, horizon)
+        st.markdown("##### Reliability across market regimes")
+        st.caption(
+            "Each cell classifies the average forward return for this holding period. "
+            "Symbols and text convey the result without relying on color."
+        )
+        st.dataframe(
+            consistency, hide_index=True, use_container_width=True,
+        )
         view = summary[
             (summary["Holding period"] == horizon) & (summary["Regime"] == regime)
         ].copy()
