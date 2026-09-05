@@ -1130,7 +1130,13 @@ function normalCdf(value) {
 
 function getHitProbabilityModel() {
   if (hitProbabilityModel) return hitProbabilityModel;
-  if (!chartData || !chartData.prices || !chartData.dates || chartData.prices.length < 30) {
+  if (
+    !chartData ||
+    !Array.isArray(chartData.prices) ||
+    !Array.isArray(chartData.dates) ||
+    chartData.prices.length < 30 ||
+    chartData.dates.length !== chartData.prices.length
+  ) {
     return null;
   }
   var logReturns = [];
@@ -1151,11 +1157,17 @@ function getHitProbabilityModel() {
   var latestPrice = Number(chartData.prices[lastIndex]);
   var latestTimestamp = new Date(chartData.dates[lastIndex]).getTime();
   var annualVolatility = Math.sqrt(variance * 252);
-  if (!(latestPrice > 0) || !Number.isFinite(latestTimestamp) || !(annualVolatility > 0)) return null;
+  var annualLogDrift = mean * 252;
+  if (
+    !(latestPrice > 0) ||
+    !Number.isFinite(latestTimestamp) ||
+    !(annualVolatility > 0) ||
+    !Number.isFinite(annualLogDrift)
+  ) return null;
   hitProbabilityModel = {
     latestPrice: latestPrice,
     latestTimestamp: latestTimestamp,
-    annualLogDrift: mean * 252,
+    annualLogDrift: annualLogDrift,
     annualVolatility: annualVolatility,
     observations: logReturns.length
   };
@@ -1176,7 +1188,9 @@ function estimateHitProbability(targetPrice, targetTimestamp) {
   var exponent = 2 * drift * barrier / (sigma * sigma);
   var secondTerm = Math.exp(Math.min(700, exponent)) *
     normalCdf((-drift * years - barrier) / scaledVolatility);
-  return Math.max(0, Math.min(1, firstTerm + secondTerm));
+  var probability = firstTerm + secondTerm;
+  if (!Number.isFinite(probability)) return null;
+  return Math.max(0, Math.min(1, probability));
 }
 
 function formatHitProbability(targetPrice, targetTimestamp) {
