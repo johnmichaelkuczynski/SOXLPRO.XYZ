@@ -138,13 +138,25 @@ def render_visitor_counter():
         total, unique = counts
         st.markdown(
             f"""
-            <div style="text-align:right;color:#64748b;font-size:.76rem;
-                        margin:-4px 2px 2px 0;letter-spacing:.01em;">
-              <span title="Anonymous visit sessions; Streamlit reruns are not counted again.">
-              Total visits: <strong>{total:,}</strong></span>
-              <span style="color:#cbd5e1;padding:0 .38rem;">•</span>
-              <span title="Anonymous browser estimate; no names or contact details are stored.">
-              Unique visitors: <strong>{unique:,}</strong></span>
+            <div style="display:flex;justify-content:flex-end;margin:0 2px 10px 0;">
+              <div style="display:inline-flex;align-items:stretch;overflow:hidden;
+                          border:1px solid #cbd5e1;border-radius:9px;background:#fff;
+                          box-shadow:0 1px 3px rgba(15,23,42,.10);color:#334155;
+                          font-size:.82rem;line-height:1.15;">
+                <div style="display:flex;align-items:center;padding:.55rem .72rem;
+                            background:#f1f5f9;font-weight:700;letter-spacing:.04em;
+                            color:#475569;">VISITOR COUNTER</div>
+                <div title="Anonymous visit sessions; Streamlit reruns are not counted again."
+                     style="padding:.48rem .78rem;text-align:center;border-left:1px solid #cbd5e1;">
+                  <div style="font-size:1.05rem;font-weight:800;color:#0f172a;">{total:,}</div>
+                  <div style="font-size:.68rem;color:#64748b;">TOTAL VISITS</div>
+                </div>
+                <div title="Anonymous browser estimate; no names or contact details are stored."
+                     style="padding:.48rem .78rem;text-align:center;border-left:1px solid #cbd5e1;">
+                  <div style="font-size:1.05rem;font-weight:800;color:#0f172a;">{unique:,}</div>
+                  <div style="font-size:.68rem;color:#64748b;">UNIQUE VISITORS</div>
+                </div>
+              </div>
             </div>
             """,
             unsafe_allow_html=True,

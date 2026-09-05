@@ -236,12 +236,12 @@
   </label>
   <label class="height-control" for="heightSlider">
     Vertical size
-    <input id="heightSlider" type="range" min="300" max="1400" step="25" value="900" oninput="setChartHeight(this.value)">
+    <input id="heightSlider" type="range" min="300" max="1400" step="25" value="900" oninput="setChartHeight(this.value)" onchange="trackEvent('chart_height_changed', {pixels: Number(this.value)})">
     <span id="heightValue">900 px</span>
   </label>
   <label class="height-control" for="widthSlider">
     Horizontal size
-    <input id="widthSlider" type="range" min="50" max="300" step="10" value="100" oninput="setChartWidth(this.value)">
+    <input id="widthSlider" type="range" min="50" max="300" step="10" value="100" oninput="setChartWidth(this.value)" onchange="trackEvent('chart_width_changed', {percent: Number(this.value)})">
     <span id="widthValue">100%</span>
   </label>
   <div id="keyboard-selection" aria-labelledby="keyboard-selection-heading">
@@ -323,6 +323,7 @@ var hoveredLineIndex = -1;
 var hoveredLineDistance = Infinity;
 var contextLineIndex = -1;
 var hitProbabilityModel = null;
+var projectionAnalyticsSeen = new Set();
 var toolbarEl = document.getElementById('toolbar');
 var railContentEl = document.getElementById('rail-content');
 var railDock = 'right';
@@ -608,6 +609,18 @@ function setFrameHeight(h) {
   sendToStreamlit("streamlit:setFrameHeight", {height: h});
 }
 
+function trackEvent(name, data) {
+  try {
+    var tracker = window.umami;
+    if (!tracker && window.parent) tracker = window.parent.umami;
+    if (tracker && typeof tracker.track === 'function') {
+      tracker.track(name, data || {});
+    }
+  } catch (error) {
+    // Analytics must never interfere with chart interactions.
+  }
+}
+
 function announce(message) {
   document.getElementById('announcement').textContent = message;
 }
@@ -718,6 +731,7 @@ function setMode(mode) {
     'newshape.line.width': 2
   });
   if (mode === 'draw') fitSoxlPrices();
+  trackEvent('chart_mode_selected', {mode: mode});
 }
 
 function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
@@ -845,6 +859,7 @@ function setFutureHorizon(value) {
   futureHorizonYears = Math.max(5, Math.min(50, Number(value) || 30));
   renderChart();
   announce('Future projection horizon set to ' + futureHorizonYears + ' years.');
+  trackEvent('future_horizon_changed', {years: futureHorizonYears});
 }
 
 function yAxisRange() {
@@ -887,6 +902,7 @@ function fitSoxlPrices(event) {
     'yaxis.range': soxlYAxisRange()
   });
   announce('Chart fitted to the SOXL price range.');
+  if (event) trackEvent('chart_prices_fitted', {scale: scaleMode});
 }
 
 function setScale(mode) {
@@ -900,6 +916,7 @@ function setScale(mode) {
   linearBtn.setAttribute('aria-pressed', mode === 'linear' ? 'true' : 'false');
   renderChart();
   announce((mode === 'log' ? 'Logarithmic' : 'Linear') + ' price scale selected.');
+  trackEvent('chart_scale_changed', {scale: mode});
 }
 
 function setChartHeight(value) {
@@ -935,6 +952,7 @@ function resetView() {
     'yaxis.type': scaleMode,
     'yaxis.range': yAxisRange()
   });
+  trackEvent('chart_view_reset', {scale: scaleMode, horizon_years: futureHorizonYears});
 }
 
 function clearAll() {
@@ -957,6 +975,7 @@ function deleteLine(idx) {
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
   announce('Line ' + (idx + 1) + ' deleted.');
+  trackEvent('trend_line_deleted', {remaining_lines: lines.length});
 }
 
 function eraseLastLine() {
@@ -1049,6 +1068,9 @@ function applyKeyboardSelection() {
 
 function analyzeSelection() {
   if (!selectedRange) return;
+  trackEvent('period_analysis_requested', {
+    duration_days: Math.max(1, Math.round((selectedRange.endMs - selectedRange.startMs) / 86400000))
+  });
   setComponentValue({
     action: "analyze",
     lines: lines,
@@ -1220,6 +1242,11 @@ function extendLineToDate(index, timestamp) {
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
   announce('Line ' + (index + 1) + ' extended to ' + msToDateStr(timestamp) + '.');
+  trackEvent('trend_line_extended', {
+    direction: timestamp < earliest ? 'backward' : 'forward',
+    extension_days: Math.round(Math.abs(timestamp - (timestamp < earliest ? earliest : latest)) / 86400000),
+    line_count: lines.length
+  });
   return true;
 }
 
@@ -1286,6 +1313,7 @@ function inspectTrendLine(event) {
   hoveredLineIndex = nearest.index;
   hoveredLineDistance = nearest.distance;
   var hitProbability = formatHitProbability(nearest.price, timestamp);
+  var probabilityValue = estimateHitProbability(nearest.price, timestamp);
   trendTooltip.innerHTML =
     '<strong>Trend line ' + (nearest.index + 1) + ' projection</strong>' +
     '<div>Projected date: ' + formatProjectedDate(timestamp) + '</div>' +
@@ -1297,6 +1325,29 @@ function inspectTrendLine(event) {
     '<div>Historical-model estimate</div>' +
     '<div><b>Double-click this line to erase it</b></div>';
   trendTooltip.style.display = 'block';
+  var probabilityModel = getHitProbabilityModel();
+  if (
+    nearest.distance <= 45 &&
+    probabilityModel &&
+    timestamp > probabilityModel.latestTimestamp &&
+    probabilityValue !== null
+  ) {
+    var horizonMonths = Math.max(
+      1,
+      Math.round((timestamp - probabilityModel.latestTimestamp) / (30.4375 * 86400000))
+    );
+    var targetMultiple = nearest.price / probabilityModel.latestPrice;
+    var analyticsKey = nearest.index + ':' + horizonMonths + ':' + Math.round(targetMultiple * 10);
+    if (!projectionAnalyticsSeen.has(analyticsKey)) {
+      projectionAnalyticsSeen.add(analyticsKey);
+      trackEvent('projection_probability_viewed', {
+        horizon_months: horizonMonths,
+        target_multiple: Number(targetMultiple.toFixed(2)),
+        probability_percent: Number((probabilityValue * 100).toFixed(1)),
+        scale: scaleMode
+      });
+    }
+  }
   var tooltipWidth = trendTooltip.offsetWidth || 270;
   var visibleLeft = chartScroll.scrollLeft;
   var visibleRight = visibleLeft + chartScroll.clientWidth;
@@ -1523,6 +1574,11 @@ function handlePlotlyRelayout(eventData) {
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
+  trackEvent('trend_line_created', {
+    line_count: lines.length,
+    span_days: Math.round(Math.abs(x1_ms - x0_ms) / 86400000),
+    scale: scaleMode
+  });
 }
 
 function renderChart() {
