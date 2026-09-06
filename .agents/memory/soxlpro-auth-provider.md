@@ -15,3 +15,7 @@ identity, while the Subscribe control remains visible to signed-out visitors.
 The PostgreSQL `user_access` primary-key column intentionally retains its legacy
 `clerk_user_id` name so Replit's production schema diff does not attempt to add
 a second primary key; only verified `google_<sub>` values may be stored there.
+Do not restore a Streamlit `[auth]` block in `.streamlit/secrets.toml`. Streamlit
+built-in auth validates its own `/oauth2callback` origin and conflicts with the
+gateway-proxied WebSocket; direct Google OAuth reads credentials from Replit
+Secrets and uses `/auth/google/callback`.

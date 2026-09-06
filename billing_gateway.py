@@ -15,7 +15,12 @@ import jwt
 import stripe
 from aiohttp import ClientSession, WSMsgType, web
 
-from billing import process_stripe_webhook
+from billing import (
+    create_checkout_url,
+    create_portal_url,
+    process_stripe_webhook,
+    valid_auth_user_id,
+)
 
 
 STREAMLIT_URL = "http://127.0.0.1:8501"
@@ -98,6 +103,11 @@ def _safe_return_path(value: str | None) -> str:
     return "/"
 
 
+def _auth_failure(stage: str) -> web.HTTPFound:
+    print(f"Google OAuth failed at stage={stage}", flush=True)
+    return web.HTTPFound(f"/?auth=failed&reason={stage}")
+
+
 async def google_login(request: web.Request) -> web.Response:
     if not google_oauth_configured():
         return web.Response(text="Google sign-in is unavailable.", status=503)
@@ -155,15 +165,16 @@ async def google_callback(request: web.Request) -> web.Response:
     cookie_value = request.cookies.get(STATE_COOKIE)
     state = _decode(state_value, "google_oauth_state")
     cookie_state = _decode(cookie_value, "google_oauth_state")
+    if request.query.get("error"):
+        raise _auth_failure("google_denied")
     if (
         not google_oauth_configured()
         or not state
         or not cookie_state
         or state_value != cookie_value
-        or request.query.get("error")
         or not request.query.get("code")
     ):
-        raise web.HTTPFound("/?auth=failed")
+        raise _auth_failure("state")
 
     async with request.app["client"].post(
         GOOGLE_TOKEN_URL,
@@ -177,21 +188,21 @@ async def google_callback(request: web.Request) -> web.Response:
     ) as token_response:
         token_data = await token_response.json()
     if token_response.status != 200 or not token_data.get("id_token"):
-        raise web.HTTPFound("/?auth=failed")
+        raise _auth_failure("token")
     try:
         user_id, _verified_email = await asyncio.to_thread(
             _verify_google_id_token,
             token_data["id_token"],
             state["nonce"],
         )
-    except Exception:
-        raise web.HTTPFound("/?auth=failed")
+    except Exception as exc:
+        print(
+            f"Google OAuth identity verification failed: {type(exc).__name__}",
+            flush=True,
+        )
+        raise _auth_failure("identity")
 
-    return_to = _safe_return_path(state.get("return_to"))
-    separator = "&" if "?" in return_to else "?"
-    destination = f"{return_to}{separator}auth=complete"
-    if state.get("subscribe"):
-        destination += "&subscribe=1"
+    destination = "/billing/checkout" if state.get("subscribe") else "/?auth=complete"
     response = web.HTTPFound(destination)
     _secure_cookie(
         response,
@@ -207,6 +218,38 @@ async def google_logout(request: web.Request) -> web.Response:
     response = web.HTTPFound("/?auth=logged_out")
     response.del_cookie(SESSION_COOKIE, path="/")
     raise response
+
+
+def _session_user(request: web.Request) -> str | None:
+    session = _decode(request.cookies.get(SESSION_COOKIE), "soxlpro_session")
+    user_id = session.get("sub") if session else None
+    return user_id if valid_auth_user_id(user_id) else None
+
+
+async def billing_checkout(request: web.Request) -> web.Response:
+    user_id = _session_user(request)
+    if not user_id:
+        raise web.HTTPFound("/auth/google/start?subscribe=1")
+    try:
+        url = await asyncio.to_thread(
+            create_checkout_url, user_id, _public_base_url()
+        )
+    except Exception:
+        raise web.HTTPFound("/?billing=failed")
+    raise web.HTTPFound(url)
+
+
+async def billing_portal(request: web.Request) -> web.Response:
+    user_id = _session_user(request)
+    if not user_id:
+        raise web.HTTPFound("/auth/google/start")
+    try:
+        url = await asyncio.to_thread(
+            create_portal_url, user_id, _public_base_url()
+        )
+    except Exception:
+        raise web.HTTPFound("/?billing=failed")
+    raise web.HTTPFound(url)
 
 
 async def stripe_webhook(request: web.Request) -> web.Response:
@@ -375,6 +418,8 @@ def create_app() -> web.Application:
     app.router.add_get("/auth/google/start", google_login)
     app.router.add_get("/auth/google/callback", google_callback)
     app.router.add_get("/auth/logout", google_logout)
+    app.router.add_get("/billing/checkout", billing_checkout)
+    app.router.add_get("/billing/portal", billing_portal)
     app.router.add_post("/api/stripe/webhook", stripe_webhook)
     app.router.add_route("*", "/{path:.*}", streamlit_proxy)
     return app

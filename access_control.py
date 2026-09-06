@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -13,13 +12,10 @@ import streamlit.components.v1 as components
 from billing import (
     anonymous_usage,
     consume_usage_action,
-    create_checkout_url,
-    create_portal_url,
     get_access_record,
     paid_from_record,
     refresh_live_subscription,
     signed_in_actions,
-    stripe_live_configured,
     verify_checkout_return,
 )
 
@@ -27,11 +23,6 @@ from billing import (
 ANONYMOUS_SECONDS = 180
 ANONYMOUS_ACTIONS = 3
 SIGNED_IN_FREE_ACTIONS = 5
-
-_auth_component = components.declare_component(
-    "soxlpro_access", path="components/soxlpro_access"
-)
-
 
 @dataclass(frozen=True)
 class AccessState:
@@ -53,18 +44,6 @@ def google_oauth_configured() -> bool:
         and os.environ.get("GOOGLE_CLIENT_SECRET")
         and len(os.environ.get("SESSION_SECRET", "")) >= 32
     )
-
-
-def _base_url() -> str:
-    configured = os.environ.get("PUBLIC_APP_URL", "").strip().rstrip("/")
-    if configured:
-        parsed = urlparse(configured)
-        if parsed.scheme == "https" and parsed.netloc:
-            return configured
-    if _is_deployment():
-        return "https://soxlpro.xyz"
-    dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "").strip()
-    return f"https://{dev_domain}" if dev_domain else "http://localhost:5000"
 
 
 def _track_event(name: str, data: dict | None = None, dedupe_key: str | None = None):
@@ -101,17 +80,92 @@ def _paid_access(user_id: str) -> bool:
         return False
 
 
-def _redirect(url: str) -> None:
-    components.html(
-        f"<script>window.top.location.href={json.dumps(url)};</script>",
-        height=0,
-        width=0,
-    )
-
-
 def _trusted_header(name: str) -> str | None:
     value = st.context.headers.get(name)
     return value.strip() if value and value.strip() else None
+
+
+def _render_account_controls(
+    state: AccessState, paid: bool, remaining_actions: int
+) -> None:
+    status = (
+        "Member"
+        if paid
+        else f"{remaining_actions} "
+        + ("free actions" if state.authenticated else "preview actions")
+    )
+    account_action = (
+        "/auth/logout" if state.authenticated else "/auth/google/start"
+    )
+    account_label = "Sign out" if state.authenticated else "Sign in with Google"
+    if state.authenticated:
+        billing_path = "/billing/portal" if paid else "/billing/checkout"
+        billing_label = "Manage membership" if paid else "Subscribe"
+        billing_hidden = ""
+    else:
+        billing_path = "/auth/google/start"
+        billing_label = "Subscribe"
+        billing_hidden = '<input type="hidden" name="subscribe" value="1">'
+    st.markdown(
+        f"""
+        <style>
+        .soxl-access-bar {{
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 7px;
+            width: 100%;
+        }}
+        .soxl-access-status {{
+            color: #64748b;
+            font-size: 11px;
+            white-space: nowrap;
+        }}
+        .soxl-access-form {{
+            display: inline-flex;
+            margin: 0;
+        }}
+        .soxl-access-button {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 38px;
+            padding: 8px 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: white;
+            color: #0f172a !important;
+            font-weight: 650;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: 1;
+            text-decoration: none !important;
+            white-space: nowrap;
+            cursor: pointer;
+        }}
+        .soxl-access-primary {{
+            background: #0f172a;
+            border-color: #0f172a;
+            color: white !important;
+        }}
+        </style>
+        <div class="soxl-access-bar">
+          <span class="soxl-access-status">{status}</span>
+          <form class="soxl-access-form" action="{account_action}"
+                method="get" target="_self">
+            <button class="soxl-access-button" type="submit">{account_label}</button>
+          </form>
+          <form class="soxl-access-form" action="{billing_path}"
+                method="get" target="_self">
+            {billing_hidden}
+            <button class="soxl-access-button soxl-access-primary"
+                    type="submit">{billing_label}</button>
+          </form>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_access_control() -> tuple[AccessState, bool]:
@@ -155,17 +209,7 @@ def render_access_control() -> tuple[AccessState, bool]:
             else ANONYMOUS_ACTIONS - state.anonymous_actions
         ),
     )
-    raw = _auth_component(
-        authenticated=state.authenticated,
-        google_configured=google_oauth_configured(),
-        stripe_configured=stripe_live_configured(),
-        paid=paid,
-        remaining_actions=remaining_actions,
-        login_url="/auth/google/start",
-        logout_url="/auth/logout",
-        key="soxlpro_access_control",
-        default={},
-    ) or {}
+    _render_account_controls(state, paid, remaining_actions)
 
     if st.query_params.get("auth") == "complete":
         _track_event(
@@ -178,19 +222,28 @@ def render_access_control() -> tuple[AccessState, bool]:
         _track_event("logout_completed", {}, "logout_completed")
         st.query_params.pop("auth", None)
     elif st.query_params.get("auth") == "failed":
-        st.error("Google sign-in could not be completed. Please try again.")
+        reason = st.query_params.get("reason")
+        messages = {
+            "google_denied": (
+                "Google denied access. If the OAuth app is in Testing, add "
+                "this Google account under Audience → Test users."
+            ),
+            "state": (
+                "The Google sign-in session expired or its cookie was blocked. "
+                "Allow cookies for soxlpro.xyz and try again."
+            ),
+            "token": (
+                "Google could not exchange the authorization code. Verify the "
+                "OAuth client secret and try again."
+            ),
+            "identity": (
+                "Google returned an identity that could not be verified. "
+                "Please try a verified Google account."
+            ),
+        }
+        st.error(messages.get(reason, "Google sign-in could not be completed."))
         st.query_params.pop("auth", None)
-
-    if state.authenticated and st.query_params.get("subscribe") == "1":
-        st.query_params.pop("subscribe", None)
-        try:
-            _track_event(
-                "subscription_checkout_started",
-                {"billing_mode": "live"},
-            )
-            _redirect(create_checkout_url(state.user_id, _base_url()))
-        except Exception:
-            st.error("Live billing is temporarily unavailable.")
+        st.query_params.pop("reason", None)
 
     session_id = st.query_params.get("session_id")
     if (
@@ -213,30 +266,9 @@ def render_access_control() -> tuple[AccessState, bool]:
             )
             st.success("Your SOXLPRO membership is active.")
 
-    action_id = raw.get("action_id")
-    action = (
-        raw.get("action")
-        if action_id and action_id != st.session_state.get("_last_access_action_id")
-        else None
-    )
-    if action:
-        st.session_state._last_access_action_id = action_id
-    if action in {"checkout", "portal"} and state.authenticated:
-        try:
-            url = (
-                create_portal_url(state.user_id, _base_url())
-                if action == "portal"
-                else create_checkout_url(state.user_id, _base_url())
-            )
-            _track_event(
-                "billing_portal_opened"
-                if action == "portal"
-                else "subscription_checkout_started",
-                {"billing_mode": "live"},
-            )
-            _redirect(url)
-        except Exception:
-            st.error("Live billing is temporarily unavailable.")
+    if st.query_params.get("billing") == "failed":
+        st.query_params.pop("billing", None)
+        st.error("Live billing is temporarily unavailable.")
 
     if st.query_params.get("checkout") == "cancelled":
         st.query_params.clear()
