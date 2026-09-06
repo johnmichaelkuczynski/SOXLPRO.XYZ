@@ -99,6 +99,13 @@
       await clerk.load();
       document.getElementById("login").hidden = Boolean(clerk.user);
       document.getElementById("status").textContent = clerk.user ? "Signed in" : "";
+      if (clerk.user) {
+        const completionKey = "soxlpro_login_tracked_" + clerk.user.id;
+        if (!localStorage.getItem(completionKey)) {
+          track("google_login_completed", {method: "google"});
+          localStorage.setItem(completionKey, "1");
+        }
+      }
       clerk.addListener(() => report());
     }
     async function openLogin() {

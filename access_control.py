@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -20,6 +21,30 @@ SIGNED_IN_FREE_ACTIONS = 5
 _auth_component = components.declare_component(
     "soxlpro_access", path="components/soxlpro_access"
 )
+
+
+def _track_event(name: str, data: dict | None = None, dedupe_key: str | None = None):
+    key = dedupe_key or name
+    session_key = f"_analytics_{key}"
+    if st.session_state.get(session_key):
+        return
+    payload = json.dumps(data or {}, separators=(",", ":")).replace("<", "\\u003c")
+    event_name = json.dumps(name)
+    components.html(
+        f"""
+        <script>
+        try {{
+          const tracker = window.parent.umami;
+          if (tracker && typeof tracker.track === "function") {{
+            tracker.track({event_name}, {payload});
+          }}
+        }} catch (_) {{}}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+    st.session_state[session_key] = True
 
 
 @dataclass(frozen=True)
@@ -238,6 +263,11 @@ def render_access_control() -> tuple[AccessState, bool]:
         else:
             checkout_url = _checkout_url(state.user_id)
             if checkout_url:
+                _track_event(
+                    "subscription_checkout_started",
+                    {"billing_mode": "live"},
+                    "subscription_checkout_started",
+                )
                 st.markdown(
                     f'<meta http-equiv="refresh" content="0;url={checkout_url}">',
                     unsafe_allow_html=True,
@@ -247,7 +277,21 @@ def render_access_control() -> tuple[AccessState, bool]:
                     "Live checkout is not available yet. Contact contact@zhisystems.ai."
                 )
 
+    if st.query_params.get("checkout") == "cancelled":
+        _track_event(
+            "subscription_checkout_cancelled",
+            {"billing_mode": "live"},
+            "subscription_checkout_cancelled",
+        )
+        st.query_params.clear()
+
     paid = _checkout_paid(state.user_id) if state.authenticated else False
+    if paid:
+        _track_event(
+            "subscription_access_verified",
+            {"billing_mode": "live"},
+            "subscription_access_verified",
+        )
     return state, paid
 
 
@@ -260,12 +304,25 @@ def enforce_staged_access(state: AccessState, paid: bool) -> None:
         or state.anonymous_actions >= ANONYMOUS_ACTIONS
     )
     if not state.authenticated and anonymous_limit_reached:
+        _track_event(
+            "anonymous_login_gate_reached",
+            {
+                "actions": state.anonymous_actions,
+                "elapsed_seconds": state.elapsed_seconds,
+            },
+            "anonymous_login_gate_reached",
+        )
         st.warning(
             "Continue with Google to keep using SOXLPRO. "
             "Your initial preview is complete."
         )
         st.stop()
     if state.authenticated and state.signed_in_actions >= SIGNED_IN_FREE_ACTIONS:
+        _track_event(
+            "signed_in_paywall_reached",
+            {"actions": state.signed_in_actions},
+            "signed_in_paywall_reached",
+        )
         st.warning(
             "Your signed-in free access is complete. Subscribe to continue using SOXLPRO."
         )
