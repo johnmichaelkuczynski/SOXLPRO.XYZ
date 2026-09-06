@@ -19,6 +19,14 @@
       #bar { gap: 5px; }
       button { padding-inline: 9px; }
     }
+    @media (max-width: 280px) {
+      #bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+      }
+      button { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -63,6 +71,11 @@
         ? "Member"
         : args.remaining_actions +
           (args.authenticated ? " free actions" : " preview actions");
+      requestAnimationFrame(() => {
+        send("streamlit:setFrameHeight", {
+          height: Math.max(46, document.documentElement.scrollHeight)
+        });
+      });
     }
     document.getElementById("login").onclick = () => {
       track("google_login_requested", {source: "header"});
@@ -80,7 +93,6 @@
     window.addEventListener("message", (event) => {
       if (event.data?.type !== "streamlit:render") return;
       args = event.data.args || {};
-      send("streamlit:setFrameHeight", {height: 46});
       updateBar();
     });
     send("streamlit:componentReady", {apiVersion: 1});
