@@ -57,9 +57,9 @@ def signed_in_actions(user_id: str) -> int:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO user_access (auth_user_id)
+                INSERT INTO user_access (clerk_user_id)
                 VALUES (%s)
-                ON CONFLICT (auth_user_id) DO UPDATE
+                ON CONFLICT (clerk_user_id) DO UPDATE
                 SET updated_at = user_access.updated_at
                 RETURNING signed_in_free_actions
                 """,
@@ -105,9 +105,9 @@ def consume_usage_action(
                     raise ValueError("Invalid Google user ID")
                 cursor.execute(
                     """
-                    INSERT INTO user_access (auth_user_id)
+                    INSERT INTO user_access (clerk_user_id)
                     VALUES (%s)
-                    ON CONFLICT (auth_user_id) DO NOTHING
+                    ON CONFLICT (clerk_user_id) DO NOTHING
                     """,
                     (user_id,),
                 )
@@ -116,7 +116,7 @@ def consume_usage_action(
                     UPDATE user_access
                     SET signed_in_free_actions = signed_in_free_actions + 1,
                         updated_at = NOW()
-                    WHERE auth_user_id = %s
+                    WHERE clerk_user_id = %s
                       AND signed_in_free_actions < %s
                     RETURNING signed_in_free_actions
                     """,
@@ -150,7 +150,7 @@ def consume_usage_action(
             if user_id:
                 cursor.execute(
                     "SELECT signed_in_free_actions FROM user_access "
-                    "WHERE auth_user_id = %s",
+                    "WHERE clerk_user_id = %s",
                     (user_id,),
                 )
             else:
@@ -197,12 +197,12 @@ def persist_subscription(
             cursor.execute(
                 """
                 INSERT INTO user_access (
-                    auth_user_id, stripe_customer_id, stripe_subscription_id,
+                    clerk_user_id, stripe_customer_id, stripe_subscription_id,
                     subscription_status, subscription_price_id,
                     current_period_end, last_stripe_event_created, updated_at
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (auth_user_id) DO UPDATE
+                ON CONFLICT (clerk_user_id) DO UPDATE
                 SET stripe_customer_id = COALESCE(
                         EXCLUDED.stripe_customer_id,
                         user_access.stripe_customer_id
@@ -249,12 +249,12 @@ def _persist_subscription_cursor(
     cursor.execute(
         """
         INSERT INTO user_access (
-            auth_user_id, stripe_customer_id, stripe_subscription_id,
+            clerk_user_id, stripe_customer_id, stripe_subscription_id,
             subscription_status, subscription_price_id, current_period_end,
             last_stripe_event_created, updated_at
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (auth_user_id) DO UPDATE
+        ON CONFLICT (clerk_user_id) DO UPDATE
         SET stripe_customer_id = COALESCE(
                 EXCLUDED.stripe_customer_id, user_access.stripe_customer_id
             ),
@@ -291,7 +291,7 @@ def get_access_record(user_id: str) -> dict | None:
                        stripe_subscription_id, subscription_status,
                        subscription_price_id, current_period_end
                 FROM user_access
-                WHERE auth_user_id = %s
+                WHERE clerk_user_id = %s
                 """,
                 (user_id,),
             )
@@ -510,7 +510,7 @@ def process_stripe_webhook(payload: bytes, signature: str) -> str:
                 )
                 if not valid_auth_user_id(user_id):
                     cursor.execute(
-                        "SELECT auth_user_id FROM user_access "
+                        "SELECT clerk_user_id FROM user_access "
                         "WHERE stripe_customer_id = %s",
                         (obj.get("customer"),),
                     )
