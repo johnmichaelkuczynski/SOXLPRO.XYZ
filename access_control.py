@@ -261,6 +261,11 @@ def render_access_control() -> tuple[AccessState, bool]:
                 "Live billing is temporarily unavailable. "
                 "Please contact contact@zhisystems.ai."
             )
+    elif action == "clerk_configuration_missing":
+        st.error(
+            "Google sign-in is awaiting production Clerk configuration. "
+            "Checkout is disabled until Google authentication is active."
+        )
 
     if st.query_params.get("checkout") == "cancelled":
         st.query_params.clear()
@@ -295,6 +300,9 @@ def record_meaningful_action(action_name: str) -> None:
 def enforce_staged_access(state: AccessState, paid: bool) -> None:
     """Stop premium rendering after each free allowance is exhausted."""
     if paid:
+        return
+    # Never trap a visitor behind an authentication control that cannot work.
+    if not _clerk_configured():
         return
     if st.session_state.get("_usage_persistence_failed"):
         st.error(

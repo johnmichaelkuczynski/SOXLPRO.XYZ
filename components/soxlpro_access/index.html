@@ -61,12 +61,20 @@
     }
     function updateBar() {
       const signedIn = Boolean(clerk?.user);
-      document.getElementById("login").hidden = signedIn || !args.clerk_configured;
+      const login = document.getElementById("login");
+      login.hidden = signedIn;
+      login.disabled = !args.clerk_configured;
+      login.title = args.clerk_configured
+        ? "Sign in securely with Google"
+        : "Google sign-in is awaiting production Clerk configuration";
       document.getElementById("logout").hidden = !signedIn;
-      document.getElementById("pay").textContent = args.paid
+      const pay = document.getElementById("pay");
+      pay.textContent = args.paid
         ? "Manage membership" : "Subscribe";
-      document.getElementById("pay").disabled =
-        !args.stripe_configured || (!signedIn && !args.clerk_configured);
+      pay.disabled = !args.stripe_configured || !args.clerk_configured;
+      pay.title = !args.clerk_configured
+        ? "Google sign-in must be active before checkout"
+        : "";
       if (args.paid) {
         document.getElementById("status").textContent = "Member";
       } else {
@@ -95,7 +103,10 @@
       }
     }
     async function openGoogleLogin(checkoutAfterLogin = false) {
-      if (!args.account_portal_url) return;
+      if (!args.clerk_configured || !args.account_portal_url) {
+        await report("clerk_configuration_missing");
+        return;
+      }
       track("google_login_requested", {
         source: checkoutAfterLogin ? "subscribe" : "header"
       });
