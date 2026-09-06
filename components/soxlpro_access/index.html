@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: transparent; font-family: Inter, system-ui, sans-serif; }
+    #bar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-height: 42px; }
+    button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 14px; background: white;
+      color: #0f172a; font-weight: 650; cursor: pointer; white-space: nowrap; }
+    #pay { background: #0f172a; color: white; border-color: #0f172a; }
+    #auth { display: none; min-height: 610px; justify-content: center; padding-top: 8px; }
+    .status { color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <span id="status" class="status"></span>
+    <button id="login" hidden>Sign in with Google</button>
+    <button id="pay">Subscribe</button>
+  </div>
+  <div id="auth"></div>
+  <script type="module">
+    const parentWindow = window.parent;
+    let args = {};
+    let clerk = null;
+    let lastPayload = "";
+
+    function send(type, data) {
+      parentWindow.postMessage({isStreamlitMessage: true, type, ...data}, "*");
+    }
+    function height(value) { send("streamlit:setFrameHeight", {height: value}); }
+    function value(payload) {
+      const encoded = JSON.stringify(payload);
+      if (encoded === lastPayload) return;
+      lastPayload = encoded;
+      send("streamlit:setComponentValue", {value: payload, dataType: "json"});
+    }
+    function storeNumber(key, fallback = 0) {
+      const parsed = Number(localStorage.getItem(key));
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+    function engagement() {
+      const firstSeenKey = "soxlpro_first_seen";
+      let firstSeen = storeNumber(firstSeenKey, 0);
+      if (!firstSeen) {
+        firstSeen = Date.now();
+        localStorage.setItem(firstSeenKey, String(firstSeen));
+      }
+      return {
+        anonymous_actions: storeNumber("soxlpro_anonymous_actions"),
+        signed_in_actions: clerk?.user
+          ? storeNumber("soxlpro_user_actions_" + clerk.user.id)
+          : 0,
+        elapsed_seconds: Math.max(0, Math.floor((Date.now() - firstSeen) / 1000))
+      };
+    }
+    async function report(action = null) {
+      let token = null;
+      if (clerk?.session) {
+        try { token = await clerk.session.getToken(); } catch (_) {}
+      }
+      value({
+        ...engagement(),
+        token,
+        action,
+        signed_in: Boolean(clerk?.user)
+      });
+    }
+    function installActionCounter() {
+      const doc = parentWindow.document;
+      if (doc.documentElement.dataset.soxlAccessCounter === "1") return;
+      doc.documentElement.dataset.soxlAccessCounter = "1";
+      doc.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        const label = (button.innerText || "").trim().toLowerCase();
+        if (!label || label.includes("contact") || label.includes("refresh")) return;
+        if (clerk?.user) {
+          const key = "soxlpro_user_actions_" + clerk.user.id;
+          localStorage.setItem(key, String(storeNumber(key) + 1));
+        } else {
+          const key = "soxlpro_anonymous_actions";
+          localStorage.setItem(key, String(storeNumber(key) + 1));
+        }
+        report();
+      }, true);
+    }
+    async function loadClerk() {
+      if (!args.clerk_configured || !args.publishable_key) return;
+      const module = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
+      clerk = new module.Clerk(args.publishable_key);
+      await clerk.load();
+      document.getElementById("login").hidden = Boolean(clerk.user);
+      document.getElementById("status").textContent = clerk.user ? "Signed in" : "";
+      clerk.addListener(() => report());
+    }
+    async function openLogin() {
+      if (!clerk) return;
+      const auth = document.getElementById("auth");
+      auth.style.display = "flex";
+      document.getElementById("bar").style.display = "none";
+      height(660);
+      clerk.mountSignIn(auth, {
+        signUpUrl: undefined,
+        afterSignInUrl: parentWindow.location.href,
+        appearance: { elements: { socialButtonsBlockButtonText: { fontWeight: 650 } } }
+      });
+    }
+    document.getElementById("login").addEventListener("click", openLogin);
+    document.getElementById("pay").addEventListener("click", async () => {
+      if (!clerk?.user) {
+        await openLogin();
+        return;
+      }
+      await report("checkout");
+    });
+    window.addEventListener("message", async (event) => {
+      if (event.data?.type !== "streamlit:render") return;
+      args = event.data.args || {};
+      height(46);
+      try {
+        await loadClerk();
+        installActionCounter();
+        await report();
+        setInterval(report, 30000);
+      } catch (_) {
+        await report();
+      }
+    });
+    send("streamlit:componentReady", {apiVersion: 1});
+  </script>
+</body>
+</html>

@@ -23,6 +23,7 @@ from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
+from access_control import enforce_staged_access, render_access_control
 
 
 def _inject_google_site_verification():
@@ -245,7 +246,7 @@ logo_data_uri = (
     + base64.b64encode(logo_path.read_bytes()).decode("ascii")
 )
 
-col_title, col_contact, col_refresh = st.columns([6, 1.15, 0.85])
+col_title, col_access, col_contact, col_refresh = st.columns([4.7, 1.7, 1.15, 0.85])
 with col_title:
     st.markdown(
         f"""
@@ -274,8 +275,12 @@ with col_refresh:
         st.cache_data.clear()
         st.rerun()
 
+with col_access:
+    access_state, has_paid_access = render_access_control()
+
 render_visitor_counter()
 render_landing_signal(data)
+enforce_staged_access(access_state, has_paid_access)
 
 def get_price_at_offset(df, days_ago):
     target_date = df.index[-1] - timedelta(days=days_ago)

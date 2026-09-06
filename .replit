@@ -51,3 +51,8 @@ timeoutMs = 180000
 [userenv]
 
 [userenv.production]
+
+[userenv.shared]
+CLERK_ACCOUNT_PORTAL_URL = "https://rare-macaw-89.accounts.dev"
+CLERK_FRONTEND_API_URL = "https://rare-macaw-89.clerk.accounts.dev"
+CLERK_PUBLISHABLE_KEY = "pk_test_cmFyZS1tYWNhdy04OS5jbGVyay5hY2NvdW50cy5kZXYk"
