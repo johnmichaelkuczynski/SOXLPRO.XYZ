@@ -256,26 +256,37 @@ def render_access_control() -> tuple[AccessState, bool]:
         elapsed_seconds=max(0, int(raw.get("elapsed_seconds", 0) or 0)),
     )
 
-    checkout_requested = raw.get("action") == "checkout"
-    if checkout_requested:
-        if not state.authenticated:
-            st.session_state._checkout_after_login = True
+    requested_action = raw.get("action")
+    if requested_action == "checkout_after_login" and not state.authenticated:
+        st.session_state._checkout_after_login = True
+
+    checkout_requested = requested_action == "checkout"
+    checkout_return = st.query_params.get("checkout_after_login") == "1"
+    checkout_after_login = bool(
+        state.authenticated
+        and (
+            checkout_return
+            or st.session_state.pop("_checkout_after_login", False)
+        )
+    )
+    if state.authenticated and (checkout_requested or checkout_after_login):
+        if checkout_return:
+            st.query_params.clear()
+        checkout_url = _checkout_url(state.user_id)
+        if checkout_url:
+            _track_event(
+                "subscription_checkout_started",
+                {"billing_mode": "live"},
+                "subscription_checkout_started",
+            )
+            st.markdown(
+                f'<meta http-equiv="refresh" content="0;url={checkout_url}">',
+                unsafe_allow_html=True,
+            )
         else:
-            checkout_url = _checkout_url(state.user_id)
-            if checkout_url:
-                _track_event(
-                    "subscription_checkout_started",
-                    {"billing_mode": "live"},
-                    "subscription_checkout_started",
-                )
-                st.markdown(
-                    f'<meta http-equiv="refresh" content="0;url={checkout_url}">',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.error(
-                    "Live checkout is not available yet. Contact contact@zhisystems.ai."
-                )
+            st.error(
+                "Live checkout is not available yet. Contact CONTACT@ZHISYSTEMS.AI."
+            )
 
     if st.query_params.get("checkout") == "cancelled":
         _track_event(

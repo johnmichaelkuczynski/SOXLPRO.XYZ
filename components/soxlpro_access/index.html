@@ -108,14 +108,25 @@
       }
       clerk.addListener(() => report());
     }
-    async function openLogin() {
+    async function openLogin(checkoutAfterLogin = false) {
       if (!clerk) return;
       track("google_login_requested", {source: "header"});
-      const returnUrl = parentWindow.location.href;
+      const returnLocation = new URL(parentWindow.location.href);
+      returnLocation.searchParams.delete("checkout");
+      returnLocation.searchParams.delete("session_id");
+      returnLocation.searchParams.delete("checkout_after_login");
+      if (checkoutAfterLogin) {
+        returnLocation.searchParams.set("checkout_after_login", "1");
+      }
+      const returnUrl = returnLocation.toString();
       if (args.account_portal_url) {
         const signInUrl = args.account_portal_url.replace(/\/$/, "") +
           "/sign-in?redirect_url=" + encodeURIComponent(returnUrl);
-        parentWindow.location.assign(signInUrl);
+        const loginWindow = window.open(signInUrl, "_blank", "noopener,noreferrer");
+        if (!loginWindow) {
+          document.getElementById("status").textContent =
+            "Allow pop-ups to continue with Google";
+        }
         return;
       }
       await clerk.client.signIn.authenticateWithRedirect({
@@ -124,11 +135,12 @@
         redirectUrlComplete: returnUrl
       });
     }
-    document.getElementById("login").addEventListener("click", openLogin);
+    document.getElementById("login").addEventListener("click", () => openLogin(false));
     document.getElementById("pay").addEventListener("click", async () => {
       track("subscription_clicked", {signed_in: Boolean(clerk?.user)});
       if (!clerk?.user) {
-        await openLogin();
+        await report("checkout_after_login");
+        await openLogin(true);
         return;
       }
       await report("checkout");
