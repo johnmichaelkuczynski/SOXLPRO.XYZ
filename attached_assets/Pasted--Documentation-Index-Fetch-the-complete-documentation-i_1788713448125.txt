@@ -1,0 +1,269 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.replit.com/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Stripe Payments Integration
+
+> Learn how to add payments and subscriptions to your app with Stripe using Agent.
+
+export const AiPrompt = ({children}) => {
+  return <CodeBlock className="relative block max-w-full overflow-x-hidden font-sans !whitespace-pre-wrap !break-words" style={{
+    overflowWrap: "anywhere",
+    wordBreak: "break-word"
+  }}>
+      <div className="pr-7" style={{
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word"
+  }}>
+        {children}
+      </div>
+    </CodeBlock>;
+};
+
+<Note>
+  The Stripe integration is available only on paid plans ([Core](/billing/plans/replit-core) and [Pro](/billing/plans/replit-pro)). It is not available on the free [Starter](/billing/plans/starter-plan) plan—Agent prompts you to upgrade when it proposes the connector.
+</Note>
+
+## What you can build
+
+Use Agent to add Stripe to your app in one click—no setup required. Build a storefront, accept one‑time payments, or create subscriptions. Agent wires up the integration, data models, and test environment.
+
+## How it works
+
+Agent starts with a Stripe sandbox so you can safely test payments without moving real money. You can build and try flows immediately. When you are ready, switch to your live Stripe account to publish and accept real payments.
+
+<Info>
+  A Stripe sandbox is an isolated test environment where you can simulate
+  payments, subscriptions, and events. Learn more in
+  [Stripe's docs on sandboxes](https://docs.stripe.com/sandboxes).
+</Info>
+
+## Use Stripe with your team
+
+Stripe works in collaborative workspaces, so your whole team can build, test, and monetize the same app together. Everyone in the workspace can work with the connected Stripe account, instead of one person building payments alone.
+
+## Get started
+
+* **Ask Agent to use Stripe**
+  * Use a slash command on the home screen and select Stripe, or ask directly:
+    <AiPrompt>Build a storefront and integrate Stripe for payments</AiPrompt>
+
+<Note>
+  Stripe integration requires an App with backend functionality. Select **App** from the homepage to get started.
+</Note>
+
+## Test payments in the sandbox
+
+1. Open your app’s **Preview** in a new tab.
+2. Make a test purchase from your storefront or payment page.
+3. Use Stripe’s standard test card:
+
+```text theme={null}
+Card number: 4242 4242 4242 4242
+Expiry: any future date
+CVC: any 3 digits
+Name, address: any mock values
+```
+
+<Tip>
+  Sandbox purchases don’t process through real networks or move money. They’re
+  safe for testing end to end.
+</Tip>
+
+## Manage products and pricing
+
+You have two options:
+
+1. From your app, select **Publish**, then choose to claim your Stripe sandbox.
+   * If you don’t have a Stripe account yet, create one to claim the sandbox.
+2. In the Stripe Dashboard, open **Products** to add or edit products and prices.
+   Changes you make in the Stripe sandbox reflect in your Replit app automatically
+   and sync to your app’s database.
+
+### View synced Stripe data
+
+* In the Project Editor, open **Database**.
+* Select **MyData**.
+* Change the schema selector to **Stripe** to see payment objects and related
+  records.
+
+## Go live
+
+To accept real payments, connect your live Stripe account by installing the
+[Replit Integrated Payments](https://marketplace.stripe.com/apps/replit-integrated-payments)
+app from the Stripe Marketplace. The install flow connects your live account
+automatically — you don't need to copy or paste API keys.
+
+<Warning>
+  Your sandbox integration is not production‑ready. It cannot accept real
+  payments until you complete the steps below.
+</Warning>
+
+<Steps>
+  <Step title="Open the Publish pane">
+    In your app, select **Publish** to start the live connection flow.
+  </Step>
+
+  <Step title="Install the Replit Integrated Payments app">
+    Select **Install Stripe app**. A Stripe window opens with the
+    [Replit Integrated Payments](https://marketplace.stripe.com/apps/replit-integrated-payments)
+    listing.
+
+    When Stripe prompts you to choose an account, select your **live**
+    Stripe account — not a sandbox or test account.
+  </Step>
+
+  <Step>
+    Follow Stripe's prompts to install the app. If your live account
+    isn't activated yet, Stripe walks you through KYB (Know Your
+    Business) verification first.
+
+    Keep the Stripe window open until the installation completes.
+    Replit finalizes the production connection in the background once
+    Stripe confirms the installation.
+  </Step>
+
+  <Step title="Publish your app">
+    Return to Replit. The **Publish** pane shows your live Stripe
+    account as connected. Publish your app to start accepting real
+    payments.
+  </Step>
+</Steps>
+
+<Note>
+  Installing the Replit Integrated Payments app replaces the older manual
+  flow of copying Publishable and Secret keys into Replit. The app sets
+  up your production keys for you and keeps the sandbox-to-live sync in
+  place.
+</Note>
+
+## Manage the integration
+
+* Go to **Integrations > Stripe** to open the Stripe connector.
+* From there, you can test the connection, view status, and manage settings.
+
+## Frequently asked questions
+
+### How do I update the prices of my products?
+
+* Ask Agent: Describe the change and Agent updates your app and Stripe objects.
+* Use the Stripe Dashboard: Open **Products** to edit prices and product details.
+  * In sandbox, changes sync back to your app and database automatically.
+  * For production, switch to your live account first, then update prices. Publish again if your app needs to pick up new configuration.
+
+### How do I test transactions on Replit?
+
+Open your app’s **Preview** in a new tab. Run the Stripe Checkout flow with the
+standard test card (4242 4242 4242 4242), any future expiry, and any CVC. See
+[Test payments in the sandbox](#test-payments-in-the-sandbox) above for details.
+
+### What is a live Stripe account?
+
+A live Stripe account is an activated and verified account that can process real
+payments using your business details. See Stripe’s guidance on account creation
+and activation: [Create and manage your Stripe account](https://docs.stripe.com/get-started/account).
+
+### Do I still need to paste in my Stripe API keys?
+
+No. The Replit Integrated Payments app installs your production keys for you
+when you connect your live Stripe account. You don't need to copy live keys
+from the Stripe Dashboard.
+
+If you previously connected Stripe by pasting live keys, that connection
+continues to work. You can switch to the Stripe app install flow by removing
+the Stripe connection and reconnecting from the **Publish** pane. See
+[Update or remove the Stripe connection](#update-or-remove-the-stripe-connection)
+below.
+
+## Update or remove the Stripe connection
+
+If you're not ready to publish with a live Stripe connection, you have two
+options:
+
+### Option A: Remove the Stripe integration manually
+
+You can completely remove the Stripe integration from your project.
+
+<Steps>
+  <Step title="Open the Integrations tab">
+    Navigate to your Replit app and select the **Integrations** tab at the top. Under **Connectors**, find **Stripe** and select **Manage**.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/B2FfFcjSO2_7EVcu/images/replitai/stripe-disconnect-1-integrations.png?fit=max&auto=format&n=B2FfFcjSO2_7EVcu&q=85&s=6c13ffeb8b367ec950a48d264540f967" alt="Integrations tab showing Connectors with the Stripe integration and a Manage button" width="2000" height="1110" data-path="images/replitai/stripe-disconnect-1-integrations.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Expand your API keys">
+    Select the chevron to expand your **Sandbox API keys** and **Live account API keys**, then select **Edit**.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/B2FfFcjSO2_7EVcu/images/replitai/stripe-disconnect-2-edit-keys.png?fit=max&auto=format&n=B2FfFcjSO2_7EVcu&q=85&s=60bbac9e871e84e28171ec9bfa22b28d" alt="Stripe sandbox and live account API keys expanded with Edit buttons" width="2000" height="1274" data-path="images/replitai/stripe-disconnect-2-edit-keys.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Disconnect your account">
+    Select **Disconnect account** to remove the Sandbox connection and **Disconnect live account** to remove the Live connection.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/B2FfFcjSO2_7EVcu/images/replitai/stripe-disconnect-3-disconnect.png?fit=max&auto=format&n=B2FfFcjSO2_7EVcu&q=85&s=576034d8d4380747c4f8c5ccdc41c652" alt="Stripe sandbox and live account API keys with Disconnect account and Disconnect live account buttons" width="2000" height="1271" data-path="images/replitai/stripe-disconnect-3-disconnect.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Ask Agent to remove the Stripe code">
+    Go to Agent chat and ask Agent to remove the Stripe connector code from your application. This will remove your entire Stripe integration.
+  </Step>
+</Steps>
+
+### Option B: Roll back to a checkpoint before the Stripe integration
+
+If you want to completely undo the Stripe integration and return to a previous state, you can roll back to an earlier checkpoint.
+
+<Steps>
+  <Step title="Open the Integrations tab">
+    Navigate to your Replit app and select the **Integrations** tab at the top. Under **Connectors**, find **Stripe** and select **Manage**.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/B2FfFcjSO2_7EVcu/images/replitai/stripe-disconnect-1-integrations.png?fit=max&auto=format&n=B2FfFcjSO2_7EVcu&q=85&s=6c13ffeb8b367ec950a48d264540f967" alt="Integrations tab showing Connectors with the Stripe integration and a Manage button" width="2000" height="1110" data-path="images/replitai/stripe-disconnect-1-integrations.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Expand your API keys">
+    Select the chevron to expand your **Sandbox API keys** and **Live account API keys**, then select **Edit**.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/B2FfFcjSO2_7EVcu/images/replitai/stripe-disconnect-2-edit-keys.png?fit=max&auto=format&n=B2FfFcjSO2_7EVcu&q=85&s=60bbac9e871e84e28171ec9bfa22b28d" alt="Stripe sandbox and live account API keys expanded with Edit buttons" width="2000" height="1274" data-path="images/replitai/stripe-disconnect-2-edit-keys.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Disconnect your account">
+    Select **Disconnect account** to remove the Sandbox connection and **Disconnect live account** to remove the Live connection.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/B2FfFcjSO2_7EVcu/images/replitai/stripe-disconnect-3-disconnect.png?fit=max&auto=format&n=B2FfFcjSO2_7EVcu&q=85&s=576034d8d4380747c4f8c5ccdc41c652" alt="Stripe sandbox and live account API keys with Disconnect account and Disconnect live account buttons" width="2000" height="1271" data-path="images/replitai/stripe-disconnect-3-disconnect.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Find a checkpoint from before the Stripe integration">
+    Go to Agent chat and look for a checkpoint that was created before the Stripe integration. Select the **clock icon** on the top left of the chat pane to view older chat history.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/YElKpLz4AJkoRVnw/images/replitai/stripe-rollback-5-clock-icon.png?fit=max&auto=format&n=YElKpLz4AJkoRVnw&q=85&s=5a8e86892fea6061d3af970dd6499a32" alt="Clock icon for viewing chat history and checkpoints" width="56" height="50" data-path="images/replitai/stripe-rollback-5-clock-icon.png" />
+    </Frame>
+  </Step>
+
+  <Step title="Select Rollback here">
+    Once you find a checkpoint that looks good, select **Rollback here** to restore your project to that state.
+
+    <Frame>
+      <img src="https://mintcdn.com/replit/YElKpLz4AJkoRVnw/images/replitai/stripe-rollback-6-checkpoint.png?fit=max&auto=format&n=YElKpLz4AJkoRVnw&q=85&s=a48d19624a6740286ff9f004c302547d" alt="Checkpoint with Rollback here button" width="904" height="202" data-path="images/replitai/stripe-rollback-6-checkpoint.png" />
+    </Frame>
+  </Step>
+</Steps>
+
+## Notes and limitations
+
+* Sandbox activity does not affect real balances or customers.
+* Some Stripe features can't be tested in sandboxes (for example, IC+ pricing
+  and certain Connect flows). See
+  [Stripe's sandbox limitations](https://docs.stripe.com/sandboxes).
