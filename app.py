@@ -23,7 +23,6 @@ from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
-from auth import require_login, render_user_badge
 
 
 def _inject_google_site_verification():
@@ -74,11 +73,6 @@ def _inject_google_site_verification():
 _inject_google_site_verification()
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
-
-# Require Google authentication on the published app. Workspace previews use
-# a development identity so OAuth does not block local iteration.
-current_user = require_login()
-current_user_email = getattr(current_user, "email", None)
 
 if "lines" not in st.session_state:
     st.session_state.lines = []
@@ -251,7 +245,7 @@ logo_data_uri = (
     + base64.b64encode(logo_path.read_bytes()).decode("ascii")
 )
 
-col_title, col_user, col_contact, col_refresh = st.columns([5.3, 1.4, 1.15, 0.85])
+col_title, col_contact, col_refresh = st.columns([6, 1.15, 0.85])
 with col_title:
     st.markdown(
         f"""
@@ -269,8 +263,6 @@ with col_title:
         """,
         unsafe_allow_html=True,
     )
-with col_user:
-    render_user_badge()
 with col_contact:
     st.link_button(
         "Contact Us",
@@ -1743,11 +1735,11 @@ with tab_diag:
         ["System Check", "Synthetic User", "Quality Control", "Backtest Sweep"]
     )
     with diag_sub_system:
-        render_diagnostic_tab(user_email=current_user_email)
+        render_diagnostic_tab()
     with diag_sub_synth:
-        render_synthetic_user_tab(user_email=current_user_email)
+        render_synthetic_user_tab()
     with diag_sub_qc:
-        render_quality_control_tab(user_email=current_user_email)
+        render_quality_control_tab()
     with diag_sub_sweep:
         render_backtest_sweep_tab()
 
