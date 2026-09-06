@@ -1,7 +1,9 @@
+import asyncio
 from types import SimpleNamespace
 
 import auth
 import auth_gateway
+from aiohttp.test_utils import make_mocked_request
 
 
 class _Request:
@@ -97,3 +99,19 @@ def test_production_user_accepts_gateway_identity(monkeypatch):
         name="user",
         email="user@example.com",
     )
+
+
+def test_auth_status_exposes_no_secret_values(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("SESSION_SECRET", "x" * 48)
+    request = make_mocked_request("GET", "/auth/status")
+
+    response = asyncio.run(auth_gateway.auth_status(request))
+    body = response.text
+
+    assert response.status == 200
+    assert '"callback_path": "/auth/google/callback"' in body
+    assert '"oauth_configured": true' in body
+    assert "client-id" not in body
+    assert "client-secret" not in body

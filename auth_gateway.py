@@ -241,6 +241,19 @@ async def google_logout(request: web.Request) -> web.Response:
     raise response
 
 
+async def auth_status(request: web.Request) -> web.Response:
+    """Expose non-secret deployment evidence for authentication diagnostics."""
+    user_id, _email = _trusted_identity(request)
+    return web.json_response(
+        {
+            "service": "soxlpro-google-auth",
+            "callback_path": "/auth/google/callback",
+            "oauth_configured": google_oauth_configured(),
+            "authenticated": bool(user_id),
+        }
+    )
+
+
 def _proxy_headers(headers) -> dict[str, str]:
     return {
         key: value
@@ -410,6 +423,7 @@ def create_app() -> web.Application:
     app.router.add_get("/auth/google/start", google_login)
     app.router.add_get("/auth/google/callback", google_callback)
     app.router.add_get("/auth/logout", google_logout)
+    app.router.add_get("/auth/status", auth_status)
     app.router.add_route("*", "/{path:.*}", streamlit_proxy)
     return app
 
