@@ -4,6 +4,10 @@ set -e
 # Sync Python dependencies (idempotent, non-interactive)
 uv sync
 
+# Apply versioned schema changes to the development database. Production
+# schema changes are applied by Replit's Publish flow, never at app startup.
+python scripts/apply_migrations.py
+
 # Re-apply the Google Search Console verification tag in case the
 # streamlit package was reinstalled (app.py also does this at startup).
 python - <<'EOF'

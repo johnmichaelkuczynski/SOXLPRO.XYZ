@@ -23,6 +23,11 @@ from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
+from access_control import (
+    enforce_staged_access,
+    record_meaningful_action,
+    render_access_control,
+)
 
 
 def _inject_google_site_verification():
@@ -236,6 +241,11 @@ try:
     quote = fetch_soxl_quote()
 except Exception:
     quote = None
+
+access_spacer, access_column = st.columns([8, 2])
+with access_column:
+    access_state, has_paid_access = render_access_control()
+enforce_staged_access(access_state, has_paid_access)
 
 render_market_snapshot(data, quote=quote)
 
@@ -502,6 +512,7 @@ with tab_chart:
             )
 
     if add_custom:
+        record_meaningful_action("custom_benchmark")
         try:
             requested_code = normalize_eodhd_symbol(custom_input)
             requested_data = get_custom_benchmark_history(requested_code)
@@ -778,6 +789,7 @@ with tab_chart:
             ask_market = st.form_submit_button("Ask", type="primary")
 
         if ask_market and market_prompt.strip():
+            record_meaningful_action("market_question")
             prompt_text = market_prompt.strip()
             st.session_state.market_chat_messages.append(
                 {"role": "user", "content": prompt_text}
@@ -1335,6 +1347,7 @@ with tab_chart:
         return result
 
     if st.button("Calculate Probability", use_container_width=True, type="primary"):
+        record_meaningful_action("probability_calculation")
         horizon_td = convert_to_trading_days(horizon_value, horizon_unit)
         horizon_label = f"{horizon_value} {horizon_unit}"
 
@@ -1691,6 +1704,7 @@ with tab_strategy:
             st.markdown(display_text)
 
     if prompt := st.chat_input("Describe your situation (portfolio, cash, goals...)"):
+        record_meaningful_action("strategy_generation")
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)

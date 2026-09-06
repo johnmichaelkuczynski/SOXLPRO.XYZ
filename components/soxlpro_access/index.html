@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: transparent;
+      font-family: Inter, system-ui, sans-serif; }
+    #bar { display: flex; justify-content: flex-end; align-items: center;
+      gap: 7px; min-height: 42px; }
+    button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 11px;
+      background: white; color: #0f172a; font-weight: 650; cursor: pointer;
+      white-space: nowrap; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    #pay { background: #0f172a; color: white; border-color: #0f172a; }
+    #status { color: #64748b; font-size: 11px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <span id="status"></span>
+    <button id="login" hidden>Sign in with Google</button>
+    <button id="logout" hidden>Sign out</button>
+    <button id="pay">Subscribe</button>
+  </div>
+  <script type="module">
+    const parentWindow = window.parent;
+    let args = {};
+    let clerk = null;
+    let lastPayload = "";
+    let intervalId = null;
+
+    function send(type, data) {
+      parentWindow.postMessage({isStreamlitMessage: true, type, ...data}, "*");
+    }
+    function setHeight(value) {
+      send("streamlit:setFrameHeight", {height: value});
+    }
+    function setValue(payload) {
+      const encoded = JSON.stringify(payload);
+      if (encoded === lastPayload) return;
+      lastPayload = encoded;
+      send("streamlit:setComponentValue", {value: payload, dataType: "json"});
+    }
+    function track(name, data = {}) {
+      try {
+        const tracker = parentWindow.umami || window.umami;
+        if (tracker && typeof tracker.track === "function") tracker.track(name, data);
+      } catch (_) {}
+    }
+    async function report(action = null) {
+      let token = null;
+      if (clerk?.session) {
+        try { token = await clerk.session.getToken(); } catch (_) {}
+      }
+      setValue({
+        token,
+        action,
+        action_id: action ? crypto.randomUUID() : null
+      });
+    }
+    function updateBar() {
+      const signedIn = Boolean(clerk?.user);
+      document.getElementById("login").hidden = signedIn || !args.clerk_configured;
+      document.getElementById("logout").hidden = !signedIn;
+      document.getElementById("pay").textContent = args.paid
+        ? "Manage membership" : "Subscribe";
+      document.getElementById("pay").disabled =
+        !args.stripe_configured || (!signedIn && !args.clerk_configured);
+      if (args.paid) {
+        document.getElementById("status").textContent = "Member";
+      } else {
+        document.getElementById("status").textContent =
+          args.remaining_actions + (signedIn ? " free actions" : " preview actions");
+      }
+    }
+    async function loadClerk() {
+      if (!args.clerk_configured || !args.publishable_key || clerk) return;
+      const module = await import(
+        "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.88.0/+esm"
+      );
+      clerk = new module.Clerk(args.publishable_key);
+      await clerk.load();
+      updateBar();
+      clerk.addListener(async () => {
+        updateBar();
+        await report();
+      });
+      if (clerk.user) {
+        const key = "soxlpro_login_tracked_" + clerk.user.id;
+        if (!localStorage.getItem(key)) {
+          track("google_login_completed", {method: "google"});
+          localStorage.setItem(key, "1");
+        }
+      }
+    }
+    async function openGoogleLogin(checkoutAfterLogin = false) {
+      if (!args.account_portal_url) return;
+      track("google_login_requested", {
+        source: checkoutAfterLogin ? "subscribe" : "header"
+      });
+      const returnUrl = new URL(parentWindow.location.href);
+      returnUrl.searchParams.delete("checkout");
+      returnUrl.searchParams.delete("session_id");
+      const signInUrl = args.account_portal_url.replace(/\/$/, "") +
+        "/sign-in?redirect_url=" + encodeURIComponent(returnUrl.toString());
+      const loginWindow = window.open(signInUrl, "_blank");
+      if (!loginWindow) {
+        parentWindow.location.href = signInUrl;
+      } else {
+        const watcher = setInterval(() => {
+          if (loginWindow.closed) {
+            clearInterval(watcher);
+            parentWindow.location.reload();
+          }
+        }, 750);
+      }
+    }
+
+    document.getElementById("login").addEventListener(
+      "click", () => openGoogleLogin(false)
+    );
+    document.getElementById("logout").addEventListener("click", async () => {
+      if (clerk) {
+        await clerk.signOut();
+        track("logout_completed");
+        parentWindow.location.reload();
+      }
+    });
+    document.getElementById("pay").addEventListener("click", async () => {
+      track("subscription_clicked", {signed_in: Boolean(clerk?.user)});
+      if (!clerk?.user) {
+        await openGoogleLogin(true);
+        return;
+      }
+      await report(args.paid ? "portal" : "checkout");
+    });
+    window.addEventListener("message", async (event) => {
+      if (event.data?.type !== "streamlit:render") return;
+      args = event.data.args || {};
+      setHeight(46);
+      try {
+        await loadClerk();
+        updateBar();
+        await report();
+        if (!intervalId) intervalId = setInterval(report, 30000);
+      } catch (_) {
+        updateBar();
+        await report();
+      }
+    });
+    send("streamlit:componentReady", {apiVersion: 1});
+  </script>
+</body>
+</html>
