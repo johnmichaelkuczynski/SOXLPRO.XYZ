@@ -246,7 +246,7 @@ logo_data_uri = (
     + base64.b64encode(logo_path.read_bytes()).decode("ascii")
 )
 
-col_title, col_access, col_contact, col_refresh = st.columns([4.7, 1.7, 1.15, 0.85])
+col_title, col_access, col_contact, col_refresh = st.columns([4.0, 2.4, 1.15, 0.85])
 with col_title:
     st.markdown(
         f"""
@@ -267,7 +267,7 @@ with col_title:
 with col_contact:
     st.link_button(
         "Contact Us",
-        "mailto:contact@zhisystems.ai",
+        "mailto:CONTACT@ZHISYSTEMS.AI",
         width="stretch",
     )
 with col_refresh:
@@ -1751,7 +1751,7 @@ with tab_diag:
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding:24px 0; "
     "border-top:1px solid #d1d5db; font-size:16px;'>"
-    "<a href='mailto:contact@zhisystems.ai' "
+    "<a href='mailto:CONTACT@ZHISYSTEMS.AI' "
     "style='display:inline-block; color:#ffffff; background:#2563eb; "
     "font-weight:700; text-decoration:none; padding:10px 22px; "
     "border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.18);'>Contact Us</a>"

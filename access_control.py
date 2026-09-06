@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 import jwt
+import psycopg2
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
@@ -47,6 +48,32 @@ def stripe_live_configured() -> bool:
     )
 
 
+def _sync_signed_in_actions(user_id: str, client_count: int) -> int:
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return client_count
+    try:
+        with psycopg2.connect(database_url, connect_timeout=4) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO user_access (clerk_user_id, signed_in_free_actions)
+                    VALUES (%s, %s)
+                    ON CONFLICT (clerk_user_id) DO UPDATE
+                    SET signed_in_free_actions = GREATEST(
+                            user_access.signed_in_free_actions,
+                            EXCLUDED.signed_in_free_actions
+                        ),
+                        updated_at = NOW()
+                    RETURNING signed_in_free_actions
+                    """,
+                    (user_id, max(0, client_count)),
+                )
+                return int(cursor.fetchone()[0])
+    except Exception:
+        return client_count
+
+
 @st.cache_resource
 def _clerk_jwk_client(frontend_api_url: str):
     return jwt.PyJWKClient(
@@ -83,12 +110,24 @@ def _checkout_url(user_id: str) -> str | None:
         import stripe
 
         stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+        matches = stripe.Customer.search(
+            query=f"metadata['clerk_user_id']:'{user_id}'",
+            limit=1,
+        )
+        if matches.data:
+            customer_id = matches.data[0].id
+        else:
+            customer = stripe.Customer.create(
+                metadata={"clerk_user_id": user_id},
+            )
+            customer_id = customer.id
         host = st.context.headers.get("host", "")
         scheme = st.context.headers.get("x-forwarded-proto", "https")
         base_url = f"{scheme}://{host}" if host else "https://soxlpro.xyz"
         session = stripe.checkout.Session.create(
             mode="subscription",
             line_items=[{"price": os.environ["STRIPE_PRICE_ID"], "quantity": 1}],
+            customer=customer_id,
             client_reference_id=user_id,
             metadata={"clerk_user_id": user_id},
             subscription_data={"metadata": {"clerk_user_id": user_id}},
@@ -102,10 +141,45 @@ def _checkout_url(user_id: str) -> str | None:
         return None
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _has_live_subscription(user_id: str) -> bool:
+    if not user_id or not stripe_live_configured():
+        return False
+    try:
+        import stripe
+
+        stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+        customers = stripe.Customer.search(
+            query=f"metadata['clerk_user_id']:'{user_id}'",
+            limit=5,
+        )
+        for customer in customers.auto_paging_iter():
+            subscriptions = stripe.Subscription.list(
+                customer=customer.id,
+                status="all",
+                limit=100,
+            )
+            for subscription in subscriptions.auto_paging_iter():
+                if not subscription.get("livemode"):
+                    continue
+                if subscription.get("status") not in {"active", "trialing"}:
+                    continue
+                if any(
+                    item.price.id == os.environ["STRIPE_PRICE_ID"]
+                    for item in subscription["items"]["data"]
+                ):
+                    return True
+    except Exception:
+        return False
+    return False
+
+
 def _checkout_paid(user_id: str) -> bool:
     session_id = st.query_params.get("session_id")
     if not session_id or not stripe_live_configured():
-        return bool(st.session_state.get("_paid_access"))
+        return bool(st.session_state.get("_paid_access")) or _has_live_subscription(
+            user_id
+        )
     try:
         import stripe
 
@@ -119,6 +193,7 @@ def _checkout_paid(user_id: str) -> bool:
         )
         if paid:
             st.session_state._paid_access = True
+            _has_live_subscription.clear()
             st.query_params.clear()
         return paid
     except Exception:
@@ -129,6 +204,7 @@ def render_access_control() -> tuple[AccessState, bool]:
     """Render fixed auth/payment controls and return verified access state."""
     raw = _auth_component(
         publishable_key=os.environ.get("CLERK_PUBLISHABLE_KEY", ""),
+        account_portal_url=os.environ.get("CLERK_ACCOUNT_PORTAL_URL", ""),
         clerk_configured=_clerk_configured(),
         stripe_configured=stripe_live_configured(),
         anonymous_seconds=ANONYMOUS_SECONDS,
@@ -138,12 +214,20 @@ def render_access_control() -> tuple[AccessState, bool]:
         default={},
     ) or {}
     claims = _verify_clerk_token(raw.get("token"))
+    client_signed_in_actions = max(
+        0, int(raw.get("signed_in_actions", 0) or 0)
+    )
+    persisted_signed_in_actions = (
+        _sync_signed_in_actions(claims["sub"], client_signed_in_actions)
+        if claims
+        else 0
+    )
     state = AccessState(
         authenticated=claims is not None,
         user_id=claims.get("sub") if claims else None,
         session_id=claims.get("sid") if claims else None,
         anonymous_actions=max(0, int(raw.get("anonymous_actions", 0) or 0)),
-        signed_in_actions=max(0, int(raw.get("signed_in_actions", 0) or 0)),
+        signed_in_actions=persisted_signed_in_actions,
         elapsed_seconds=max(0, int(raw.get("elapsed_seconds", 0) or 0)),
     )
 
