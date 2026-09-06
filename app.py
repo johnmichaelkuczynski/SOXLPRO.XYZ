@@ -242,7 +242,7 @@ try:
 except Exception:
     quote = None
 
-access_spacer, access_column = st.columns([8, 2])
+access_spacer, access_column = st.columns([6.5, 3.5])
 with access_column:
     access_state, has_paid_access = render_access_control()
 enforce_staged_access(access_state, has_paid_access)

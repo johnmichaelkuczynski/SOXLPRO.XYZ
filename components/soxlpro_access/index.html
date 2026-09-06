@@ -19,22 +19,16 @@
 <body>
   <div id="bar">
     <span id="status"></span>
-    <button id="login" hidden>Sign in with Google</button>
+    <button id="login">Sign in with Google</button>
     <button id="logout" hidden>Sign out</button>
     <button id="pay">Subscribe</button>
   </div>
-  <script type="module">
+  <script>
     const parentWindow = window.parent;
     let args = {};
-    let clerk = null;
     let lastPayload = "";
-    let intervalId = null;
-
     function send(type, data) {
       parentWindow.postMessage({isStreamlitMessage: true, type, ...data}, "*");
-    }
-    function setHeight(value) {
-      send("streamlit:setFrameHeight", {height: value});
     }
     function setValue(payload) {
       const encoded = JSON.stringify(payload);
@@ -48,117 +42,41 @@
         if (tracker && typeof tracker.track === "function") tracker.track(name, data);
       } catch (_) {}
     }
-    async function report(action = null) {
-      let token = null;
-      if (clerk?.session) {
-        try { token = await clerk.session.getToken(); } catch (_) {}
-      }
-      setValue({
-        token,
-        action,
-        action_id: action ? crypto.randomUUID() : null
-      });
+    function report(action) {
+      setValue({action, action_id: crypto.randomUUID()});
+    }
+    function go(path) {
+      parentWindow.location.href = new URL(path, parentWindow.location.origin);
     }
     function updateBar() {
-      const signedIn = Boolean(clerk?.user);
-      const login = document.getElementById("login");
-      login.hidden = signedIn;
-      login.disabled = !args.clerk_configured;
-      login.title = args.clerk_configured
-        ? "Sign in securely with Google"
-        : "Google sign-in is awaiting production Clerk configuration";
-      document.getElementById("logout").hidden = !signedIn;
+      document.getElementById("login").hidden = args.authenticated;
+      document.getElementById("logout").hidden = !args.authenticated;
       const pay = document.getElementById("pay");
-      pay.textContent = args.paid
-        ? "Manage membership" : "Subscribe";
-      pay.disabled = !args.stripe_configured || !args.clerk_configured;
-      pay.title = !args.clerk_configured
-        ? "Google sign-in must be active before checkout"
-        : "";
-      if (args.paid) {
-        document.getElementById("status").textContent = "Member";
+      pay.textContent = args.paid ? "Manage membership" : "Subscribe";
+      pay.disabled = !args.stripe_configured;
+      document.getElementById("status").textContent = args.paid
+        ? "Member"
+        : args.remaining_actions +
+          (args.authenticated ? " free actions" : " preview actions");
+    }
+    document.getElementById("login").onclick = () => {
+      track("google_login_requested", {source: "header"});
+      go(args.login_url);
+    };
+    document.getElementById("logout").onclick = () => go(args.logout_url);
+    document.getElementById("pay").onclick = () => {
+      track("subscription_clicked", {signed_in: args.authenticated});
+      if (!args.authenticated) {
+        go(args.login_url + "?subscribe=1");
       } else {
-        document.getElementById("status").textContent =
-          args.remaining_actions + (signedIn ? " free actions" : " preview actions");
+        report(args.paid ? "portal" : "checkout");
       }
-    }
-    async function loadClerk() {
-      if (!args.clerk_configured || !args.publishable_key || clerk) return;
-      const module = await import(
-        "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.88.0/+esm"
-      );
-      clerk = new module.Clerk(args.publishable_key);
-      await clerk.load();
-      updateBar();
-      clerk.addListener(async () => {
-        updateBar();
-        await report();
-      });
-      if (clerk.user) {
-        const key = "soxlpro_login_tracked_" + clerk.user.id;
-        if (!localStorage.getItem(key)) {
-          track("google_login_completed", {method: "google"});
-          localStorage.setItem(key, "1");
-        }
-      }
-    }
-    async function openGoogleLogin(checkoutAfterLogin = false) {
-      if (!args.clerk_configured || !args.account_portal_url) {
-        await report("clerk_configuration_missing");
-        return;
-      }
-      track("google_login_requested", {
-        source: checkoutAfterLogin ? "subscribe" : "header"
-      });
-      const returnUrl = new URL(parentWindow.location.href);
-      returnUrl.searchParams.delete("checkout");
-      returnUrl.searchParams.delete("session_id");
-      const signInUrl = args.account_portal_url.replace(/\/$/, "") +
-        "/sign-in?redirect_url=" + encodeURIComponent(returnUrl.toString());
-      const loginWindow = window.open(signInUrl, "_blank");
-      if (!loginWindow) {
-        parentWindow.location.href = signInUrl;
-      } else {
-        const watcher = setInterval(() => {
-          if (loginWindow.closed) {
-            clearInterval(watcher);
-            parentWindow.location.reload();
-          }
-        }, 750);
-      }
-    }
-
-    document.getElementById("login").addEventListener(
-      "click", () => openGoogleLogin(false)
-    );
-    document.getElementById("logout").addEventListener("click", async () => {
-      if (clerk) {
-        await clerk.signOut();
-        track("logout_completed");
-        parentWindow.location.reload();
-      }
-    });
-    document.getElementById("pay").addEventListener("click", async () => {
-      track("subscription_clicked", {signed_in: Boolean(clerk?.user)});
-      if (!clerk?.user) {
-        await openGoogleLogin(true);
-        return;
-      }
-      await report(args.paid ? "portal" : "checkout");
-    });
-    window.addEventListener("message", async (event) => {
+    };
+    window.addEventListener("message", (event) => {
       if (event.data?.type !== "streamlit:render") return;
       args = event.data.args || {};
-      setHeight(46);
-      try {
-        await loadClerk();
-        updateBar();
-        await report();
-        if (!intervalId) intervalId = setInterval(report, 30000);
-      } catch (_) {
-        updateBar();
-        await report();
-      }
+      send("streamlit:setFrameHeight", {height: 46});
+      updateBar();
     });
     send("streamlit:componentReady", {apiVersion: 1});
   </script>

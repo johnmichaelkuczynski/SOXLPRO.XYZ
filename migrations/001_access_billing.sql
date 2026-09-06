@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS user_access (
-    clerk_user_id TEXT PRIMARY KEY,
+    auth_user_id TEXT PRIMARY KEY,
     signed_in_free_actions INTEGER NOT NULL DEFAULT 0
         CHECK (signed_in_free_actions >= 0),
     stripe_customer_id TEXT UNIQUE,

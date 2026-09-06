@@ -11,7 +11,7 @@ import psycopg2
 
 
 ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
-_CLERK_USER_ID = re.compile(r"^user_[A-Za-z0-9]+$")
+_AUTH_USER_ID = re.compile(r"^google_[0-9]{8,64}$")
 
 
 def _database_url() -> str:
@@ -27,8 +27,8 @@ def _connect():
     return psycopg2.connect(database_url, connect_timeout=8)
 
 
-def valid_clerk_user_id(user_id: str | None) -> bool:
-    return bool(user_id and _CLERK_USER_ID.fullmatch(user_id))
+def valid_auth_user_id(user_id: str | None) -> bool:
+    return bool(user_id and _AUTH_USER_ID.fullmatch(user_id))
 
 
 def stripe_live_configured() -> bool:
@@ -40,17 +40,26 @@ def stripe_live_configured() -> bool:
     )
 
 
+def _stripe_dict(value: Any) -> dict:
+    if isinstance(value, dict):
+        return value
+    converter = getattr(value, "to_dict", None)
+    if callable(converter):
+        return converter()
+    raise TypeError("Unexpected Stripe response type")
+
+
 def signed_in_actions(user_id: str) -> int:
-    """Return the server-maintained free-action count for a Clerk user."""
-    if not valid_clerk_user_id(user_id):
-        raise ValueError("Invalid Clerk user ID")
+    """Return the server-maintained free-action count for a Google user."""
+    if not valid_auth_user_id(user_id):
+        raise ValueError("Invalid Google user ID")
     with _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO user_access (clerk_user_id)
+                INSERT INTO user_access (auth_user_id)
                 VALUES (%s)
-                ON CONFLICT (clerk_user_id) DO UPDATE
+                ON CONFLICT (auth_user_id) DO UPDATE
                 SET updated_at = user_access.updated_at
                 RETURNING signed_in_free_actions
                 """,
@@ -81,45 +90,79 @@ def anonymous_usage(visitor_id: str) -> tuple[int, int]:
     return int(row[0]), int(row[1])
 
 
-def increment_usage_action(
-    *, user_id: str | None = None, visitor_id: str | None = None
-) -> int:
-    """Increment one server-observed meaningful action."""
+def consume_usage_action(
+    *,
+    user_id: str | None = None,
+    visitor_id: str | None = None,
+    user_limit: int,
+    visitor_limit: int,
+) -> tuple[bool, int]:
+    """Atomically reserve one free action if the principal is below its limit."""
     with _connect() as connection:
         with connection.cursor() as cursor:
             if user_id:
-                if not valid_clerk_user_id(user_id):
-                    raise ValueError("Invalid Clerk user ID")
+                if not valid_auth_user_id(user_id):
+                    raise ValueError("Invalid Google user ID")
                 cursor.execute(
                     """
-                    INSERT INTO user_access (clerk_user_id, signed_in_free_actions)
-                    VALUES (%s, 1)
-                    ON CONFLICT (clerk_user_id) DO UPDATE
-                    SET signed_in_free_actions =
-                            user_access.signed_in_free_actions + 1,
-                        updated_at = NOW()
-                    RETURNING signed_in_free_actions
+                    INSERT INTO user_access (auth_user_id)
+                    VALUES (%s)
+                    ON CONFLICT (auth_user_id) DO NOTHING
                     """,
                     (user_id,),
+                )
+                cursor.execute(
+                    """
+                    UPDATE user_access
+                    SET signed_in_free_actions = signed_in_free_actions + 1,
+                        updated_at = NOW()
+                    WHERE auth_user_id = %s
+                      AND signed_in_free_actions < %s
+                    RETURNING signed_in_free_actions
+                    """,
+                    (user_id, user_limit),
                 )
             elif visitor_id:
                 cursor.execute(
                     """
-                    INSERT INTO anonymous_access (visitor_id, free_actions)
-                    VALUES (%s, 1)
-                    ON CONFLICT (visitor_id) DO UPDATE
-                    SET free_actions = anonymous_access.free_actions + 1,
-                        updated_at = NOW()
-                    RETURNING free_actions
+                    INSERT INTO anonymous_access (visitor_id)
+                    VALUES (%s)
+                    ON CONFLICT (visitor_id) DO NOTHING
                     """,
                     (visitor_id,),
                 )
+                cursor.execute(
+                    """
+                    UPDATE anonymous_access
+                    SET free_actions = free_actions + 1,
+                        updated_at = NOW()
+                    WHERE visitor_id = %s
+                      AND free_actions < %s
+                    RETURNING free_actions
+                    """,
+                    (visitor_id, visitor_limit),
+                )
             else:
                 raise ValueError("A usage principal is required")
-            return int(cursor.fetchone()[0])
+            row = cursor.fetchone()
+            if row:
+                return True, int(row[0])
+            if user_id:
+                cursor.execute(
+                    "SELECT signed_in_free_actions FROM user_access "
+                    "WHERE auth_user_id = %s",
+                    (user_id,),
+                )
+            else:
+                cursor.execute(
+                    "SELECT free_actions FROM anonymous_access WHERE visitor_id = %s",
+                    (visitor_id,),
+                )
+            return False, int(cursor.fetchone()[0])
 
 
 def _subscription_price_id(subscription: Any) -> str | None:
+    subscription = _stripe_dict(subscription)
     items = subscription.get("items", {}).get("data", [])
     for item in items:
         price = item.get("price") or {}
@@ -130,6 +173,7 @@ def _subscription_price_id(subscription: Any) -> str | None:
 
 
 def _period_end(subscription: Any) -> datetime | None:
+    subscription = _stripe_dict(subscription)
     value = subscription.get("current_period_end")
     if value:
         return datetime.fromtimestamp(int(value), tz=timezone.utc)
@@ -146,19 +190,19 @@ def persist_subscription(
     current_period_end: datetime | None = None,
     event_created: int | None = None,
 ) -> None:
-    if not valid_clerk_user_id(user_id):
-        raise ValueError("Invalid Clerk user ID")
+    if not valid_auth_user_id(user_id):
+        raise ValueError("Invalid Google user ID")
     with _connect() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO user_access (
-                    clerk_user_id, stripe_customer_id, stripe_subscription_id,
+                    auth_user_id, stripe_customer_id, stripe_subscription_id,
                     subscription_status, subscription_price_id,
                     current_period_end, last_stripe_event_created, updated_at
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (clerk_user_id) DO UPDATE
+                ON CONFLICT (auth_user_id) DO UPDATE
                 SET stripe_customer_id = COALESCE(
                         EXCLUDED.stripe_customer_id,
                         user_access.stripe_customer_id
@@ -200,17 +244,17 @@ def _persist_subscription_cursor(
     current_period_end: datetime | None,
     event_created: int,
 ) -> None:
-    if not valid_clerk_user_id(user_id):
-        raise ValueError("Invalid Clerk user ID")
+    if not valid_auth_user_id(user_id):
+        raise ValueError("Invalid Google user ID")
     cursor.execute(
         """
         INSERT INTO user_access (
-            clerk_user_id, stripe_customer_id, stripe_subscription_id,
+            auth_user_id, stripe_customer_id, stripe_subscription_id,
             subscription_status, subscription_price_id, current_period_end,
             last_stripe_event_created, updated_at
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (clerk_user_id) DO UPDATE
+        ON CONFLICT (auth_user_id) DO UPDATE
         SET stripe_customer_id = COALESCE(
                 EXCLUDED.stripe_customer_id, user_access.stripe_customer_id
             ),
@@ -237,7 +281,7 @@ def _persist_subscription_cursor(
 
 
 def get_access_record(user_id: str) -> dict | None:
-    if not valid_clerk_user_id(user_id):
+    if not valid_auth_user_id(user_id):
         return None
     with _connect() as connection:
         with connection.cursor() as cursor:
@@ -247,7 +291,7 @@ def get_access_record(user_id: str) -> dict | None:
                        stripe_subscription_id, subscription_status,
                        subscription_price_id, current_period_end
                 FROM user_access
-                WHERE clerk_user_id = %s
+                WHERE auth_user_id = %s
                 """,
                 (user_id,),
             )
@@ -287,13 +331,13 @@ def _customer_for_user(stripe, user_id: str) -> str:
         return record["stripe_customer_id"]
 
     matches = stripe.Customer.search(
-        query=f"metadata['clerk_user_id']:'{user_id}'",
+        query=f"metadata['auth_user_id']:'{user_id}'",
         limit=1,
     )
     customer_id = (
         matches.data[0].id
         if matches.data
-        else stripe.Customer.create(metadata={"clerk_user_id": user_id}).id
+        else stripe.Customer.create(metadata={"auth_user_id": user_id}).id
     )
     persist_subscription(
         user_id,
@@ -306,41 +350,41 @@ def _customer_for_user(stripe, user_id: str) -> str:
 
 
 def create_checkout_url(user_id: str, base_url: str) -> str:
-    if not valid_clerk_user_id(user_id):
-        raise ValueError("Invalid Clerk user ID")
+    if not valid_auth_user_id(user_id):
+        raise ValueError("Invalid Google user ID")
     stripe = _stripe()
     customer_id = _customer_for_user(stripe, user_id)
-    session = stripe.checkout.Session.create(
+    session = _stripe_dict(stripe.checkout.Session.create(
         mode="subscription",
         line_items=[{"price": os.environ["STRIPE_PRICE_ID"], "quantity": 1}],
         customer=customer_id,
         client_reference_id=user_id,
-        metadata={"clerk_user_id": user_id},
-        subscription_data={"metadata": {"clerk_user_id": user_id}},
+        metadata={"auth_user_id": user_id},
+        subscription_data={"metadata": {"auth_user_id": user_id}},
         success_url=f"{base_url}/?checkout=success&session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{base_url}/?checkout=cancelled",
         allow_promotion_codes=True,
-    )
+    ))
     if not session.get("livemode"):
         raise RuntimeError("Stripe returned a non-live Checkout session")
-    return session.url
+    return session["url"]
 
 
 def create_portal_url(user_id: str, base_url: str) -> str:
-    if not valid_clerk_user_id(user_id):
-        raise ValueError("Invalid Clerk user ID")
+    if not valid_auth_user_id(user_id):
+        raise ValueError("Invalid Google user ID")
     stripe = _stripe()
     customer_id = _customer_for_user(stripe, user_id)
-    session = stripe.billing_portal.Session.create(
+    session = _stripe_dict(stripe.billing_portal.Session.create(
         customer=customer_id,
         return_url=f"{base_url}/",
-    )
-    return session.url
+    ))
+    return session["url"]
 
 
 def refresh_live_subscription(user_id: str) -> bool:
     """Refresh durable entitlement directly from live Stripe."""
-    if not valid_clerk_user_id(user_id):
+    if not valid_auth_user_id(user_id):
         return False
     stripe = _stripe()
     customer_id = _customer_for_user(stripe, user_id)
@@ -352,6 +396,7 @@ def refresh_live_subscription(user_id: str) -> bool:
     )
     matching = None
     for subscription in subscriptions.auto_paging_iter():
+        subscription = _stripe_dict(subscription)
         if not subscription.get("livemode"):
             continue
         if _subscription_price_id(subscription):
@@ -381,10 +426,10 @@ def refresh_live_subscription(user_id: str) -> bool:
 
 
 def verify_checkout_return(user_id: str, session_id: str) -> bool:
-    if not valid_clerk_user_id(user_id) or not session_id.startswith("cs_live_"):
+    if not valid_auth_user_id(user_id) or not session_id.startswith("cs_live_"):
         return False
     stripe = _stripe()
-    session = stripe.checkout.Session.retrieve(session_id)
+    session = _stripe_dict(stripe.checkout.Session.retrieve(session_id))
     valid = (
         session.get("livemode") is True
         and session.get("client_reference_id") == user_id
@@ -397,11 +442,11 @@ def verify_checkout_return(user_id: str, session_id: str) -> bool:
 def process_stripe_webhook(payload: bytes, signature: str) -> str:
     """Verify and persist one live Stripe webhook event. Returns its event ID."""
     stripe = _stripe()
-    event = stripe.Webhook.construct_event(
+    event = _stripe_dict(stripe.Webhook.construct_event(
         payload,
         signature,
         os.environ["STRIPE_WEBHOOK_SECRET"],
-    )
+    ))
     if not event.get("livemode"):
         raise ValueError("Test-mode Stripe events are not accepted")
 
@@ -428,13 +473,13 @@ def process_stripe_webhook(payload: bytes, signature: str) -> str:
             if event_type == "checkout.session.completed":
                 user_id = obj.get("client_reference_id") or obj.get(
                     "metadata", {}
-                ).get("clerk_user_id")
+                ).get("auth_user_id")
                 subscription_id = obj.get("subscription")
-                if valid_clerk_user_id(user_id) and subscription_id:
-                    subscription = stripe.Subscription.retrieve(
+                if valid_auth_user_id(user_id) and subscription_id:
+                    subscription = _stripe_dict(stripe.Subscription.retrieve(
                         subscription_id,
                         expand=["items.data.price"],
-                    )
+                    ))
                     _persist_subscription_cursor(
                         cursor,
                         user_id,
@@ -446,24 +491,40 @@ def process_stripe_webhook(payload: bytes, signature: str) -> str:
                         event_created=event_created,
                     )
             elif event_type.startswith("customer.subscription."):
-                user_id = obj.get("metadata", {}).get("clerk_user_id")
-                if not valid_clerk_user_id(user_id):
+                # Stripe event timestamps are second-resolution and deliveries
+                # can be out of order. Persist Stripe's current resource state,
+                # not the potentially stale event snapshot.
+                try:
+                    current_subscription = _stripe_dict(stripe.Subscription.retrieve(
+                        obj.get("id"),
+                        expand=["items.data.price"],
+                    ))
+                except Exception:
+                    if event_type == "customer.subscription.deleted":
+                        current_subscription = obj
+                    else:
+                        raise
+                user_id = (
+                    current_subscription.get("metadata", {}).get("auth_user_id")
+                    or current_subscription.get("metadata", {}).get("clerk_user_id")
+                )
+                if not valid_auth_user_id(user_id):
                     cursor.execute(
-                        "SELECT clerk_user_id FROM user_access "
+                        "SELECT auth_user_id FROM user_access "
                         "WHERE stripe_customer_id = %s",
                         (obj.get("customer"),),
                     )
                     row = cursor.fetchone()
                     user_id = row[0] if row else None
-                if valid_clerk_user_id(user_id):
+                if valid_auth_user_id(user_id):
                     _persist_subscription_cursor(
                         cursor,
                         user_id,
-                        customer_id=obj.get("customer"),
-                        subscription_id=obj.get("id"),
-                        status=obj.get("status"),
-                        price_id=_subscription_price_id(obj),
-                        current_period_end=_period_end(obj),
+                        customer_id=current_subscription.get("customer"),
+                        subscription_id=current_subscription.get("id"),
+                        status=current_subscription.get("status"),
+                        price_id=_subscription_price_id(current_subscription),
+                        current_period_end=_period_end(current_subscription),
                         event_created=event_created,
                     )
     return event_id
