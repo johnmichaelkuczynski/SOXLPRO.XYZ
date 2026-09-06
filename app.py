@@ -23,7 +23,6 @@ from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
-from access_control import enforce_staged_access, render_access_control
 
 
 def _inject_google_site_verification():
@@ -246,7 +245,7 @@ logo_data_uri = (
     + base64.b64encode(logo_path.read_bytes()).decode("ascii")
 )
 
-col_title, col_access, col_contact, col_refresh = st.columns([4.0, 2.4, 1.15, 0.85])
+col_title, col_contact, col_refresh = st.columns([6, 1.15, 0.85])
 with col_title:
     st.markdown(
         f"""
@@ -267,7 +266,7 @@ with col_title:
 with col_contact:
     st.link_button(
         "Contact Us",
-        "mailto:CONTACT@ZHISYSTEMS.AI",
+        "mailto:contact@zhisystems.ai",
         width="stretch",
     )
 with col_refresh:
@@ -275,12 +274,8 @@ with col_refresh:
         st.cache_data.clear()
         st.rerun()
 
-with col_access:
-    access_state, has_paid_access = render_access_control()
-
 render_visitor_counter()
 render_landing_signal(data)
-enforce_staged_access(access_state, has_paid_access)
 
 def get_price_at_offset(df, days_ago):
     target_date = df.index[-1] - timedelta(days=days_ago)
@@ -1751,7 +1746,7 @@ with tab_diag:
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding:24px 0; "
     "border-top:1px solid #d1d5db; font-size:16px;'>"
-    "<a href='mailto:CONTACT@ZHISYSTEMS.AI' "
+    "<a href='mailto:contact@zhisystems.ai' "
     "style='display:inline-block; color:#ffffff; background:#2563eb; "
     "font-weight:700; text-decoration:none; padding:10px 22px; "
     "border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.18);'>Contact Us</a>"
