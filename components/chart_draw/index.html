@@ -21,6 +21,7 @@
     gap: 7px; align-items: stretch; padding: 10px; flex-direction: column;
     transform-origin: top left;
   }
+  #rail-content > * { min-width: 0; width: 100%; }
   #rail-content.wide-layout {
     display: grid; width: 650px; grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-auto-flow: row; gap: 7px 10px; align-content: start;
@@ -424,9 +425,16 @@ function fitRailContent() {
   var useWideLayout = toolbarEl.clientWidth >= 320 &&
     toolbarEl.clientWidth / Math.max(1, toolbarEl.clientHeight) >= 1.05;
   railContentEl.classList.toggle('wide-layout', useWideLayout);
-  var naturalWidth = useWideLayout ? 650 : 250;
+  var baseNaturalWidth = useWideLayout ? 650 : 250;
+  railContentEl.style.width = baseNaturalWidth + 'px';
   var naturalHeight = Math.max(1, railContentEl.scrollHeight);
-  var scale = Math.min(
+  var scale = Math.min(1, toolbarEl.clientHeight / naturalHeight);
+  // Use all available horizontal space at the height-safe scale. This makes
+  // controls genuinely widen with the panel instead of leaving an empty strip.
+  var naturalWidth = Math.max(baseNaturalWidth, toolbarEl.clientWidth / Math.max(0.1, scale));
+  railContentEl.style.width = naturalWidth + 'px';
+  naturalHeight = Math.max(1, railContentEl.scrollHeight);
+  scale = Math.min(
     toolbarEl.clientWidth / naturalWidth,
     toolbarEl.clientHeight / naturalHeight
   );
