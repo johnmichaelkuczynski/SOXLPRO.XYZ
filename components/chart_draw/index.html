@@ -241,7 +241,7 @@
   </div>
   <strong style="text-align:center;color:#0f172a;">CHART CONTROLS</strong>
   <button class="tbtn" id="undoBtn" onclick="undoLastAction()" aria-label="Undo last line change">&#8630; Undo Last Line Change</button>
-  <button class="tbtn active" id="drawBtn" aria-pressed="true" onclick="toggleDraw()">[ ] Stop Drawing</button>
+  <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
   <button class="tbtn danger" onclick="eraseLastLine()">Erase Last Line</button>
   <label class="rail-label" for="rail-extend-date">Extend Last Line To</label>
   <input class="rail-date" id="rail-extend-date" type="date">
@@ -283,7 +283,7 @@
     </label>
     <button class="range-apply" onclick="applyKeyboardSelection()">Apply date range</button>
   </div>
-  <span id="status"><strong>CLICK AND DRAG ANYWHERE ON THE CHART TO DRAW A LINE</strong> &#8226; Double-click a line to erase it</span>
+  <span id="status"><strong>DRAG THE CHART TO MOVE IT</strong> &#8226; Press Draw Line when you are ready to draw</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
   <div id="analyze-bar">
     <span id="analyze-text"></span>
@@ -337,7 +337,7 @@ var selectOverlay = document.getElementById('select-overlay');
 var selectHighlight = document.getElementById('select-highlight');
 var trendTooltip = document.getElementById('trend-tooltip');
 var cursorTools = document.getElementById('cursor-tools');
-var currentMode = 'draw';
+var currentMode = 'pan';
 var lines = [];
 var chartData = null;
 var rendered = false;
