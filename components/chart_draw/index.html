@@ -105,6 +105,34 @@
     font-size: 13px; color: #334155;
   }
   .height-control input { width: 82px; cursor: ns-resize; }
+  .height-control.size-control {
+    display: grid; grid-template-columns: 1fr auto; gap: 0 8px;
+    padding: 5px 9px; cursor: default; user-select: none;
+  }
+  .size-control input[type="range"] {
+    grid-column: 1 / -1; grid-row: 2; width: 100%; min-width: 0;
+    height: 32px; margin: 0; cursor: pointer; touch-action: none;
+    appearance: none; -webkit-appearance: none; background: transparent;
+  }
+  .size-control input[type="range"]::-webkit-slider-runnable-track {
+    height: 8px; border-radius: 5px; background: #cbd5e1;
+  }
+  .size-control input[type="range"]::-moz-range-track {
+    height: 8px; border-radius: 5px; background: #cbd5e1;
+  }
+  .size-control input[type="range"]::-webkit-slider-thumb {
+    appearance: none; -webkit-appearance: none; width: 24px; height: 24px;
+    margin-top: -8px; border-radius: 50%; border: 2px solid #fff;
+    background: #1565c0; box-shadow: 0 1px 4px #64748b;
+  }
+  .size-control input[type="range"]::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff;
+    background: #1565c0; box-shadow: 0 1px 4px #64748b;
+  }
+  .size-control input:focus-visible { outline: 2px solid #1565c0; outline-offset: 2px; }
+  .size-control #heightValue, .size-control #widthValue {
+    grid-column: 2; grid-row: 1; font-weight: 700; text-align: right;
+  }
   .height-control select {
     border: 0; background: transparent; color: #0f172a; font-weight: 700;
     cursor: pointer; outline: none;
@@ -234,12 +262,12 @@
       <option value="50">50 years</option>
     </select>
   </label>
-  <label class="height-control" for="heightSlider">
+  <label class="height-control size-control" for="heightSlider">
     Vertical size
     <input id="heightSlider" type="range" min="300" max="1400" step="25" value="900" oninput="setChartHeight(this.value)" onchange="trackEvent('chart_height_changed', {pixels: Number(this.value)})">
     <span id="heightValue">900 px</span>
   </label>
-  <label class="height-control" for="widthSlider">
+  <label class="height-control size-control" for="widthSlider">
     Horizontal size
     <input id="widthSlider" type="range" min="50" max="300" step="10" value="100" oninput="setChartWidth(this.value)" onchange="trackEvent('chart_width_changed', {percent: Number(this.value)})">
     <span id="widthValue">100%</span>
@@ -498,6 +526,11 @@ toolbarEl.addEventListener('click', function(event) {
 
 toolbarEl.addEventListener('pointerdown', function(event) {
   if (event.button !== 0) return;
+  // A range gesture belongs to its control, not the movable panel.
+  if (event.target.closest('.size-control')) {
+    suppressPanelClick = false;
+    return;
+  }
   var startX = event.clientX;
   var startY = event.clientY;
   var startRect = toolbarEl.getBoundingClientRect();

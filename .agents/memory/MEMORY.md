@@ -3,3 +3,4 @@
 - [Plotly heatmap hover safety](plotly-heatmap-hover-safety.md) — mixed customdata can trigger SVG NaN errors on hover; prefer preformatted hovertext.
 - [Plotly drawn-shape events](plotly-drawn-shape-events.md) — bind drawing events through Plotly after initialization; log-axis shape coordinates are already data values.
 - [Projection hit probabilities](projection-hit-probabilities.md) — show historically calibrated by-or-before hit odds directly beside projected date and price.
+- [Panel gesture priority](panel-gesture-priority.md) — slider adjustment takes priority over the panel's drag-anywhere interaction.
