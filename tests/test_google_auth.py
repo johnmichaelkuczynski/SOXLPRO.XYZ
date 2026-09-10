@@ -22,7 +22,9 @@ class GoogleAuthTests(unittest.TestCase):
     @patch.dict("os.environ", {"REPLIT_DEV_DOMAIN": "preview.example.com"})
     @patch("auth.configure_google_auth")
     @patch("auth.st")
-    def test_preview_stays_signed_in_without_google_or_signout(self, st, configure):
+    def test_preview_stays_signed_in_without_google(self, st, configure):
+        st.session_state.get.return_value = False
+        st.button.return_value = False
         for _ in range(2):
             self.assertTrue(get_current_user()["is_logged_in"])
             self.assertEqual(get_current_user()["auth_provider"], "development")
@@ -30,8 +32,21 @@ class GoogleAuthTests(unittest.TestCase):
         configure.assert_not_called()
         st.login.assert_not_called()
         st.logout.assert_not_called()
-        st.button.assert_not_called()
-        st.caption.assert_called_with("Signed in · Development preview")
+        self.assertEqual(st.button.call_args.args[0], "Sign out")
+
+    @patch.dict("os.environ", {"REPLIT_DEV_DOMAIN": "preview.example.com"})
+    @patch("auth.st")
+    def test_preview_explicit_logout_and_signin(self, st):
+        st.session_state = {}
+        st.button.return_value = True
+        render_google_login()
+        self.assertFalse(get_current_user()["is_logged_in"])
+        self.assertTrue(st.session_state["preview_signed_out"])
+        render_google_login()
+        self.assertTrue(get_current_user()["is_logged_in"])
+        self.assertFalse(st.session_state["preview_signed_out"])
+        st.login.assert_not_called()
+        st.logout.assert_not_called()
 
     @patch.dict("os.environ", {"REPLIT_DEPLOYMENT": "1", "REPLIT_DEV_DOMAIN": "preview.example.com"})
     @patch("auth.configure_google_auth")
@@ -101,7 +116,7 @@ class GoogleAuthTests(unittest.TestCase):
     def test_errors_never_echo_configuration(self, st, configure):
         render_google_login()
         st.login.assert_not_called()
-        self.assertNotIn("private configuration", str(st.error.call_args))
+        self.assertNotIn("private configuration", str(st.info.call_args))
 
 
 if __name__ == "__main__":

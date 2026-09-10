@@ -16,3 +16,12 @@ configuration. Do not create or modify Stripe products, prices, portal settings,
 or account settings. If required configuration is missing, report the exact
 blocker instead of proposing to create it. App-initiated checkout/payment
 operations must use the owner's credentials, never a managed connection.
+
+Put sign-in/sign-out and Buy at the top of the page in normal document flow,
+not in a fixed, floating, or sticky bar.
+
+**Why:** The user explicitly said these controls are used rarely and should
+not clutter the screen while scrolling.
+
+**How to apply:** Keep them above the market snapshot and let them scroll away
+normally. Do not interpret "at the top" as "always visible."

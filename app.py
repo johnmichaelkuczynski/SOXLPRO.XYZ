@@ -24,7 +24,8 @@ from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
 from chart_market_feed import fetch_chart_market_feed, update_chart_market_feed
-from auth import get_current_user, render_google_login
+from auth import get_current_user
+from account_header import render_account_header
 
 
 def _inject_google_site_verification():
@@ -77,6 +78,7 @@ _inject_google_site_verification()
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
 
 current_user = get_current_user()
+render_account_header()
 
 if "lines" not in st.session_state:
     st.session_state.lines = []
@@ -242,43 +244,6 @@ except Exception:
     quote = None
 
 render_market_snapshot(data, quote=quote)
-
-logo_path = Path("attached_assets/zhi_logoc_1787826573212.png")
-logo_data_uri = (
-    "data:image/png;base64,"
-    + base64.b64encode(logo_path.read_bytes()).decode("ascii")
-)
-
-col_title, col_login, col_contact, col_refresh = st.columns([4.4, 1.6, 1.15, 0.85])
-with col_title:
-    st.markdown(
-        f"""
-        <div style="display:flex; align-items:center; gap:12px; min-height:44px;">
-          <a href="https://zhisystems.ai/" target="_blank" rel="noopener noreferrer"
-             title="Visit ZHI Systems" aria-label="Visit ZHI Systems">
-            <img src="{logo_data_uri}" alt="ZHI Systems"
-                 style="display:block; width:38px; height:38px; border-radius:8px;
-                        box-shadow:0 1px 4px rgba(0,0,0,0.22);" />
-          </a>
-          <h1 style="font-size:1.35rem; font-weight:700; color:#111827; margin:0;">
-            SOXL Analysis
-          </h1>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-with col_login:
-    render_google_login()
-with col_contact:
-    st.link_button(
-        "Contact Us",
-        "mailto:contact@zhisystems.ai",
-        width="stretch",
-    )
-with col_refresh:
-    if st.button("Refresh", help="Refresh data"):
-        st.cache_data.clear()
-        st.rerun()
 
 render_visitor_counter()
 render_landing_signal(data)

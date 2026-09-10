@@ -19,6 +19,8 @@ def is_development_preview(environ=None):
 
 def get_current_user():
     if is_development_preview():
+        if st.session_state.get("preview_signed_out", False):
+            return {"is_logged_in": False, "auth_provider": "development"}
         return {
             "is_logged_in": True,
             "sub": "development-preview",
@@ -85,13 +87,22 @@ def configure_google_auth():
 
 def render_google_login():
     if is_development_preview():
-        st.caption("Signed in · Development preview")
+        if st.session_state.get("preview_signed_out", False):
+            if st.button("Sign in", key="preview_login", width="stretch"):
+                st.session_state["preview_signed_out"] = False
+                st.rerun()
+        else:
+            if st.button("Sign out", key="preview_logout", width="stretch",
+                         help="Sign out of this development session. New preview sessions start signed in."):
+                st.session_state.clear()
+                st.session_state["preview_signed_out"] = True
+                st.rerun()
         return
     try:
         configure_google_auth()
     except Exception:
         st.button("Sign in with Google", disabled=True, width="stretch")
-        st.error("Google sign-in is unavailable: check the server's authentication configuration.")
+        st.info("Please try signing in again shortly. You can keep using the app.")
         return
     if st.user.is_logged_in:
         st.caption(f"Signed in as {st.user.get('name') or st.user.get('email') or 'Google user'}")
@@ -102,4 +113,4 @@ def render_google_login():
         try:
             st.login("google")
         except Exception:
-            st.error("Google sign-in could not start. Please try again.")
+            st.info("Please try signing in again. Your current app access remains available.")

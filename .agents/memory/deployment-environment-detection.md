@@ -22,10 +22,12 @@ Report missing Google Cloud allowlist entries as owner configuration blockers;
 never store or expose credentials while diagnosing them.
 
 Automatically sign in with a clearly identified development-only identity in
-the workspace preview; never require Google login there.
+new workspace preview sessions; never require Google login there. Allow an
+explicit Sign out and local Sign in within a preview session.
 
 **Why:** The user explicitly requires uninterrupted access while developing
 and authorized preview-only automatic sign-in. This is not a Google identity.
+The user subsequently required a usable logout control in preview as well.
 
 **How to apply:** Keep the bypass server-controlled and disabled on published
 deployments even if workspace markers remain. Preserve real Google login on
