@@ -23,6 +23,7 @@ from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
+from overnight_market import render_overnight_market
 
 
 def _inject_google_site_verification():
@@ -275,6 +276,7 @@ with col_refresh:
         st.rerun()
 
 render_visitor_counter()
+render_overnight_market()
 render_landing_signal(data)
 
 def get_price_at_offset(df, days_ago):
