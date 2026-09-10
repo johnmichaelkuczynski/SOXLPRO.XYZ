@@ -21,6 +21,12 @@
     gap: 7px; align-items: stretch; padding: 10px; flex-direction: column;
     transform-origin: top left;
   }
+  #market-feed-status {
+    position: absolute; top: 12px; left: 75px; z-index: 10;
+    max-width: 70%; padding: 4px 7px; border-radius: 4px;
+    background: rgba(255,255,255,0.9); color: #334155; font-size: 12px;
+    pointer-events: none;
+  }
   #rail-content > * { min-width: 0; width: 100%; }
   #rail-content.wide-layout {
     display: grid; width: 650px; grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -65,13 +71,15 @@
     border: 2px solid #334155; border-radius: 7px; background: #fff; color: #0f172a;
     padding: 8px 10px; font-weight: 900; cursor: pointer;
   }
-  #panel-parking-area {
-    position: relative; height: 520px; margin-top: 12px;
-    border: 2px dashed #94a3b8; border-radius: 10px;
-    background: rgba(226,232,240,0.35); color: #64748b;
-    display: flex; align-items: flex-start; justify-content: center;
-    padding-top: 18px; font-size: 13px; font-weight: 800;
+  #chart-market-summary {
+    position: relative; margin-top: 12px; padding: 16px;
+    border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #f8fafc; color: #334155; font-size: 13px;
   }
+  .market-summary-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin: 12px 0; }
+  .market-summary-grid strong { display: block; font-size: 21px; color: #0f172a; margin: 6px 0; }
+  .market-summary-grid small { display: block; line-height: 1.5; }
+  @media (max-width: 550px) { .market-summary-grid { grid-template-columns: 1fr; } }
   .tbtn {
     padding: 7px 18px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;
     font-size: 14px; background: #fff; color: #333; transition: all 0.15s;
@@ -309,6 +317,7 @@
 <div id="chart-scroll">
   <div id="chart-container">
     <div id="chart"></div>
+    <div id="market-feed-status" role="status" aria-live="polite"></div>
     <div id="select-overlay" aria-hidden="true"></div>
     <div id="select-highlight"></div>
     <div id="trend-tooltip" role="tooltip"></div>
@@ -330,7 +339,17 @@
   </div>
 </div>
 <div id="line-list"></div>
-<div id="panel-parking-area">CONTROL PANEL PARKING AREA — DRAG THE PANEL HERE</div>
+<section id="chart-market-summary" aria-label="SOXL regular and extended-hours prices">
+  <strong>SOXL · Regular session, after-hours &amp; pre-market</strong>
+  <div class="market-summary-grid">
+    <div>Regular session<strong id="market-regular-price">—</strong><small id="market-regular-time">Waiting for price data</small></div>
+    <div>After-hours<strong id="market-post-price">—</strong><small id="market-post-time">Waiting for price data</small></div>
+    <div>Pre-market<strong id="market-pre-price">—</strong><small id="market-pre-time">Waiting for price data</small></div>
+  </div>
+  <p id="market-summary-state" role="status"></p>
+  <small>These prices are plotted in the SOXL chart above. Yahoo Finance five-minute data; may be delayed.
+    Updates every minute while open. No 8 p.m.–4 a.m. ET coverage. Gaps indicate no supplied prices, not zero movement.</small>
+</section>
 
 <script>
 var COLORS = ['#888','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#6D4C41','#D81B60','#00897B','#FFB300'];
@@ -344,6 +363,10 @@ var cursorTools = document.getElementById('cursor-tools');
 var currentMode = 'pan';
 var lines = [];
 var chartData = null;
+var marketFeed = null;
+var marketFeedError = null;
+var pendingMarketUpdate = false;
+var chartGestureActive = false;
 var rendered = false;
 var knownShapeCount = 0;
 var scaleMode = 'log';
@@ -384,12 +407,9 @@ function positionRightControlRail() {
   var railHeight = Math.min(toolbarEl.scrollHeight, availableHeight);
   var top;
   if (railDock === 'free' || railDock === 'bottom') {
-    var parkingArea = document.getElementById('panel-parking-area');
-    var requiredParkingHeight = toolbarEl.offsetHeight + 60;
-    if (parkingArea.offsetHeight < requiredParkingHeight) {
-      parkingArea.style.height = requiredParkingHeight + 'px';
-    }
-    var documentBottom = parkingArea.offsetTop + parkingArea.offsetHeight;
+    var parkingArea = document.getElementById('chart-market-summary');
+    var documentBottom = Math.max(parkingArea.offsetTop + parkingArea.offsetHeight,
+      (railFreeTop || 8) + toolbarEl.offsetHeight + 8);
     railFreeTop = Math.max(8, Math.min(railFreeTop || 8, documentBottom - toolbarEl.offsetHeight - 8));
     top = railFreeTop;
     availableHeight = Math.max(220, documentBottom - top - 8);
@@ -485,7 +505,7 @@ function dockControlRail(side, event) {
 function parkControlRail(event) {
   if (event) event.stopPropagation();
   if (railCollapsed) showControlRail();
-  var parkingArea = document.getElementById('panel-parking-area');
+  var parkingArea = document.getElementById('chart-market-summary');
   railDock = 'bottom';
   railFreeLeft = Math.max(12, document.documentElement.clientWidth - toolbarEl.offsetWidth - 24);
   railFreeTop = parkingArea.offsetTop + 18;
@@ -684,9 +704,106 @@ function configureKeyboardDateInputs() {
   if (!endInput.value) endInput.value = maxDate;
 }
 
+function acceptMarketFeed(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  marketFeedError = payload.error || null;
+  if (Array.isArray(payload.points) && payload.points.length) {
+    var points = payload.points.filter(function(point) {
+      return typeof point.date === 'string' && Number.isFinite(Date.parse(point.time)) &&
+        Number.isFinite(point.price) && point.price > 0 &&
+        ['Pre-market', 'Regular session', 'After-hours'].indexOf(point.session) !== -1;
+    });
+    if (points.length) marketFeed = {points: points, checked: payload.checked};
+  }
+  updateMarketFeedStatus();
+}
+
+function updateMarketFeedStatus() {
+  var status = document.getElementById('market-feed-status');
+  updateMarketSummary();
+  if (marketFeedError) { status.textContent = marketFeedError; return; }
+  if (!marketFeed || !marketFeed.points.length) {
+    status.textContent = 'Intraday prices unavailable — historical daily chart shown.';
+    return;
+  }
+  var latest = marketFeed.points[marketFeed.points.length - 1];
+  var stale = Date.now() - Date.parse(latest.time) > 15 * 60000;
+  status.textContent = 'SOXL $' + latest.price.toFixed(2) + ' · ' + latest.session +
+    ' · ' + latest.date + ' ET' + (stale ? ' · Last available bar' : '') +
+    ' · 5-minute data; may be delayed';
+  status.title = 'Refreshes every minute. Yahoo Finance pre-market, regular-session and after-hours data. ' +
+    'No 8 p.m.–4 a.m. coverage. Last checked: ' + marketFeed.checked;
+}
+
+function updateMarketSummary() {
+  var state = document.getElementById('market-summary-state');
+  var points = marketFeed ? marketFeed.points : [];
+  [['Regular session','regular'],['After-hours','post'],['Pre-market','pre']].forEach(function(pair) {
+    var observations = points.filter(function(point) { return point.session === pair[0]; });
+    var last = observations[observations.length - 1];
+    document.getElementById('market-' + pair[1] + '-price').textContent = last ? '$' + last.price.toFixed(4) : 'Unavailable';
+    document.getElementById('market-' + pair[1] + '-time').textContent = last
+      ? 'Latest bar: ' + last.date + ' ET' : 'No prices supplied for this session.';
+  });
+  state.textContent = marketFeedError || (marketFeed
+    ? 'Feed checked: ' + new Date(marketFeed.checked).toLocaleString('en-US', {timeZone:'America/New_York'}) +
+      ' ET. Each session shows its own latest available timestamp.'
+    : 'Waiting for price data.');
+}
+
+function soxlMarketTrace() {
+  var dates = [], prices = [], details = [];
+  var points = marketFeed ? marketFeed.points : [];
+  var firstDay = points.length ? points[0].date.slice(0, 10) : null;
+  chartData.dates.forEach(function(date, index) {
+    if (!firstDay || date.slice(0, 10) < firstDay) {
+      dates.push(date); prices.push(chartData.prices[index]);
+      details.push(['Daily close', date]);
+    }
+  });
+  var prior = null;
+  points.forEach(function(point) {
+    // Do not draw a fictitious path across hours where the feed has no prices.
+    if (prior && Date.parse(point.time) - Date.parse(prior.time) > 10 * 60000) {
+      dates.push(point.date); prices.push(null); details.push(['', '']);
+    }
+    dates.push(point.date); prices.push(point.price);
+    details.push([point.session, point.date + ' ET']);
+    prior = point;
+  });
+  return {x: dates, y: prices, customdata: details};
+}
+
+function refreshMarketTrace() {
+  if (!chartData || !chartDiv.data || !chartDiv.data.length || chartGestureActive) {
+    pendingMarketUpdate = true;
+    return;
+  }
+  pendingMarketUpdate = false;
+  var trace = soxlMarketTrace();
+  // Only the SOXL price data changes: no layout, range, shapes, or panel changes.
+  Plotly.restyle(chartDiv, {x: [trace.x], y: [trace.y], customdata: [trace.customdata]}, [0]);
+}
+
+chartDiv.addEventListener('pointerdown', function() { chartGestureActive = true; }, true);
+document.addEventListener('pointerup', function() {
+  chartGestureActive = false;
+  if (pendingMarketUpdate) setTimeout(refreshMarketTrace, 150);
+});
+document.addEventListener('pointercancel', function() { chartGestureActive = false; });
+
 window.addEventListener("message", function(event) {
+  if (!event.data) return;
+  if (event.data.type === 'soxl:market-update') {
+    // Sibling Streamlit frames share the app's origin.
+    if (event.origin !== window.location.origin) return;
+    acceptMarketFeed(event.data.payload);
+    refreshMarketTrace();
+    return;
+  }
   if (event.data.type === "streamlit:render") {
     var args = event.data.args;
+    acceptMarketFeed(args.market_feed);
     chartData = {
       dates: args.dates,
       prices: args.prices,
@@ -1797,12 +1914,14 @@ function renderChart(options) {
   var hasCustom = chartData.custom_dates && chartData.custom_dates.length > 0;
   var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX || hasGUSH || hasBTC || hasCustom;
 
+  var marketTrace = soxlMarketTrace();
   traces.push({
-    x: chartData.dates, y: chartData.prices,
+    x: marketTrace.x, y: marketTrace.y, customdata: marketTrace.customdata,
     mode: 'lines', name: 'SOXL',
     line: {color: '#1E88E5', width: 1.5},
     yaxis: 'y',
-    hovertemplate: 'SOXL: %{x|%Y-%m-%d}<br>$%{y:.2f}<extra></extra>'
+    connectgaps: false,
+    hovertemplate: 'SOXL · %{customdata[0]}<br>%{customdata[1]}<br>$%{y:.4f}<extra></extra>'
   });
 
   if (hasQQQ) {

@@ -23,7 +23,7 @@ from market_chat import answer_market_question
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
-from overnight_market import render_overnight_market
+from chart_market_feed import fetch_chart_market_feed, update_chart_market_feed
 
 
 def _inject_google_site_verification():
@@ -276,7 +276,6 @@ with col_refresh:
         st.rerun()
 
 render_visitor_counter()
-render_overnight_market()
 render_landing_signal(data)
 
 def get_price_at_offset(df, days_ago):
@@ -680,9 +679,12 @@ with tab_chart:
         lines=st.session_state.lines,
         future_end=future_end,
         chart_height=900,
+        market_feed=fetch_chart_market_feed(),
         key="soxl_chart",
         default=None,
     )
+
+    update_chart_market_feed()
 
     if result is not None:
         action = result.get("action")

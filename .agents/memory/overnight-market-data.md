@@ -3,7 +3,14 @@ name: Overnight market data
 description: Preserve chart interactions and distinguish extended-hours monitoring from a continuous overnight feed.
 ---
 
-Refresh extended-hours prices independently from the full Streamlit page.
+Show intraday and extended-hours prices in the existing SOXL chart, not a
+separate section above it. Supplementary session prices belong directly below
+that chart, replacing the former empty control-panel parking area.
+
+**Why:** The user explicitly rejected the standalone overnight dashboard and
+asked for one chart that works during regular and extended sessions.
+
+Refresh prices independently from the full Streamlit page.
 
 **Why:** The user has repeatedly reported losing the prepared historical-chart
 view during rerenders. A recurring price refresh must not reset drawings or
@@ -13,9 +20,9 @@ recreate the historical chart.
 separate from the observation time. Never substitute regular-session prices
 when extended-hours observations are unavailable.
 
-Use provider session boundaries and unadjusted regular closes for the overnight
-baseline; evening and next-morning observations belong to the same close.
+Keep intraday observations out of the daily-history statistical calibration.
+Use consistent price adjustment for the historical and intraday trace segments.
 
-**Why:** Calendar-day changes and early exchange closes make fixed-date or
-fixed-hour assumptions misleading. The existing feed covers pre/post market,
-not a continuous 8 p.m.–4 a.m. session.
+**Why:** Mixing five-minute returns with daily returns changes the model's
+meaning. The existing feed covers pre/post market, not a continuous
+8 p.m.–4 a.m. session; uncovered hours must not be fabricated.
