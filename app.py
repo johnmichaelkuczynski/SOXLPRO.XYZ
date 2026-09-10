@@ -27,6 +27,7 @@ from chart_market_feed import fetch_chart_market_feed, update_chart_market_feed
 from auth import get_current_user
 from account_header import render_account_header, show_purchase_options
 from access import can_use_market_chat, require_paid_access
+from app_analytics import flush_analytics, track_event
 
 
 def _inject_google_site_verification():
@@ -760,6 +761,7 @@ with tab_chart:
             ask_market = False
 
         if ask_market and market_prompt.strip():
+            track_event("market_question_submitted", {"feature": "market_chat"})
             prompt_text = market_prompt.strip()
             st.session_state.market_chat_messages.append(
                 {"role": "user", "content": prompt_text}
@@ -832,6 +834,7 @@ with tab_chart:
                                 ),
                             },
                         )
+                        track_event("market_answer_received", {"feature": "market_chat"})
                         if unavailable:
                             answer += (
                                 "\n\n_Data was temporarily unavailable for: "
@@ -1679,6 +1682,7 @@ def _render_strategy_tab():
             st.markdown(display_text)
 
     if prompt := st.chat_input("Describe your situation (portfolio, cash, goals...)"):
+        track_event("strategy_requested", {"feature": "strategy_builder"})
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -1693,6 +1697,7 @@ def _render_strategy_tab():
                 try:
                     response_text = generate_strategy(api_messages, close_prices)
                 except Exception as e:
+                    flush_analytics()
                     error_msg = str(e)
                     if "FREE_CLOUD_BUDGET_EXCEEDED" in error_msg:
                         st.error("Cloud budget exceeded. Please upgrade your Replit plan to continue using the AI strategy builder.")
@@ -1710,6 +1715,7 @@ def _render_strategy_tab():
                     st.session_state.strategy_html = render_strategy_html(strategy_data)
                     st.markdown(STRATEGY_CSS, unsafe_allow_html=True)
                     st.markdown(st.session_state.strategy_html, unsafe_allow_html=True)
+                    track_event("strategy_generated", {"feature": "strategy_builder"})
                 elif "===STRATEGY_START===" in response_text:
                     display_text = response_text.split("===STRATEGY_START===")[0].strip()
                     if display_text:
@@ -1748,3 +1754,4 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
+flush_analytics()

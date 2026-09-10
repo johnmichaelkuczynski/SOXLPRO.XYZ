@@ -24,6 +24,11 @@ def verify(user, session_id):
     st.session_state["verified_session"] = session_id
     return st.session_state.get("test_confirmed", False)
 
+def track(name, properties=None, once_key=None):
+    events = st.session_state.get("analytics_events", [])
+    events.append({"name": name, "properties": properties})
+    st.session_state["analytics_events"] = events
+
 h.get_current_user = user
 h.is_development_preview = lambda: st.session_state.get("test_preview", False)
 h.user_identity = lambda u: u["sub"]
@@ -33,6 +38,8 @@ h.create_checkout = create
 h.verify_checkout = verify
 h.public_origin = lambda: "https://example.com"
 h.render_google_login = lambda: st.button("Test account")
+h.track_event = track
+h.flush_analytics = lambda: None
 h.render_account_header()
 '''
 
@@ -51,6 +58,8 @@ class AccountCheckoutTests(unittest.TestCase):
         links = app.get("link_button")
         self.assertTrue(any("Pay $0.99 USD with Stripe" == x.proto.label for x in links))
         self.assertEqual(app.session_state["checkout_calls"], 1)
+        self.assertTrue(any(e["name"] == "checkout_ready"
+                            for e in app.session_state["analytics_events"]))
         self.assertFalse(any("not available yet" in x.value for x in app.markdown))
 
     def test_guest_is_invited_to_sign_in_without_creating_checkout(self):
@@ -91,6 +100,8 @@ class AccountCheckoutTests(unittest.TestCase):
         self.assertFalse(app.success)
         self.assertFalse(app.session_state["_paid_access_verified"])
         self.assertEqual(app.session_state["verified_session"], "cs_not_paid")
+        self.assertFalse(any(e["name"] == "payment_confirmed"
+                             for e in app.session_state["analytics_events"]))
 
     def test_confirmed_return_clears_payment_query(self):
         app = self.app(test_confirmed=True, test_paid=True)
@@ -101,6 +112,11 @@ class AccountCheckoutTests(unittest.TestCase):
         self.assertTrue(any("Payment confirmed" in x.value for x in app.success))
         self.assertNotIn("checkout", app.query_params)
         self.assertNotIn("session_id", app.query_params)
+        payment_events = [e for e in app.session_state["analytics_events"]
+                          if e["name"] == "payment_confirmed"]
+        self.assertEqual(payment_events, [
+            {"name": "payment_confirmed", "properties": {"plan": "full_access"}}
+        ])
 
     def test_cancel_is_not_payment_success(self):
         app = self.app()

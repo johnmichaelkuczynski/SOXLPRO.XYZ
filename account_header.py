@@ -15,6 +15,7 @@ from billing import (
     create_checkout, get_paid_access, get_plan, public_origin,
     user_identity, verify_checkout,
 )
+from app_analytics import flush_analytics, track_event
 
 logger = logging.getLogger(__name__)
 
@@ -77,19 +78,25 @@ def show_purchase_options():
             return
         with st.spinner("Opening secure checkout…"):
             checkout = create_checkout(user)
+        track_event("checkout_ready", {"location": "buy_dialog"},
+                    once_key=checkout["session_id"])
         st.link_button(f"Pay {price} with Stripe", checkout["url"],
                        type="primary", width="stretch")
         st.caption("After payment, return here with the same Google account. Your purchase will also be recognized on your next visit.")
     except Exception as exc:
         _billing_failure("checkout", exc)
+        track_event("checkout_error", {"stage": "checkout"})
         st.info("We couldn't open checkout. If you already paid, do not pay again—use Refresh to check your access. Otherwise, please try again.")
         if st.button("Try again", key="retry_checkout", width="stretch"):
             st.rerun(scope="fragment")
+    finally:
+        flush_analytics()
 
 
 def _handle_checkout_return():
     action = st.query_params.get("checkout")
     if action == "cancelled":
+        track_event("checkout_cancelled", {"location": "return"})
         st.info("Checkout was cancelled. You can continue using the app.")
         del st.query_params["checkout"]
         return
@@ -111,6 +118,8 @@ def _handle_checkout_return():
             confirmed = verify_checkout(user, session_id)
         st.session_state.pop("_billing_access", None)
         if confirmed:
+            track_event("payment_confirmed", {"plan": "full_access"},
+                        once_key=session_id)
             st.success("Payment confirmed. Your full access is active.")
             del st.query_params["checkout"]
             del st.query_params["session_id"]
@@ -120,12 +129,14 @@ def _handle_checkout_return():
                 st.rerun()
     except Exception as exc:
         _billing_failure("confirmation", exc)
+        track_event("checkout_error", {"stage": "confirmation"})
         st.info("We couldn't confirm payment yet. If you paid, do not pay again—retry confirmation or sign back in later.")
         if st.button("Retry confirmation", key="retry_payment"):
             st.rerun()
 
 
 def render_account_header():
+    flush_analytics()
     _handle_checkout_return()
     paid = False
     st.session_state["_paid_access_verified"] = False
@@ -135,6 +146,10 @@ def render_account_header():
     except Exception as exc:
         _billing_failure("access-check", exc)
         st.info("Purchase status is temporarily unavailable. If you have paid, please refresh before trying to buy again.")
+    user = get_current_user()
+    if user.get("is_logged_in") and not is_development_preview():
+        track_event("signed_in_session", {"tier": "paid" if paid else "signed_in"},
+                    once_key=user.get("sub", "signed-in"))
     logo = Path("attached_assets/zhi_logoc_1787826573212.png")
     logo_uri = "data:image/png;base64," + base64.b64encode(logo.read_bytes()).decode("ascii")
     with st.container(key="account_header"):
@@ -167,3 +182,4 @@ def render_account_header():
     if st.query_params.get("checkout") == "buy":
         del st.query_params["checkout"]
         show_purchase_options()
+    flush_analytics()
