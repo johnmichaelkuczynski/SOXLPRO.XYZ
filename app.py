@@ -25,7 +25,8 @@ from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
 from chart_market_feed import fetch_chart_market_feed, update_chart_market_feed
 from auth import get_current_user
-from account_header import render_account_header
+from account_header import render_account_header, show_purchase_options
+from access import can_use_market_chat, require_paid_access
 
 
 def _inject_google_site_verification():
@@ -730,7 +731,10 @@ with tab_chart:
             "Ask anything about the app—charts, benchmarks, probabilities, options, "
             "volatility, dislocation, strategies, backtests, or what a result means."
         )
-        if st.session_state.market_chat_messages:
+        market_chat_allowed = can_use_market_chat(current_user)
+        if not market_chat_allowed:
+            st.info("Sign in to ask SOXL Pro questions about the market and your results.")
+        elif st.session_state.market_chat_messages:
             if st.button("Start new chat", key="market_chat_reset"):
                 st.session_state.market_chat_messages = []
                 st.rerun()
@@ -743,13 +747,17 @@ with tab_chart:
                 "Engine with Backtest,” or “What are these chart lines telling me?”_"
             )
 
-        with st.form("market_chart_chat_form", clear_on_submit=True):
-            market_prompt = st.text_input(
-                "Your question",
-                placeholder="Talk with SOXL Pro…",
-                label_visibility="collapsed",
-            )
-            ask_market = st.form_submit_button("Ask", type="primary")
+        if market_chat_allowed:
+            with st.form("market_chart_chat_form", clear_on_submit=True):
+                market_prompt = st.text_input(
+                    "Your question",
+                    placeholder="Talk with SOXL Pro…",
+                    label_visibility="collapsed",
+                )
+                ask_market = st.form_submit_button("Ask", type="primary")
+        else:
+            market_prompt = ""
+            ask_market = False
 
         if ask_market and market_prompt.strip():
             prompt_text = market_prompt.strip()
@@ -1628,18 +1636,24 @@ with tab_chart:
                 st.info(f"**Verdict:** A {r['magnitude']}%+ move in either direction happened {r['prob']:.0f}% of the time over {r['horizon_label']}.")
 
 with tab_vol:
-    render_vol_surface_tab()
+    if require_paid_access("Vol Surface", current_user, show_purchase_options):
+        render_vol_surface_tab()
 
 with tab_call_rr:
-    render_call_risk_reward_tab()
+    if require_paid_access(
+        "Call Risk/Reward", current_user, show_purchase_options
+    ):
+        render_call_risk_reward_tab()
 
 with tab_disloc:
-    render_dislocation_tab()
+    if require_paid_access("Dislocation", current_user, show_purchase_options):
+        render_dislocation_tab()
 
 with tab_backtest:
-    render_backtest_tab()
+    if require_paid_access("Backtest", current_user, show_purchase_options):
+        render_backtest_tab()
 
-with tab_strategy:
+def _render_strategy_tab():
     st.markdown("### 🎯 Strategy Builder")
     st.markdown(
         "Tell me about your situation — portfolio size, how much cash you have, "
@@ -1703,6 +1717,13 @@ with tab_strategy:
                     st.warning("The strategy document had a formatting issue. Please try saying 'generate the strategy again' to retry.")
                 else:
                     st.markdown(response_text)
+
+
+with tab_strategy:
+    if require_paid_access(
+        "Strategy Builder", current_user, show_purchase_options
+    ):
+        _render_strategy_tab()
 
 with tab_diag:
     diag_sub_system, diag_sub_synth, diag_sub_qc, diag_sub_sweep = st.tabs(

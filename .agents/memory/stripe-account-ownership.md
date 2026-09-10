@@ -25,3 +25,15 @@ not clutter the screen while scrolling.
 
 **How to apply:** Keep them above the market snapshot and let them scroll away
 normally. Do not interpret "at the top" as "always visible."
+
+Respect the owner's existing Stripe Managed Payments configuration.
+
+**Why:** Real Checkout requests revealed that Managed Payments is enabled by
+default. It rejects explicit payment_method_types and requires an eligible tax
+category on the existing product; a valid API key and price alone do not prove
+checkout readiness.
+
+**How to apply:** Verify actual session creation without submitting payment.
+Do not disable Managed Payments, even per-session, or edit product tax settings
+without permission. Preserve Stripe's tax calculation when validating totals;
+base price and final charge can differ because of tax.
