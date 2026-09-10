@@ -24,7 +24,7 @@ from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
 from chart_market_feed import fetch_chart_market_feed, update_chart_market_feed
-from auth import render_google_login
+from auth import get_current_user, render_google_login
 
 
 def _inject_google_site_verification():
@@ -75,6 +75,8 @@ def _inject_google_site_verification():
 _inject_google_site_verification()
 
 st.set_page_config(page_title="SOXL Analysis", page_icon="📈", layout="wide")
+
+current_user = get_current_user()
 
 if "lines" not in st.session_state:
     st.session_state.lines = []

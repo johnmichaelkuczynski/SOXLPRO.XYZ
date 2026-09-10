@@ -10,6 +10,24 @@ import toml
 GOOGLE_METADATA = "https://accounts.google.com/.well-known/openid-configuration"
 
 
+def is_development_preview(environ=None):
+    env = os.environ if environ is None else environ
+    # Published instances can retain workspace markers. Fail closed for any
+    # unexpected deployment flag; never trust URL parameters or client headers.
+    return env.get("REPLIT_DEPLOYMENT", "") in ("", "0") and bool(env.get("REPLIT_DEV_DOMAIN"))
+
+
+def get_current_user():
+    if is_development_preview():
+        return {
+            "is_logged_in": True,
+            "sub": "development-preview",
+            "name": "Developer",
+            "auth_provider": "development",
+        }
+    return dict(st.user)
+
+
 def redirect_uri(environ=None):
     env = os.environ if environ is None else environ
     if env.get("REPLIT_DEPLOYMENT") == "1":
@@ -66,6 +84,9 @@ def configure_google_auth():
 
 
 def render_google_login():
+    if is_development_preview():
+        st.caption("Signed in · Development preview")
+        return
     try:
         configure_google_auth()
     except Exception:
