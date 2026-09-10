@@ -35,5 +35,26 @@ A single-page Streamlit web application for analyzing SOXL (Direxion Daily Semic
 
 ## Running
 ```bash
-streamlit run app.py --server.port 5000
+python seo_server.py
 ```
+
+## Public search responses
+The startup wrapper preserves the existing Streamlit app and its native routes.
+It serves SOXL metadata and descriptive initial HTML at `/`, plain-text
+`/robots.txt`, and XML `/sitemap.xml` before any browser session. The same
+educational description appears in the app's bottom About section.
+Use the wrapper in development and publishing; running Streamlit directly skips
+these handlers. Dependencies must be synced from `uv.lock`.
+
+The canonical URL in `seo.py` was verified from deployment metadata as
+`https://soxlpro.xyz/` on 2026-09-10. Re-verify deployment metadata before changing
+domains; never derive canonical URLs from incoming headers or preview URLs.
+Development responses use noindex and disallow crawling. Production permits
+crawling only when `REPLIT_DEPLOYMENT=1`.
+
+Check compatibility after Streamlit upgrades with
+`python -m unittest discover -s tests -p 'test_seo*.py'`.
+The wrapper uses Streamlit's internal Tornado startup hook, not a proxy;
+WebSockets, OAuth, components, and downloads stay with Streamlit.
+Publishing is a separate user action. Development checks do not establish that
+the published site contains these changes or that a search engine has indexed it.
