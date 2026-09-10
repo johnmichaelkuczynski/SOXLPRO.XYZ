@@ -302,10 +302,9 @@ def _session_needs_confirmation(session: Mapping, identity: str) -> bool:
         return False
     if _field(session, "payment_status") != "paid":
         return True
-    payment_intent = _retrieve_payment_intent(_field(session, "payment_intent"))
-    if not payment_intent:
-        return True
-    return _field(payment_intent, "status") in _PENDING_INTENT_STATUSES
+    # A paid session that failed our local checks must be reconciled, never
+    # discarded in favor of asking the customer to pay a second time.
+    return True
 
 
 def _mark_status(identity: str, session_id: str, status: str) -> None:
@@ -325,6 +324,7 @@ def _retrieve_session(session_id: str) -> dict | None:
                 "expand": [
                     "line_items.data.price",
                     "payment_intent.latest_charge",
+                    "total_details.breakdown",
                 ]
             },
         )
@@ -428,7 +428,7 @@ def _tax_is_inclusive(items: list, details: Mapping) -> bool:
         tax = plain(tax)
         if _field(tax, "inclusive") is True:
             return True
-        rate = plain(_field(tax, "tax_rate_details", {}))
+        rate = plain(_field(tax, "rate", {}))
         if (
             _field(rate, "inclusive") is True
             or _field(rate, "tax_behavior") == "inclusive"
@@ -548,7 +548,7 @@ def verify_checkout(user, session_id) -> bool:
         or not _line_item_matches(items, plan)
         or expected_total is None
     ):
-        _mark_status(identity, session_id, "revoked")
+        _mark_status(identity, session_id, "review")
         return False
 
     payment_intent = _retrieve_payment_intent(_field(session, "payment_intent"))
@@ -557,18 +557,14 @@ def verify_checkout(user, session_id) -> bool:
         return False
     payment_status = _field(payment_intent, "status")
     if payment_status != "succeeded":
-        _mark_status(
-            identity,
-            session_id,
-            "pending" if payment_status in _PENDING_INTENT_STATUSES else "failed",
-        )
+        _mark_status(identity, session_id, "pending")
         return False
     if (
         _field(payment_intent, "livemode") is not True
         or _as_int(_field(payment_intent, "amount", -1)) != expected_total
         or str(_field(payment_intent, "currency", "")).lower() != plan["currency"]
     ):
-        _mark_status(identity, session_id, "revoked")
+        _mark_status(identity, session_id, "review")
         return False
     charge = _field(payment_intent, "latest_charge")
     if not charge:
@@ -576,7 +572,12 @@ def verify_checkout(user, session_id) -> bool:
         charge = charges[-1] if charges else None
     charge = _retrieve_charge(charge)
     if not charge or not _charge_is_valid(charge, expected_total, plan["currency"]):
-        _mark_status(identity, session_id, "revoked")
+        reversed_payment = bool(charge) and (
+            _field(charge, "refunded") is True
+            or _field(charge, "disputed") is True
+            or _as_int(_field(charge, "amount_refunded"), 0) > 0
+        )
+        _mark_status(identity, session_id, "revoked" if reversed_payment else "review")
         return False
 
     _store_call(lambda: purchase_store.mark_paid(identity, session_id))
@@ -640,7 +641,10 @@ def create_checkout(user) -> dict:
                 }
             existing_session = _retrieve_session(existing_id)
             if _session_needs_confirmation(existing_session, identity):
-                _mark_status(identity, existing_id, "pending")
+                _mark_status(
+                    identity, existing_id,
+                    "review" if _field(existing_session, "payment_status") == "paid" else "pending",
+                )
                 raise BillingError(
                     "Payment is still being confirmed. Please check again shortly; "
                     "do not pay again."

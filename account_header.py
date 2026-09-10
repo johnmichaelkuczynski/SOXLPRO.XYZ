@@ -62,9 +62,9 @@ def show_purchase_options():
         plan = get_plan()
         price = _price_label(plan)
         st.write(f"{plan['name']} · {price} one-time payment")
-        st.caption("No recurring subscription. Payment is securely handled by Stripe.")
+        st.caption("No recurring subscription. Stripe handles payment and calculates any applicable tax at checkout.")
         if is_development_preview():
-            st.info("Preview already includes full access. Purchases use your Google account on the published site.")
+            st.info("The preview does not take payments. Use the published site and sign in with Google to purchase.")
             st.link_button("Open published site to buy", public_origin() + "/?checkout=buy",
                            type="primary", width="stretch")
             return
@@ -82,7 +82,7 @@ def show_purchase_options():
         st.caption("After payment, return here with the same Google account. Your purchase will also be recognized on your next visit.")
     except Exception as exc:
         _billing_failure("checkout", exc)
-        st.info("We couldn't open checkout. Please try again. This step did not charge you.")
+        st.info("We couldn't open checkout. If you already paid, do not pay again—use Refresh to check your access. Otherwise, please try again.")
         if st.button("Try again", key="retry_checkout", width="stretch"):
             st.rerun(scope="fragment")
 

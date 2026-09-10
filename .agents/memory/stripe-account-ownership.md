@@ -13,7 +13,9 @@ not inferred from the presence of environment variables.
 
 **How to apply:** Keep credentials server-side and use existing account
 configuration. Do not create or modify Stripe products, prices, portal settings,
-or account settings. If required configuration is missing, report the exact
+or account settings without specific permission. Approval to correct the
+software product's tax category was a narrow exception, not general permission
+to change the account or catalog. If required configuration is missing, report the exact
 blocker instead of proposing to create it. App-initiated checkout/payment
 operations must use the owner's credentials, never a managed connection.
 

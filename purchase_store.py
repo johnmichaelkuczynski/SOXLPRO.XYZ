@@ -117,7 +117,7 @@ def reserve_checkout(
             cur.execute(
                 f"SELECT {_COLUMNS} FROM purchase_checkouts "
                 "WHERE user_identity_hash = %s AND price_id = %s "
-                "AND status IN ('pending', 'open', 'paid') "
+                "AND status IN ('pending', 'open', 'paid', 'review') "
                 "ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
                 (user_identity_hash, price_id),
             )
@@ -265,7 +265,7 @@ def mark_paid(user_identity_hash: str, session_id: str) -> dict:
 
 def mark_status(user_identity_hash: str, session_id: str, status: str) -> None:
     """Record a provider-confirmed non-paid state without granting access."""
-    allowed = {"pending", "open", "cancelled", "failed", "revoked", "expired"}
+    allowed = {"pending", "open", "cancelled", "failed", "revoked", "expired", "review"}
     if status not in allowed:
         raise ValueError("invalid purchase status")
     initialize_store()

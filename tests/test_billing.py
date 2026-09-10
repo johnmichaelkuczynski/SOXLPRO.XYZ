@@ -372,10 +372,10 @@ def test_inclusive_tax_is_not_added_twice(monkeypatch):
         "amount_shipping": 0,
         "amount_tax": 20,
         "breakdown": {
-            "taxes": [{"amount": 20, "tax_rate_details": {"inclusive": True}}],
+            "taxes": [{"amount": 20, "rate": {"inclusive": True}}],
         },
     }
-    session["line_items"]["data"][0]["price"] = dict(PRICE, tax_behavior="inclusive")
+    session["line_items"]["data"][0]["price"] = dict(PRICE, tax_behavior="unspecified")
     record = _stored_record()
     monkeypatch.setattr(billing, "stripe_client", lambda: _client(session=session))
     monkeypatch.setattr(billing.purchase_store, "find_checkout",
@@ -403,6 +403,39 @@ def test_create_checkout_does_not_start_second_payment_while_pending(monkeypatch
 
     with pytest.raises(billing.BillingError, match="still being confirmed"):
         billing.create_checkout(USER)
+
+
+@pytest.mark.parametrize("field", ["session", "intent", "charge"])
+def test_paid_amount_mismatch_blocks_second_checkout_and_can_reconcile(monkeypatch, field):
+    session = _verification_session()
+    target = {
+        "session": (session, "amount_total"),
+        "intent": (session["payment_intent"], "amount"),
+        "charge": (session["payment_intent"]["latest_charge"], "amount"),
+    }[field]
+    target[0][target[1]] = 199  # Locally unverifiable, but Stripe says paid.
+    record = _stored_record()
+    client = _client(session=session)
+    client.v1.checkout.sessions.create = lambda *_args: pytest.fail("second checkout created")
+    monkeypatch.setattr(billing, "stripe_client", lambda: client)
+    monkeypatch.setattr(billing.purchase_store, "find_checkout", lambda *_: record)
+    monkeypatch.setattr(billing.purchase_store, "reserve_checkout", lambda *_: record)
+    monkeypatch.setattr(
+        billing.purchase_store, "mark_status",
+        lambda _identity, _session, status: record.update(status=status),
+    )
+    monkeypatch.setattr(
+        billing.purchase_store, "mark_paid",
+        lambda *_: record.update(status="paid"),
+    )
+    assert billing.verify_checkout(USER, "cs_live_123") is False
+    assert record["status"] == "review"
+    with pytest.raises(billing.BillingError, match="do not pay again"):
+        billing.create_checkout(USER)
+    assert record["status"] == "review"
+    target[0][target[1]] = 99
+    assert billing.verify_checkout(USER, "cs_live_123") is True
+    assert record["status"] == "paid"
 
 
 def test_provider_invalid_request_is_not_silently_treated_as_unpaid(monkeypatch):
