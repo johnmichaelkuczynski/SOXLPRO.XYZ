@@ -19,6 +19,8 @@ dependencies = [
     "requests>=2.32.5",
     "scipy>=1.17.1",
     "streamlit>=1.55.0",
+    "stripe>=15.6.1",
     "tenacity>=9.1.4",
+    "toml>=0.10.2",
     "yfinance>=1.2.0",
 ]

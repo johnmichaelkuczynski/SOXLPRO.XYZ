@@ -230,10 +230,10 @@ def convert_to_timedelta(value, unit):
 try:
     data = fetch_soxl_data()
     if data.empty:
-        st.error("No data returned from yfinance. Please try refreshing.")
+        st.info("SOXL price data is temporarily unavailable. Please refresh and try again.")
         st.stop()
 except Exception as e:
-    st.error(f"Failed to fetch SOXL data: {e}")
+    st.info("SOXL price data is temporarily unavailable. Please refresh and try again.")
     st.stop()
 
 try:

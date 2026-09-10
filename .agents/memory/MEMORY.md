@@ -6,3 +6,4 @@
 - [Panel gesture priority](panel-gesture-priority.md) — slider adjustment takes priority over the panel's drag-anywhere interaction.
 - [Chart interaction default](chart-interaction-default.md) — start in pan/navigation mode; drawing must be explicitly enabled.
 - [Overnight market data](overnight-market-data.md) — isolate refreshes from the drawing chart and distinguish pre/post-market coverage from continuous overnight trading.
+- [Stripe account ownership](stripe-account-ownership.md) — use only the owner's keys directly; do not create or modify account settings, products, or prices.
