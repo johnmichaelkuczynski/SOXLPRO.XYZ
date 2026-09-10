@@ -247,6 +247,9 @@
   <input class="rail-date" id="rail-extend-date" type="date">
   <button class="tbtn" onclick="extendLastLine()">Extend Last Line</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Analyze Period</button>
+  <button class="tbtn" id="medianLineBtn" onclick="addAutomaticChannelLine('median')">Median Line</button>
+  <button class="tbtn" id="upperChannelBtn" onclick="addAutomaticChannelLine('upper')">Upper Channel Line</button>
+  <button class="tbtn" id="lowerChannelBtn" onclick="addAutomaticChannelLine('lower')">Lower Channel Line</button>
   <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <span class="scale-group" role="group" aria-label="Price scale">
@@ -771,7 +774,6 @@ function setMode(mode) {
     'newshape.line.color': '#888',
     'newshape.line.width': 2
   });
-  if (mode === 'draw') fitSoxlPrices();
   trackEvent('chart_mode_selected', {mode: mode});
 }
 
@@ -898,7 +900,7 @@ function getFutureEnd() {
 
 function setFutureHorizon(value) {
   futureHorizonYears = Math.max(5, Math.min(50, Number(value) || 30));
-  renderChart();
+  renderChart({resetViewport: true});
   announce('Future projection horizon set to ' + futureHorizonYears + ' years.');
   trackEvent('future_horizon_changed', {years: futureHorizonYears});
 }
@@ -955,7 +957,7 @@ function setScale(mode) {
   linearBtn.classList.toggle('active', mode === 'linear');
   logBtn.setAttribute('aria-pressed', mode === 'log' ? 'true' : 'false');
   linearBtn.setAttribute('aria-pressed', mode === 'linear' ? 'true' : 'false');
-  renderChart();
+  renderChart({resetViewport: true});
   announce((mode === 'log' ? 'Logarithmic' : 'Linear') + ' price scale selected.');
   trackEvent('chart_scale_changed', {scale: mode});
 }
@@ -1045,7 +1047,133 @@ function cloneLines(source) {
   return source.map(function(line) { return Object.assign({}, line); });
 }
 
+function freezePanelGeometry() {
+  var rect = toolbarEl.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) {
+    toolbarEl.style.width = rect.width + 'px';
+    toolbarEl.style.height = rect.height + 'px';
+  }
+}
+
+function medianValue(values) {
+  if (!values.length) return NaN;
+  var sorted = values.slice().sort(function(a, b) { return a - b; });
+  var middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function automaticLineEndMs() {
+  var tenYearsFromToday = new Date();
+  tenYearsFromToday.setHours(12, 0, 0, 0);
+  tenYearsFromToday.setFullYear(tenYearsFromToday.getFullYear() + 10);
+  return Math.max(getFutureEndMs(), tenYearsFromToday.getTime());
+}
+
+function addAutomaticChannelLine(kind) {
+  if (!chartData || ['median', 'upper', 'lower'].indexOf(kind) < 0) return;
+
+  var rangeStart = selectedRange ? selectedRange.startMs : -Infinity;
+  var rangeEnd = selectedRange ? selectedRange.endMs : Infinity;
+  var points = [];
+  for (var i = 0; i < chartData.dates.length; i++) {
+    var timestamp = new Date(chartData.dates[i]).getTime();
+    var price = Number(chartData.prices[i]);
+    if (!Number.isFinite(timestamp) || !Number.isFinite(price) || price <= 0 ||
+        timestamp < rangeStart || timestamp > rangeEnd) continue;
+    points.push({
+      timestamp: timestamp,
+      value: scaleMode === 'log' ? Math.log10(price) : price
+    });
+  }
+
+  if (points.length < 2 || points[0].timestamp === points[points.length - 1].timestamp) {
+    announce('Select a range containing at least two SOXL prices.');
+    return;
+  }
+
+  var origin = points[0].timestamp;
+  var dayMs = 86400000;
+  var meanX = 0;
+  var meanY = 0;
+  for (var p = 0; p < points.length; p++) {
+    points[p].x = (points[p].timestamp - origin) / dayMs;
+    meanX += points[p].x;
+    meanY += points[p].value;
+  }
+  meanX /= points.length;
+  meanY /= points.length;
+
+  var numerator = 0;
+  var denominator = 0;
+  for (var j = 0; j < points.length; j++) {
+    numerator += (points[j].x - meanX) * (points[j].value - meanY);
+    denominator += Math.pow(points[j].x - meanX, 2);
+  }
+  if (!Number.isFinite(denominator) || denominator <= 0) {
+    announce('The selected SOXL range is too short for a channel line.');
+    return;
+  }
+
+  var slope = numerator / denominator;
+  var interceptCandidates = points.map(function(point) {
+    return point.value - slope * point.x;
+  });
+  var medianIntercept = medianValue(interceptCandidates);
+  var intercept = medianIntercept;
+  if (kind === 'upper') intercept = Math.max.apply(null, interceptCandidates);
+  if (kind === 'lower') intercept = Math.min.apply(null, interceptCandidates);
+
+  var startMs = new Date(chartData.dates[0]).getTime();
+  var endMs = automaticLineEndMs();
+  var startValue = intercept + slope * ((startMs - origin) / dayMs);
+  var endValue = intercept + slope * ((endMs - origin) / dayMs);
+  var startPrice = scaleMode === 'log' ? Math.pow(10, startValue) : startValue;
+  var endPrice = scaleMode === 'log' ? Math.pow(10, endValue) : endValue;
+  if (!Number.isFinite(startPrice) || !Number.isFinite(endPrice) ||
+      startPrice <= 0 || endPrice <= 0) {
+    announce('That SOXL range does not produce a valid channel line.');
+    return;
+  }
+
+  var labels = {
+    median: 'Median Line',
+    upper: 'Upper Channel Line',
+    lower: 'Lower Channel Line'
+  };
+  var colors = {
+    median: '#475569',
+    upper: '#E53935',
+    lower: '#43A047'
+  };
+  saveUndoState();
+  lines.push({
+    x1_ms: startMs,
+    y1: startPrice,
+    x2_ms: endMs,
+    y2: endPrice,
+    x1: msToDateStr(startMs),
+    x2: msToDateStr(endMs),
+    label: labels[kind],
+    color: colors[kind],
+    automaticType: kind
+  });
+  renderChart();
+  renderLineList();
+  setComponentValue({action: "set_all", lines: lines});
+  announce(labels[kind] + ' added using ' +
+    (selectedRange ? 'the selected SOXL period.' : 'the full SOXL history.'));
+  trackEvent('trend_line_created', {
+    line_count: lines.length,
+    span_days: Math.round((endMs - startMs) / dayMs),
+    scale: scaleMode,
+    method: 'automatic_channel',
+    channel_type: kind,
+    selected_period: Boolean(selectedRange)
+  });
+}
+
 function saveUndoState() {
+  freezePanelGeometry();
   undoStack.push(cloneLines(lines));
   if (undoStack.length > 50) undoStack.shift();
   updateLineActionButtons();
@@ -1057,6 +1185,7 @@ function undoLastAction() {
     document.getElementById('status').textContent = 'Nothing to undo yet \u2022 Draw, erase, extend, or delete a line first';
     return;
   }
+  freezePanelGeometry();
   lines = undoStack.pop();
   knownShapeCount = 0;
   renderChart();
@@ -1636,8 +1765,24 @@ function handlePlotlyRelayout(eventData) {
   });
 }
 
-function renderChart() {
+function captureChartViewport() {
+  var layout = chartDiv.layout;
+  if (!layout || !layout.xaxis || !layout.yaxis ||
+      !Array.isArray(layout.xaxis.range) || !Array.isArray(layout.yaxis.range)) {
+    return null;
+  }
+  return {
+    xRange: layout.xaxis.range.slice(),
+    yRange: layout.yaxis.range.slice(),
+    scrollLeft: chartScroll.scrollLeft,
+    scrollTop: chartScroll.scrollTop
+  };
+}
+
+function renderChart(options) {
   if (!chartData) return;
+  options = options || {};
+  var lockedViewport = options.resetViewport ? null : captureChartViewport();
   var traces = [];
 
   var hasQQQ = chartData.qqq_dates && chartData.qqq_dates.length > 0;
@@ -1769,7 +1914,8 @@ function renderChart() {
     var transformedY1 = scaleMode === 'log' ? Math.log10(y1) : y1;
     var transformedY2 = scaleMode === 'log' ? Math.log10(y2) : y2;
     var transformedSlope = (transformedY2 - transformedY1) / dt;
-    var color = COLORS[i % COLORS.length];
+    var color = ln.color || COLORS[i % COLORS.length];
+    var lineName = ln.label || ('Trend line ' + (i + 1));
     var segmentStart = Math.min(x1, x2);
     var segmentEnd = Math.max(x1, x2);
     var segmentStartY = segmentStart === x1 ? y1 : y2;
@@ -1781,7 +1927,7 @@ function renderChart() {
       mode: 'lines+markers', showlegend: false,
       line: {color: color, width: 2.5},
       marker: {size: 14, color: 'rgba(0,0,0,0)'},
-      hovertemplate: '<b>Trend line ' + (i+1) + '</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
+      hovertemplate: '<b>' + lineName + '</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
     });
 
     var fwdEnd = Math.max(x1, x2);
@@ -1789,7 +1935,9 @@ function renderChart() {
     var fwdStart = scaleMode === 'log' ? Math.log10(fwdY0) : fwdY0;
     var fwdTransformedY = fwdStart + transformedSlope * (futureMs - fwdEnd);
     var fwdY = scaleMode === 'log' ? Math.pow(10, fwdTransformedY) : fwdTransformedY;
-    var forward = trendPoints(fwdEnd, futureMs, fwdY0, transformedSlope);
+    var forward = futureMs > fwdEnd
+      ? trendPoints(fwdEnd, futureMs, fwdY0, transformedSlope)
+      : {dates: [], prices: [], hitProbabilities: []};
     if (forward.dates.length > 1) {
       traces.push({
         x: forward.dates,
@@ -1798,7 +1946,7 @@ function renderChart() {
         mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         marker: {size: 14, color: 'rgba(0,0,0,0)'},
-        hovertemplate: '<b>Trend line ' + (i+1) + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
+        hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
       });
     }
 
@@ -1817,7 +1965,7 @@ function renderChart() {
         mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         marker: {size: 14, color: 'rgba(0,0,0,0)'},
-        hovertemplate: '<b>Trend line ' + (i+1) + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
+        hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
       });
     }
   }
@@ -1838,12 +1986,12 @@ function renderChart() {
     yaxis: {
       type: scaleMode, tickprefix: '$', title: '',
       gridcolor: '#eee',
-      range: yAxisRange(),
+      range: lockedViewport ? lockedViewport.yRange : yAxisRange(),
       fixedrange: false
     },
     xaxis: {
       type: 'date',
-      range: [chartData.dates[0], getFutureEnd()],
+      range: lockedViewport ? lockedViewport.xRange : [chartData.dates[0], getFutureEnd()],
       title: '', gridcolor: '#eee',
       tickformatstops: [
         {dtickrange: [null, 86400000], value: '%b %d, %Y'},
@@ -1857,6 +2005,7 @@ function renderChart() {
     width: Math.round(document.getElementById('chart-scroll').clientWidth * currentChartWidth / 100),
     height: currentChartHeight,
     margin: {l: 65, r: 20, t: 10, b: 40},
+    uirevision: 'explicit-viewport-lock',
     showlegend: hasOverlay,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
     hovermode: 'closest',
@@ -1879,6 +2028,10 @@ function renderChart() {
   };
 
   Plotly.react(chartDiv, traces, layout, config).then(function() {
+    if (lockedViewport) {
+      chartScroll.scrollLeft = lockedViewport.scrollLeft;
+      chartScroll.scrollTop = lockedViewport.scrollTop;
+    }
     if (!plotlyEventsBound && typeof chartDiv.on === 'function') {
       chartDiv.on('plotly_relayout', handlePlotlyRelayout);
       plotlyEventsBound = true;
@@ -1895,15 +2048,15 @@ function renderLineList() {
   document.getElementById('rail-extend-date').value = suggestedExtensionDate(lines[lines.length - 1]);
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
-    var color = COLORS[i % COLORS.length];
+    var color = ln.color || COLORS[i % COLORS.length];
+    var lineName = ln.label || ('Line ' + (i + 1));
     html += '<div class="line-row">'
       + '<span class="line-dot" style="background:' + color + '"></span>'
-      + '<span>Line ' + (i+1) + ': ' + ln.x1 + ' ($' + ln.y1.toFixed(2) + ') \u2192 ' + ln.x2 + ' ($' + ln.y2.toFixed(2) + ')</span>'
+      + '<span>' + lineName + ': ' + ln.x1 + ' ($' + ln.y1.toFixed(2) + ') \u2192 ' + ln.x2 + ' ($' + ln.y2.toFixed(2) + ')</span>'
       + '</div>';
   }
   el.innerHTML = html;
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
-  setTimeout(positionRightControlRail, 60);
 }
 </script>
 </body>
