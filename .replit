@@ -51,3 +51,6 @@ timeoutMs = 180000
 [userenv]
 
 [userenv.production]
+
+[userenv.shared]
+PUBLIC_APP_URL = "https://soxlpro.xyz"

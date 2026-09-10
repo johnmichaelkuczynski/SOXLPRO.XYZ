@@ -24,6 +24,7 @@ from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
 from chart_market_feed import fetch_chart_market_feed, update_chart_market_feed
+from auth import render_google_login
 
 
 def _inject_google_site_verification():
@@ -246,7 +247,7 @@ logo_data_uri = (
     + base64.b64encode(logo_path.read_bytes()).decode("ascii")
 )
 
-col_title, col_contact, col_refresh = st.columns([6, 1.15, 0.85])
+col_title, col_login, col_contact, col_refresh = st.columns([4.4, 1.6, 1.15, 0.85])
 with col_title:
     st.markdown(
         f"""
@@ -264,6 +265,8 @@ with col_title:
         """,
         unsafe_allow_html=True,
     )
+with col_login:
+    render_google_login()
 with col_contact:
     st.link_button(
         "Contact Us",
