@@ -242,14 +242,15 @@
   <strong style="text-align:center;color:#0f172a;">CHART CONTROLS</strong>
   <button class="tbtn" id="undoBtn" onclick="undoLastAction()" aria-label="Undo last line change">&#8630; Undo Last Line Change</button>
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
+  <span class="rail-label" style="text-align:center;">AUTOMATIC CHANNEL LINES</span>
+  <button class="tbtn" id="medianLineBtn" onclick="addAutomaticChannelLine('median')">Median Line</button>
+  <button class="tbtn" id="upperChannelBtn" onclick="addAutomaticChannelLine('upper')">Upper Channel Line</button>
+  <button class="tbtn" id="lowerChannelBtn" onclick="addAutomaticChannelLine('lower')">Lower Channel Line</button>
   <button class="tbtn danger" onclick="eraseLastLine()">Erase Last Line</button>
   <label class="rail-label" for="rail-extend-date">Extend Last Line To</label>
   <input class="rail-date" id="rail-extend-date" type="date">
   <button class="tbtn" onclick="extendLastLine()">Extend Last Line</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Analyze Period</button>
-  <button class="tbtn" id="medianLineBtn" onclick="addAutomaticChannelLine('median')">Median Line</button>
-  <button class="tbtn" id="upperChannelBtn" onclick="addAutomaticChannelLine('upper')">Upper Channel Line</button>
-  <button class="tbtn" id="lowerChannelBtn" onclick="addAutomaticChannelLine('lower')">Lower Channel Line</button>
   <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <span class="scale-group" role="group" aria-label="Price scale">
