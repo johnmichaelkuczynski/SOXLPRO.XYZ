@@ -54,4 +54,3 @@ timeoutMs = 180000
 
 [userenv.shared]
 PUBLIC_APP_URL = "https://soxlpro.xyz"
-STRIPE_PRICE_ID = "price_1UE8T3Insig3xwFyctnYYNnq"
