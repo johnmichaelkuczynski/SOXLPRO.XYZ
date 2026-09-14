@@ -620,6 +620,9 @@ def _reusable_open_session(identity: str, record: dict, plan: dict) -> bool:
 
 def create_checkout(user) -> dict:
     """Create or reuse a card-only one-time Checkout session."""
+    from auth import is_owner
+    if is_owner(user):
+        raise BillingError("Permanent owner access is already active. No payment is required.")
     identity = user_identity(user)
     plan = get_plan()
     _live_plan(plan)
@@ -693,6 +696,9 @@ def create_checkout(user) -> dict:
 
 def get_paid_access(user) -> bool:
     """Refresh this user's stored one-time purchases and return access state."""
+    from auth import is_owner
+    if is_owner(user):
+        return True
     identity = user_identity(user)
     plan = get_plan()
     if not plan.get("livemode"):

@@ -12,7 +12,7 @@ from typing import Any, Callable, Mapping
 
 import streamlit as st
 
-from auth import get_current_user, is_development_preview
+from auth import get_current_user, is_development_preview, is_owner
 
 
 PAID_ACCESS_SESSION_KEY = "_paid_access_verified"
@@ -20,6 +20,12 @@ PAID_ACCESS_SESSION_KEY = "_paid_access_verified"
 GUEST = "guest"
 SIGNED_IN = "signed_in"
 PAID = "paid"
+OWNER = "owner"
+
+
+def has_unlimited_credits(user=None) -> bool:
+    """Permanent exemption from application credit quotas, not provider billing."""
+    return is_owner(user)
 
 # These are the paid entry points.  Chart/probability/snapshot rendering and
 # diagnostics intentionally do not appear here and remain available under
@@ -46,7 +52,7 @@ def access_tier(
     paid_verified: bool | None = None,
     preview: bool | None = None,
 ) -> str:
-    """Resolve the current session to ``guest``, ``signed_in``, or ``paid``.
+    """Resolve to ``guest``, ``signed_in``, ``paid``, or permanent ``owner``.
 
     ``paid_verified`` is deliberately an explicit server result.  When it is
     omitted, the value written by ``render_account_header`` is used.  Preview
@@ -58,6 +64,9 @@ def access_tier(
 
     if not _logged_in(user):
         return GUEST
+
+    if is_owner(user):
+        return OWNER
 
     if preview is None:
         preview = is_development_preview()
@@ -78,7 +87,7 @@ def has_paid_access(
     """Whether the authenticated session may enter a paid feature."""
     return access_tier(
         user, paid_verified=paid_verified, preview=preview
-    ) == PAID
+    ) in (PAID, OWNER)
 
 
 def can_use_market_chat(

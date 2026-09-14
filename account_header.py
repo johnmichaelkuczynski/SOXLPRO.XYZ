@@ -9,7 +9,7 @@ import streamlit as st
 
 from auth import (
     configure_google_auth, get_current_user, is_development_preview,
-    render_google_login,
+    render_google_login, is_owner,
 )
 from billing import (
     create_checkout, get_paid_access, get_plan, public_origin,
@@ -32,6 +32,8 @@ def _price_label(plan):
 
 def paid_access_for_current_user(force=False):
     user = get_current_user()
+    if is_owner(user):
+        return True
     if is_development_preview() or not user.get("is_logged_in"):
         return False
     identity = user_identity(user)
@@ -60,6 +62,9 @@ def _purchase_sign_in():
 @st.dialog("Buy full access")
 def show_purchase_options():
     try:
+        if is_owner(get_current_user()):
+            st.success("Permanent owner access is active. Unlimited app credits. No payment or renewal is required.")
+            return
         plan = get_plan()
         price = _price_label(plan)
         st.write(f"{plan['name']} · {price} one-time payment")
@@ -94,6 +99,9 @@ def show_purchase_options():
 
 
 def _handle_checkout_return():
+    if is_owner(get_current_user()):
+        # Owner access is not a purchase and must not emit payment-confirmed events.
+        return
     action = st.query_params.get("checkout")
     if action == "cancelled":
         track_event("checkout_cancelled", {"location": "return"})
@@ -167,7 +175,11 @@ def render_account_header():
         with login:
             render_google_login()
         with buy:
-            if paid:
+            if is_owner(user):
+                st.button("Owner", key="owner_access_active", disabled=True,
+                          help="Permanent highest-tier access with unlimited app credits. No payment or renewal required.",
+                          width="stretch")
+            elif paid:
                 st.button("Full access", key="paid_access_active", disabled=True,
                           help="Your payment has been verified with Stripe.", width="stretch")
             elif st.button("Buy", key="buy_access", type="primary", width="stretch"):
