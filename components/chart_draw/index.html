@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Interactive SOXL historical price chart</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="area_measure.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; position: relative; }
@@ -259,6 +260,9 @@
   <input class="rail-date" id="rail-extend-date" type="date">
   <button class="tbtn" onclick="extendLastLine()">Extend Last Line</button>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Analyze Period</button>
+  <button class="tbtn" id="axisAreaToggle" aria-pressed="false" title="Connect a hovered price point to both visible axes and measure the rectangle">Axis Lines &amp; Area</button>
+  <button class="tbtn" id="axisAreaFollow" hidden>Follow cursor</button>
+  <div id="axisAreaOutput" hidden style="white-space:pre-line;font-size:12px;line-height:1.5;padding:8px;background:#fffbeb;color:#78350f;border-radius:6px;"></div>
   <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <span class="scale-group" role="group" aria-label="Price scale">
@@ -2148,6 +2152,7 @@ function renderChart(options) {
   };
 
   Plotly.react(chartDiv, traces, layout, config).then(function() {
+    installAxisArea(chartDiv);
     if (lockedViewport) {
       chartScroll.scrollLeft = lockedViewport.scrollLeft;
       chartScroll.scrollTop = lockedViewport.scrollTop;
