@@ -345,7 +345,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
             unsafe_allow_html=True,
         )
 
-tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "🩺 Diagnostic"])
+tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_area, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "Area Research", "🩺 Diagnostic"])
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
@@ -1684,6 +1684,10 @@ with tab_strategy:
         "Strategy Builder", current_user, show_purchase_options
     ):
         _render_strategy_tab()
+
+with tab_area:
+    from area_lab.ui import render_area_lab
+    render_area_lab()
 
 with tab_diag:
     diag_sub_system, diag_sub_synth, diag_sub_qc, diag_sub_sweep = st.tabs(

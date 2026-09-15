@@ -1,0 +1,325 @@
+Add a **Time–Price Area Predictiveness Lab** to SOXL Pro. Its purpose is to determine, using rigorous historical backtesting, whether the areas of earlier cursor-style time–price “squares”/rectangles predict the areas of later ones.
+
+## Core definition
+
+For this feature, define each “square” as the rectangle determined by:
+
+- A rule-based **anchor point** \( (t_0, P_0) \)
+- A later evaluation point \( (t, P_t) \)
+- A vertical projection from \( (t,P_t) \) to the x-axis/time axis
+- A horizontal projection from \( (t,P_t) \) to the y-axis/price axis
+
+Do **not** use pixel dimensions or screen coordinates. Use actual trading-session counts and actual adjusted market prices.
+
+For every observation, compute:
+
+\[
+\Delta t = \text{number of trading sessions between anchor and evaluation point}
+\]
+
+\[
+r = \log(P_t/P_0)
+\]
+
+\[
+A_{\text{raw}} = \Delta t \times |P_t-P_0|
+\]
+
+\[
+A_{\log} = \Delta t \times |r|
+\]
+
+\[
+A_{\text{signed}} = \Delta t \times r
+\]
+
+Also compute a volatility-normalized area:
+
+\[
+A_{\text{norm}}
+=
+\Delta t
+\times
+\frac{|r|}{\sigma_t}
+\]
+
+where \( \sigma_t \) is trailing realized volatility available as of date \(t\), calculated from prior returns only. Default to 20 trading days, with user-selectable windows of 10, 20, and 60 days.
+
+Treat \(A_{\log}\) and \(A_{\text{norm}}\) as the primary variables. Display raw dollar-area only as an intuitive visual measurement, not as the main research variable.
+
+## Anchor rules
+
+The research feature must generate anchors automatically and reproducibly. Never rely on manually selected chart points for the backtest.
+
+Provide these anchor modes:
+
+- Most recent 20-day closing-price low
+- Most recent 20-day closing-price high
+- Most recent confirmed swing low
+- Most recent confirmed swing high
+- Start of the current rolling 5-, 10-, 20-, or 60-session window
+- User-selected fixed calendar anchor for exploratory use only
+
+For confirmed swing pivots, prevent look-ahead bias: a pivot is “confirmed” only after a user-selectable number of subsequent bars, default 3. The system must make the pivot available only on its confirmation date, not on the earlier pivot date.
+
+Show the exact anchor date, anchor price, anchor type, elapsed sessions, and current price for every historical observation.
+
+## Predictive test
+
+Create a dedicated panel named:
+
+> **Time–Price Area Predictiveness Lab**
+
+For each historical date \(t\), calculate the current area features from the chosen anchor. Then test whether they predict the area of later squares at selected forward horizons:
+
+\[
+A_{t+1},\; A_{t+5},\; A_{t+10},\; A_{t+20}
+\]
+
+Support user-selectable horizons of 1, 2, 3, 5, 10, 20, 40, and 60 trading sessions.
+
+For each horizon \(h\), calculate:
+
+\[
+\text{FutureAreaChange}_{t,h}
+=
+A_{t+h}-A_t
+\]
+
+\[
+\text{FutureNormalizedArea}_{t,h}
+=
+A_{\text{norm},t+h}
+\]
+
+\[
+\text{FutureAbsoluteReturn}_{t,h}
+=
+|\log(P_{t+h}/P_t)|
+\]
+
+\[
+\text{FutureSignedReturn}_{t,h}
+=
+\log(P_{t+h}/P_t)
+\]
+
+The primary question is:
+
+> Does the current normalized area, or its recent rate of change, predict the future normalized area after controlling for ordinary volatility and momentum?
+
+## Required models
+
+Run the following models for each selected horizon.
+
+### Model 1: Area persistence
+
+Test whether current normalized area predicts future normalized area:
+
+\[
+A_{\text{norm},t+h}
+=
+\alpha
++
+\beta_1A_{\text{norm},t}
++
+\epsilon_{t+h}
+\]
+
+Report:
+
+- Coefficient \( \beta_1 \)
+- Standard error
+- t-statistic
+- p-value
+- \(R^2\)
+- Adjusted \(R^2\)
+- Number of observations
+- Correlation between current and future normalized area
+- Spearman rank correlation
+- Direction and statistical significance of the relationship
+
+### Model 2: Incremental-value model
+
+Test whether area adds information beyond ordinary technical and volatility features:
+
+\[
+A_{\text{norm},t+h}
+=
+\alpha
++
+\beta_1A_{\text{norm},t}
++
+\beta_2\Delta A_{\text{norm},t}
++
+\beta_3\sigma_t
++
+\beta_4|r_{t-5,t}|
++
+\beta_5|r_{t-20,t}|
++
+\beta_6\text{ATRPercent}_t
++
+\epsilon_{t+h}
+\]
+
+Where:
+
+\[
+\Delta A_{\text{norm},t}
+=
+A_{\text{norm},t}-A_{\text{norm},t-1}
+\]
+
+Use only information available at time \(t\). Calculate ATR percent, realized volatility, and lagged returns without future leakage.
+
+The area hypothesis should be considered supported only if the area variables improve out-of-sample predictive performance over a baseline model that uses volatility and lagged absolute returns but **does not** use area features.
+
+### Model 3: Quantile/bucket analysis
+
+Sort historical observations into 5 or 10 equal-sized quantile buckets according to current normalized area.
+
+For each bucket, report:
+
+- Number of observations
+- Mean future normalized area
+- Median future normalized area
+- Mean future absolute return
+- Median future absolute return
+- Mean future signed return
+- Median future signed return
+- Probability that future absolute return exceeds a user-defined threshold
+- Probability of a positive future return
+- Maximum drawdown and maximum favorable move over the forward horizon, if feasible
+
+Use a table and a bar chart. The user should be able to inspect whether larger current areas systematically lead to larger or smaller future areas.
+
+### Model 4: Classification test
+
+Allow the user to define a “large future area” as being above the historical 75th, 80th, 90th, or 95th percentile of future normalized area.
+
+Create a classifier that estimates:
+
+\[
+\Pr(
+A_{\text{norm},t+h}
+>
+\text{threshold}
+\mid
+A_{\text{norm},t},
+\Delta A_{\text{norm},t},
+\sigma_t,
+\text{momentum variables}
+)
+\]
+
+At minimum, support logistic regression. If the existing app supports machine-learning models, also support random forest and gradient boosting, but preserve logistic regression as the transparent baseline.
+
+Report:
+
+- Accuracy
+- Precision
+- Recall
+- F1 score
+- ROC-AUC
+- Precision-recall AUC
+- Brier score
+- Calibration chart
+- Feature importance or standardized coefficients
+- Confusion matrix
+- Comparison against a baseline model with no area variables
+
+Do not claim predictive value merely because in-sample accuracy is high.
+
+## Proper validation
+
+Use time-series validation only. Never randomly shuffle the observations.
+
+Add these validation modes:
+
+- Expanding-window walk-forward validation
+- Rolling-window walk-forward validation
+- Train/test split by date
+- User-defined test period
+
+Default configuration:
+
+- Train on the earliest 70% of observations
+- Validate on the next 15%
+- Test on the latest untouched 15%
+- Show the exact calendar dates and number of observations in each set
+
+For walk-forward testing, retrain using only data available before each prediction date. Do not let future dates influence scaling, pivot identification, thresholds, feature engineering, or model fitting.
+
+Report results separately for:
+
+- Training data
+- Validation data
+- Final out-of-sample test data
+
+Highlight only final test results as the primary evidence.
+
+## Benchmark comparisons
+
+Compare area-based models against these baselines:
+
+| Model | Inputs |
+|---|---|
+| Naive persistence baseline | Current realized volatility and recent absolute return only |
+| Volatility baseline | Trailing realized volatility, ATR percent, and lagged absolute returns |
+| Momentum baseline | 1-, 5-, 10-, and 20-day returns plus moving-average trend |
+| Combined non-area baseline | Volatility and momentum inputs, but no area features |
+| Area-enhanced model | All non-area baseline inputs plus normalized area, signed area, and area growth |
+
+For each model and forward horizon, show out-of-sample:
+
+- \(R^2\)
+- Mean absolute error
+- Root mean squared error
+- Correlation of predicted vs. realized future area
+- ROC-AUC where the target is binary
+- Calibration/Brier score where the target is binary
+- Change in performance relative to the combined non-area baseline
+
+The core result must explicitly state whether area variables add statistically and economically meaningful out-of-sample value beyond the non-area baseline.
+
+## User interface requirements
+
+Add a toggle named:
+
+> **Enable Time–Price Area Research**
+
+When enabled:
+
+- Show vertical and horizontal projection lines from the selected chart point to the selected anchor’s time and price coordinates.
+- Shade the resulting rectangle.
+- Show the selected area’s raw, log, signed, and normalized values.
+- Make clear that the visual rectangle is illustrative; the predictive research uses data units, not pixels.
+- Provide controls for anchor rule, lookback window, pivot confirmation bars, volatility window, forward horizon, normalization method, and train/test date range.
+- Provide an **Analyze Historical Predictiveness** button.
+- Show a progress indicator and allow cancellation if computation is slow.
+- Present the results in a dashboard with:
+  - Summary verdict
+  - Regression table
+  - Quantile table
+  - Bucket chart
+  - Current-vs-future-area scatterplot
+  - Time-series chart of normalized area
+  - Out-of-sample model-comparison table
+  - Feature-importance or coefficient display
+  - Data-quality and leakage warnings
+
+## Interpretation rules
+
+Display this language prominently:
+
+> “This tool tests statistical associations in historical data. It does not establish causation or guarantee future performance. A relationship is meaningful only if it remains stable in untouched out-of-sample data and adds value beyond standard volatility and momentum measures.”
+
+Classify results as follows:
+
+- **No evidence:** Area features do not improve final out-of-sample performance relative to the non-area baseline.
+- **Weak evidence:** Improvement is small, unstable across horizons or anchors, or disappears after controlling for volatility and momentum.
+- **Promising evidence:** Improvement is consistent across multiple unseen periods, anchor types, and horizons, with reasonable calibration and economic relevance.
+- **Potentially spurious:** Strong in-sample results but weak test results; results depend heavily on one time period, one manually selected anchor, or one arbitrary parameter configuration.
+
+Do not generate a buy/sell signal from this research feature unless a separate strategy module is explicitly built and tested with transaction costs, slippage, risk limits, and final out-of-sample validation.

@@ -17,10 +17,13 @@ dependencies = [
     "python-docx>=1.2.0",
     "reportlab>=4.4.10",
     "requests>=2.32.5",
+    "scikit-learn>=1.9.1",
     "scipy>=1.17.1",
+    "statsmodels>=0.15.0",
     "streamlit>=1.55.0",
     "stripe>=15.6.1",
     "tenacity>=9.1.4",
     "toml>=0.10.2",
+    "tornado>=6.5.4",
     "yfinance>=1.2.0",
 ]

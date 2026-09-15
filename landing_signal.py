@@ -232,6 +232,8 @@ def render_landing_signal(price_data):
         "and produce buy-side signals; higher percentiles are closer to historical "
         "highs and produce sell-side signals. The broad 35%–65% middle is Do Nothing."
     )
+    from signal_scorecard_ui import render_rating_scorecard
+    render_rating_scorecard(closes, display_signal_label(result["signal"]))
 
     st.markdown("#### Multi-timeframe overbought/oversold")
     display = readings.copy()
