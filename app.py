@@ -79,30 +79,9 @@ def fetch_soxl_data():
     return df[["Close"]].copy()
 
 
-@st.cache_data(ttl=60)
 def fetch_soxl_quote():
-    """Latest live quote including pre-/post-market when available.
-
-    Returns dict with the current price, the relevant previous close for the
-    day's change, the market state, and whether it's an extended-hours price.
-    Falls back to None on any failure so callers can use the last daily close.
-    """
-    try:
-        info = yf.Ticker("SOXL").info
-    except Exception:
-        return None
-    state = info.get("marketState")
-    reg = info.get("regularMarketPrice")
-    reg_prev = info.get("regularMarketPreviousClose")
-    pre = info.get("preMarketPrice")
-    post = info.get("postMarketPrice")
-    if state == "PRE" and pre:
-        return {"price": float(pre), "prev_close": reg, "state": "PRE", "extended": True}
-    if state == "POST" and post:
-        return {"price": float(post), "prev_close": reg, "state": "POST", "extended": True}
-    if reg:
-        return {"price": float(reg), "prev_close": reg_prev, "state": state or "REGULAR", "extended": False}
-    return None
+    from live_market_quote import fetch_live_quote
+    return fetch_live_quote()
 
 
 @st.cache_data(ttl=300)
@@ -199,7 +178,7 @@ try:
 except Exception:
     quote = None
 
-render_market_snapshot(data, quote=quote)
+render_market_snapshot(data, quote=quote, refresh_quotes=True)
 
 render_visitor_counter()
 render_landing_signal(data)
@@ -219,7 +198,7 @@ else:
     current_price = last_close
 
 if quote and quote.get("extended"):
-    latest_date = "Pre-market" if quote.get("state") == "PRE" else "After-hours"
+    latest_date = quote.get("session", "Extended hours")
 else:
     latest_date = data.index[-1].strftime("%Y-%m-%d")
 

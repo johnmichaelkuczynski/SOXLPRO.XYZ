@@ -708,8 +708,12 @@ function configureKeyboardDateInputs() {
   if (!endInput.value) endInput.value = maxDate;
 }
 
+var latestMarketQuote = null;
 function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
+  latestMarketQuote = payload.quote && Number.isFinite(payload.quote.price) &&
+    payload.quote.price > 0 && Number.isFinite(Date.parse(payload.quote.observed_at))
+    ? payload.quote : null;
   marketFeedError = payload.error || null;
   if (Array.isArray(payload.points) && payload.points.length) {
     var points = payload.points.filter(function(point) {
@@ -725,6 +729,17 @@ function acceptMarketFeed(payload) {
 function updateMarketFeedStatus() {
   var status = document.getElementById('market-feed-status');
   updateMarketSummary();
+  if (latestMarketQuote) {
+    var q = latestMarketQuote;
+    status.textContent = 'SOXL $' + q.price.toFixed(2) + ' · ' + q.session +
+      ' · ' + q.source + ' · ' + q.observed_label +
+      (Date.now() - Date.parse(q.observed_at) > 900000 ? ' · Last available quote (not live)' : ' · May be delayed') +
+      (marketFeedError ? ' · ' + marketFeedError : '');
+    status.title = 'Latest trade quote (unadjusted), refreshed every minute. Chart bars remain adjusted Yahoo data. ' +
+      'Robinhood overnight quotes are best-effort, not guaranteed continuous coverage. ' +
+      (q.feed_warning || '') + ' Checked: ' + q.checked_at;
+    return;
+  }
   if (marketFeedError) { status.textContent = marketFeedError; return; }
   if (!marketFeed || !marketFeed.points.length) {
     status.textContent = 'Intraday prices unavailable — historical daily chart shown.';

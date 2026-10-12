@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 import yfinance as yf
 
 from overnight_market import clean_prices, ET
+from live_market_quote import fetch_live_quote
 
 
 def make_market_payload(bars, periods, checked):
@@ -46,13 +47,16 @@ def make_market_payload(bars, periods, checked):
 @st.cache_data(ttl=50, show_spinner=False)
 def fetch_chart_market_feed():
     checked = datetime.now(timezone.utc).isoformat()
+    quote = fetch_live_quote()
     try:
         ticker = yf.Ticker("SOXL")
         bars = ticker.history(period="5d", interval="5m", prepost=True,
                               auto_adjust=True, timeout=15)
-        return make_market_payload(bars, ticker.get_history_metadata().get("tradingPeriods"), checked)
+        payload = make_market_payload(bars, ticker.get_history_metadata().get("tradingPeriods"), checked)
+        payload["quote"] = quote
+        return payload
     except Exception:
-        return {"points": [], "checked": checked,
+        return {"points": [], "checked": checked, "quote": quote,
                 "error": "Price update unavailable — retaining the last chart prices."}
 
 

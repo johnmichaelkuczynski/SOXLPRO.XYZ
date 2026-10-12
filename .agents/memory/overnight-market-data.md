@@ -26,3 +26,14 @@ Use consistent price adjustment for the historical and intraday trace segments.
 **Why:** Mixing five-minute returns with daily returns changes the model's
 meaning. The existing feed covers pre/post market, not a continuous
 8 p.m.–4 a.m. session; uncovered hours must not be fabricated.
+
+Treat Robinhood's public quote endpoint as best-effort, not a guaranteed
+continuous overnight service. Only an actual non-regular trade timestamp can
+establish an overnight observation; a response update timestamp cannot.
+
+**Why:** Public endpoint checks supplied after-hours trades, but did not
+establish actual 8 p.m.–4 a.m. availability. The user's Robinhood screenshot
+expresses a need for true overnight prices, not merely relabeled after-hours.
+
+**How to apply:** Disclose source, observation time, and stale quotes. Keep raw
+latest-trade quotes separate from adjusted historical chart bars.

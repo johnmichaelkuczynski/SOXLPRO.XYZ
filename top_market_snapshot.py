@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from html import escape
 
 import numpy as np
 import pandas as pd
@@ -81,7 +82,12 @@ def compute_market_snapshot(price_data, quote=None):
         ])
 
     state = (quote or {}).get("state", "")
-    if (quote or {}).get("extended"):
+    if (quote or {}).get("observed_label"):
+        price_context = (
+            f'{quote["session"]} · {quote["source"]} · {quote["observed_label"]}'
+            + (" · Last available quote (not live)" if quote["stale"] else " · May be delayed")
+        )
+    elif (quote or {}).get("extended"):
         price_context = "Pre-market" if state == "PRE" else "After hours"
     elif quote_price is not None:
         price_context = "Live market price"
@@ -121,7 +127,11 @@ def _price_card(label, value, css_class):
     )
 
 
-def render_market_snapshot(price_data, quote=None):
+@st.fragment(run_every="60s")
+def render_market_snapshot(price_data, quote=None, refresh_quotes=False):
+    if refresh_quotes:
+        from live_market_quote import fetch_live_quote
+        quote = fetch_live_quote()
     snapshot = compute_market_snapshot(price_data, quote=quote)
     if snapshot is None:
         st.warning("Current SOXL market statistics are unavailable.")
@@ -176,7 +186,7 @@ def render_market_snapshot(price_data, quote=None):
         <div class="soxl-market-strip">
           <div class="soxl-market-heading">
             <strong>SOXL Market Snapshot</strong>
-            <span>{snapshot["price_context"]}</span>
+            <span>{escape(snapshot["price_context"])}</span>
           </div>
           <div class="soxl-stat-grid">
             <div class="soxl-stat primary">
@@ -189,3 +199,11 @@ def render_market_snapshot(price_data, quote=None):
         </div>
         """
     st.markdown(html.replace("\n", ""), unsafe_allow_html=True)
+    if refresh_quotes:
+        warning = (quote or {}).get("feed_warning")
+        st.caption(
+            (f"{warning}. " if warning else "")
+            + ("Quote feeds unavailable; showing historical close. " if not quote else "")
+            + "Quotes checked every minute. Robinhood overnight quotes are best-effort; "
+            "continuous 8 p.m.–4 a.m. coverage is not guaranteed."
+        )
