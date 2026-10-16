@@ -120,20 +120,53 @@ results = [1, 7, 30, 90, 365, 730, 1825].map(function(days) {
                 )
                 self.assertEqual(result, ["Unavailable"])
 
-    def test_probability_wording_remains_in_both_projection_hover_paths(self):
+    def test_only_one_projection_hover_path_retains_probability(self):
         html, _ = _probability_source()
         wording = "Probability of hitting this by or before this date:"
-        # Plotly's projection trace and the custom pointer tooltip are separate paths.
-        self.assertGreaterEqual(html.count(wording), 3)
+        self.assertEqual(html.count(wording), 1)
         self.assertRegex(
             html,
             r"(?s)trendTooltip\.innerHTML\s*=.*?" + re.escape(wording),
         )
-        self.assertRegex(
-            html,
-            r"(?s)forward\.hitProbabilities.*?hovertemplate:.*?"
-            + re.escape(wording),
-        )
+        trend_traces = html.split("var segment = trendPoints(", 1)[1].split("var shapes = []", 1)[0]
+        self.assertEqual(trend_traces.count("hoverinfo: 'skip'"), 3)
+        self.assertNotIn("hovertemplate:", trend_traces)
+
+    def test_pointer_switches_readout_to_bottom_line_and_clears_in_gaps(self):
+        html = CHART_HTML.read_text()
+        source = "function inspectTrendLine(event)" + html.split(
+            "function inspectTrendLine(event)", 1)[1].split(
+            "chartContainer.addEventListener('pointermove'", 1)[0]
+        program = """
+var active = false;
+var chartContainer = {classList: {add:()=>active=true, remove:()=>active=false}};
+var trendTooltip = {style:{},offsetWidth:270,innerHTML:''};
+var currentMode='pan', scaleMode='linear', hoveredLineIndex=-1, hoveredLineDistance=Infinity;
+var chartScroll={scrollLeft:0,clientWidth:1000};
+var chartDiv={getBoundingClientRect:()=>({left:0,top:0}),
+  _fullLayout:{_size:{l:0,t:0,w:1000,h:600},xaxis:{range:[0,1000]},yaxis:{range:[0,100]}}};
+var lines=[{y1:80,y2:80},{y1:50,y2:50},{y1:20,y2:20}];
+function lineTimestamp(line,point){return point===1?0:1000;}
+function getFutureEndMs(){return 2000;}
+function formatHitProbability(){return '75%';}
+function estimateHitProbability(){return .75;}
+function formatProjectedDate(){return 'Jan 1, 2030';}
+function getHitProbabilityModel(){return null;}
+""" + source + """
+var results=[];
+for (var y of [300,480,390]) {
+ inspectTrendLine({clientX:700,clientY:y});
+ results.push({active:active,display:trendTooltip.style.display,text:trendTooltip.innerHTML,index:hoveredLineIndex});
+}
+console.log(JSON.stringify(results));
+"""
+        results = json.loads(subprocess.check_output(["node", "-e", program], text=True))
+        self.assertIn("Trend line 2 projection", results[0]["text"])
+        self.assertIn("Trend line 3 projection", results[1]["text"])
+        self.assertIn("2030", results[1]["text"])
+        self.assertTrue(results[1]["active"])
+        self.assertFalse(results[2]["active"])
+        self.assertEqual(results[2]["display"], "none")
 
 
 if __name__ == "__main__":

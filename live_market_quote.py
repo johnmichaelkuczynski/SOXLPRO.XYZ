@@ -27,6 +27,12 @@ def select_quote(yahoo, robinhood, now=None):
                 return
             if (observed - now).total_seconds() > 60:
                 return
+            try:
+                previous = float(previous)
+                if not isfinite(previous) or previous <= 0:
+                    previous = None
+            except (ValueError, TypeError):
+                previous = None
             if state is None:
                 local = observed.astimezone(ET)
                 minutes = local.hour * 60 + local.minute

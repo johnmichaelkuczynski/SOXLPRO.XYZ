@@ -180,6 +180,8 @@
     font-size: 13px; line-height: 1.45;
   }
   #trend-tooltip strong { display: block; color: #fff; margin-bottom: 3px; }
+  /* One projection readout owns hover while a trend line is being inspected. */
+  #chart-container.inspecting-trend .hoverlayer { visibility: hidden; }
   #cursor-tools {
     display: none; position: absolute; z-index: 160; width: 250px;
     padding: 10px; border: 1px solid #94a3b8; border-radius: 9px;
@@ -1572,6 +1574,10 @@ function extendLineToDate(index, timestamp) {
 }
 
 function inspectTrendLine(event) {
+  chartContainer.classList.remove('inspecting-trend');
+  hoveredLineIndex = -1;
+  hoveredLineDistance = Infinity;
+  trendTooltip.style.display = 'none';
   if (currentMode === 'select' || lines.length === 0) {
     trendTooltip.style.display = 'none';
     return;
@@ -1633,6 +1639,10 @@ function inspectTrendLine(event) {
 
   hoveredLineIndex = nearest.index;
   hoveredLineDistance = nearest.distance;
+  // Keep the nearest-line index for context actions, but do not show a
+  // projection belonging to a distant line while the pointer crosses the plot.
+  if (nearest.distance > 24) return;
+  chartContainer.classList.add('inspecting-trend');
   var hitProbability = formatHitProbability(nearest.price, timestamp);
   var probabilityValue = estimateHitProbability(nearest.price, timestamp);
   trendTooltip.innerHTML =
@@ -1685,6 +1695,7 @@ function inspectTrendLine(event) {
 chartContainer.addEventListener('pointermove', inspectTrendLine, true);
 chartContainer.addEventListener('mousemove', inspectTrendLine, true);
 chartContainer.addEventListener('mouseleave', function() {
+  chartContainer.classList.remove('inspecting-trend');
   hoveredLineIndex = -1;
   hoveredLineDistance = Infinity;
   trendTooltip.style.display = 'none';
@@ -2066,7 +2077,7 @@ function renderChart(options) {
       mode: 'lines+markers', showlegend: false,
       line: {color: color, width: 2.5},
       marker: {size: 14, color: 'rgba(0,0,0,0)'},
-      hovertemplate: '<b>' + lineName + '</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
+      hoverinfo: 'skip'
     });
 
     var fwdEnd = Math.max(x1, x2);
@@ -2085,7 +2096,7 @@ function renderChart(options) {
         mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         marker: {size: 14, color: 'rgba(0,0,0,0)'},
-        hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
+        hoverinfo: 'skip'
       });
     }
 
@@ -2104,7 +2115,7 @@ function renderChart(options) {
         mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         marker: {size: 14, color: 'rgba(0,0,0,0)'},
-        hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
+        hoverinfo: 'skip'
       });
     }
   }

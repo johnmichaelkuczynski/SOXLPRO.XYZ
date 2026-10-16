@@ -52,6 +52,13 @@ class LiveQuoteTests(unittest.TestCase):
         rh = dict(last_non_reg_trade_price="141", venue_last_non_reg_trade_time=now.isoformat())
         self.assertEqual(select_quote(self.yahoo, rh, now)["state"], "PRE")
 
+    def test_robinhood_previous_close_is_numeric_or_unavailable(self):
+        for previous, expected in [("142.52", 142.52), ("bad", None), ("NaN", None)]:
+            rh = dict(last_trade_price="140", venue_last_trade_time=self.now.isoformat(),
+                      previous_close=previous)
+            quote = select_quote({}, rh, self.now)
+            self.assertEqual(quote["prev_close"], expected)
+
     def test_provider_failure_preserves_other_quote_and_reports_warning(self):
         with patch("live_market_quote.yf.Ticker") as ticker, patch(
                 "live_market_quote.requests.get", side_effect=RuntimeError("offline")):
