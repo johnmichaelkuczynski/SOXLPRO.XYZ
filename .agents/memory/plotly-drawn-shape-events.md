@@ -15,5 +15,12 @@ Use one projection-tooltip owner, not simultaneous Plotly and custom readouts.
 another trendline's popup covered it. Independent hover hit-testing can select
 different lines at the same pointer position.
 
-**How to apply:** Preserve a single nearest-line readout, suppress competing
-native labels during inspection, and hide the readout away from the lines.
+**How to apply:** Provide explicit line selection as well as nearest-line
+inspection; calculate projections at the pointer date rather than relying only
+on sampled Plotly marker hits. The user repeatedly reported that hover-only
+fixes remained unusable. Keep native hover as a fallback but suppress it only
+while the continuous readout is visible. Verify actual automatic channel lines
+in a real browser, including explicit lower-line selection while the pointer is
+near a different line. Clamp popups to the visible parent viewport, not merely
+the tall chart iframe. Floating controls can intercept pointer events over
+future chart points; selection must allow reading the chosen line elsewhere.

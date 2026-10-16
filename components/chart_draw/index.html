@@ -180,8 +180,8 @@
     font-size: 13px; line-height: 1.45;
   }
   #trend-tooltip strong { display: block; color: #fff; margin-bottom: 3px; }
-  /* One projection readout owns hover while a trend line is being inspected. */
-  #chart-container.inspecting-trend .hoverlayer { visibility: hidden; }
+  body.projection-readout-active .hoverlayer { visibility: hidden; }
+  #trend-tooltip { position: fixed; z-index: 1000; max-width: calc(100vw - 16px); }
   #cursor-tools {
     display: none; position: absolute; z-index: 160; width: 250px;
     padding: 10px; border: 1px solid #94a3b8; border-radius: 9px;
@@ -261,6 +261,10 @@
   <label class="rail-label" for="rail-extend-date">Extend Last Line To</label>
   <input class="rail-date" id="rail-extend-date" type="date">
   <button class="tbtn" onclick="extendLastLine()">Extend Last Line</button>
+  <label class="rail-label" for="projection-line">Projection readout</label>
+  <select id="projection-line" class="rail-date" aria-label="Line for projection readout">
+    <option value="">Nearest line to pointer</option>
+  </select>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Analyze Period</button>
   <button class="tbtn" id="axisAreaToggle" aria-pressed="false" title="Connect a hovered price point to both visible axes and measure the rectangle">Axis Lines &amp; Area</button>
   <button class="tbtn" id="axisAreaFollow" hidden>Follow cursor</button>
@@ -1573,8 +1577,14 @@ function extendLineToDate(index, timestamp) {
   return true;
 }
 
+var lastProjectionPointer = null;
+document.getElementById('projection-line').addEventListener('change', function() {
+  if (lastProjectionPointer) inspectTrendLine(lastProjectionPointer);
+});
+
 function inspectTrendLine(event) {
-  chartContainer.classList.remove('inspecting-trend');
+  lastProjectionPointer = {clientX:event.clientX, clientY:event.clientY};
+  document.body.classList.remove('projection-readout-active');
   hoveredLineIndex = -1;
   hoveredLineDistance = Infinity;
   trendTooltip.style.display = 'none';
@@ -1605,15 +1615,17 @@ function inspectTrendLine(event) {
   var ySpan = yRange[1] - yRange[0];
   var futureMs = getFutureEndMs();
   var nearest = null;
+  var requestedLine = document.getElementById('projection-line').value;
 
   for (var index = 0; index < lines.length; index++) {
+    if (requestedLine !== '' && index !== Number(requestedLine)) continue;
     var line = lines[index];
     var lineStart = lineTimestamp(line, 1);
     var lineEnd = lineTimestamp(line, 2);
     var lineSpan = lineEnd - lineStart;
     if (!lineSpan || line.y1 <= 0 || line.y2 <= 0) continue;
     var earliest = Math.min(lineStart, lineEnd) - 63072000000;
-    if (timestamp < earliest || timestamp > futureMs) continue;
+    if (timestamp < earliest) continue;
 
     var transformedStart = scaleMode === 'log' ? Math.log10(line.y1) : line.y1;
     var transformedEnd = scaleMode === 'log' ? Math.log10(line.y2) : line.y2;
@@ -1639,23 +1651,52 @@ function inspectTrendLine(event) {
 
   hoveredLineIndex = nearest.index;
   hoveredLineDistance = nearest.distance;
-  // Keep the nearest-line index for context actions, but do not show a
-  // projection belonging to a distant line while the pointer crosses the plot.
-  if (nearest.distance > 24) return;
-  chartContainer.classList.add('inspecting-trend');
-  var hitProbability = formatHitProbability(nearest.price, timestamp);
+  // Compute at the exact pointer date, independent of Plotly's sampled markers.
+  // In future space (or with an explicitly selected line), never require hitting
+  // a narrow pixel target. Keep ordinary historical price hovers available.
+  var lastPriceDate = chartData && chartData.dates.length
+    ? Date.parse(chartData.dates[chartData.dates.length - 1]) : -Infinity;
+  if (requestedLine !== '' || timestamp > lastPriceDate || nearest.distance <= 24) {
+    var name = lines[nearest.index].label || ('Trend line ' + (nearest.index + 1));
+    trendTooltip.replaceChildren();
+    var heading = document.createElement('strong');
+    heading.textContent = name + ' projection';
+    trendTooltip.appendChild(heading);
+    [
+      'Projected date: ' + formatProjectedDate(timestamp),
+      'Projected SOXL price: $' + nearest.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}),
+      'Probability of hitting this by or before this date: ' + formatHitProbability(nearest.price, timestamp),
+      'Historical-model estimate'
+    ].forEach(function(text) {
+      var row = document.createElement('div');
+      row.textContent = text;
+      trendTooltip.appendChild(row);
+    });
+    trendTooltip.style.display = 'block';
+    document.body.classList.add('projection-readout-active');
+    var width = trendTooltip.offsetWidth;
+    var height = trendTooltip.offsetHeight;
+    // An iframe can be taller than the visible parent page. Clamp against the
+    // actually visible part of that frame, not just its internal viewport.
+    var visibleTop = 0, visibleBottom = window.innerHeight;
+    var visibleLeft = 0, visibleRight = window.innerWidth;
+    try {
+      if (window.frameElement && window.parent !== window) {
+        var frameBounds = window.frameElement.getBoundingClientRect();
+        visibleTop = Math.max(0, -frameBounds.top);
+        visibleBottom = Math.min(visibleBottom, window.parent.innerHeight - frameBounds.top);
+        visibleLeft = Math.max(0, -frameBounds.left);
+        visibleRight = Math.min(visibleRight, window.parent.innerWidth - frameBounds.left);
+      }
+    } catch (error) { /* Cross-origin embeds retain the local viewport bounds. */ }
+    var left = event.clientX + 18;
+    if (left + width > visibleRight - 8) left = event.clientX - width - 18;
+    var top = event.clientY + 18;
+    if (top + height > visibleBottom - 8) top = event.clientY - height - 18;
+    trendTooltip.style.left = Math.max(visibleLeft + 8, Math.min(left, visibleRight - width - 8)) + 'px';
+    trendTooltip.style.top = Math.max(visibleTop + 8, Math.min(top, visibleBottom - height - 8)) + 'px';
+  }
   var probabilityValue = estimateHitProbability(nearest.price, timestamp);
-  trendTooltip.innerHTML =
-    '<strong>Trend line ' + (nearest.index + 1) + ' projection</strong>' +
-    '<div>Projected date: ' + formatProjectedDate(timestamp) + '</div>' +
-    '<div>Projected SOXL price: $' + nearest.price.toLocaleString('en-US', {
-      minimumFractionDigits: 2, maximumFractionDigits: 2
-    }) + '</div>' +
-    '<div><b>Probability of hitting this by or before this date: ' +
-      hitProbability + '</b></div>' +
-    '<div>Historical-model estimate</div>' +
-    '<div><b>Double-click this line to erase it</b></div>';
-  trendTooltip.style.display = 'block';
   var probabilityModel = getHitProbabilityModel();
   if (
     nearest.distance <= 45 &&
@@ -1679,23 +1720,12 @@ function inspectTrendLine(event) {
       });
     }
   }
-  var tooltipWidth = trendTooltip.offsetWidth || 270;
-  var visibleLeft = chartScroll.scrollLeft;
-  var visibleRight = visibleLeft + chartScroll.clientWidth;
-  var left = mouseX + 16;
-  if (left + tooltipWidth > visibleRight - 8) {
-    left = mouseX - tooltipWidth - 16;
-  }
-  left = Math.max(visibleLeft + 8, Math.min(left, visibleRight - tooltipWidth - 8));
-  var top = mouseY > 100 ? mouseY - 88 : mouseY + 18;
-  trendTooltip.style.left = left + 'px';
-  trendTooltip.style.top = Math.max(8, top) + 'px';
 }
 
 chartContainer.addEventListener('pointermove', inspectTrendLine, true);
 chartContainer.addEventListener('mousemove', inspectTrendLine, true);
 chartContainer.addEventListener('mouseleave', function() {
-  chartContainer.classList.remove('inspecting-trend');
+  document.body.classList.remove('projection-readout-active');
   hoveredLineIndex = -1;
   hoveredLineDistance = Infinity;
   trendTooltip.style.display = 'none';
@@ -2077,7 +2107,7 @@ function renderChart(options) {
       mode: 'lines+markers', showlegend: false,
       line: {color: color, width: 2.5},
       marker: {size: 14, color: 'rgba(0,0,0,0)'},
-      hoverinfo: 'skip'
+      hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
     });
 
     var fwdEnd = Math.max(x1, x2);
@@ -2096,7 +2126,7 @@ function renderChart(options) {
         mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         marker: {size: 14, color: 'rgba(0,0,0,0)'},
-        hoverinfo: 'skip'
+        hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
       });
     }
 
@@ -2115,7 +2145,7 @@ function renderChart(options) {
         mode: 'lines+markers', showlegend: false,
         line: {color: color, width: 2, dash: 'dash'},
         marker: {size: 14, color: 'rgba(0,0,0,0)'},
-        hoverinfo: 'skip'
+        hovertemplate: '<b>' + lineName + ' projection</b><br>Projected date: %{x|%b %d, %Y}<br>Projected SOXL price: $%{y:,.2f}<br><b>Probability of hitting this by or before this date: %{customdata}</b><br>Historical-model estimate<extra></extra>'
       });
     }
   }
@@ -2193,6 +2223,13 @@ function renderChart(options) {
 
 function renderLineList() {
   var el = document.getElementById('line-list');
+  var picker = document.getElementById('projection-line');
+  var prior = picker.value;
+  picker.replaceChildren(new Option('Nearest line to pointer', ''));
+  lines.forEach(function(line, index) {
+    picker.add(new Option(line.label || ('Trend line ' + (index + 1)), String(index)));
+  });
+  picker.value = Number(prior) < lines.length ? prior : '';
   updateLineActionButtons();
   if (lines.length === 0) { el.innerHTML = ''; return; }
   var html = '';

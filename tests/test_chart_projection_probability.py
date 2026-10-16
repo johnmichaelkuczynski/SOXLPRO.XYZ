@@ -123,16 +123,14 @@ results = [1, 7, 30, 90, 365, 730, 1825].map(function(days) {
     def test_only_one_projection_hover_path_retains_probability(self):
         html, _ = _probability_source()
         wording = "Probability of hitting this by or before this date:"
-        self.assertEqual(html.count(wording), 1)
-        self.assertRegex(
-            html,
-            r"(?s)trendTooltip\.innerHTML\s*=.*?" + re.escape(wording),
-        )
+        self.assertEqual(html.count(wording), 4)
+        self.assertIn("body.projection-readout-active .hoverlayer { visibility: hidden; }", html)
+        self.assertIn("document.body.classList.remove('projection-readout-active')", html)
         trend_traces = html.split("var segment = trendPoints(", 1)[1].split("var shapes = []", 1)[0]
-        self.assertEqual(trend_traces.count("hoverinfo: 'skip'"), 3)
-        self.assertNotIn("hovertemplate:", trend_traces)
+        self.assertNotIn("hoverinfo: 'skip'", trend_traces)
+        self.assertEqual(trend_traces.count("hovertemplate:"), 3)
 
-    def test_pointer_switches_readout_to_bottom_line_and_clears_in_gaps(self):
+    def test_continuous_projection_and_explicit_lower_line_selection(self):
         html = CHART_HTML.read_text()
         source = "function inspectTrendLine(event)" + html.split(
             "function inspectTrendLine(event)", 1)[1].split(
@@ -140,7 +138,14 @@ results = [1, 7, 30, 90, 365, 730, 1825].map(function(days) {
         program = """
 var active = false;
 var chartContainer = {classList: {add:()=>active=true, remove:()=>active=false}};
-var trendTooltip = {style:{},offsetWidth:270,innerHTML:''};
+var trendTooltip = {style:{},offsetWidth:270,offsetHeight:150,innerHTML:'',
+ replaceChildren:function(){this.innerHTML='';},appendChild:function(el){this.innerHTML+=el.textContent;}};
+var picker={value:''};
+var document={body:chartContainer,getElementById:()=>picker,createElement:()=>({textContent:''})};
+var window={innerWidth:1000,innerHeight:900,
+ frameElement:{getBoundingClientRect:()=>({left:0,top:100})},
+ parent:{innerWidth:1000,innerHeight:500}};
+var chartData={dates:['1970-01-01']};
 var currentMode='pan', scaleMode='linear', hoveredLineIndex=-1, hoveredLineDistance=Infinity;
 var chartScroll={scrollLeft:0,clientWidth:1000};
 var chartDiv={getBoundingClientRect:()=>({left:0,top:0}),
@@ -158,15 +163,23 @@ for (var y of [300,480,390]) {
  inspectTrendLine({clientX:700,clientY:y});
  results.push({active:active,display:trendTooltip.style.display,text:trendTooltip.innerHTML,index:hoveredLineIndex});
 }
+picker.value='2';
+inspectTrendLine({clientX:700,clientY:120});
+results.push({active:active,display:trendTooltip.style.display,text:trendTooltip.innerHTML,index:hoveredLineIndex});
+inspectTrendLine({clientX:700,clientY:380});
+results.push({active:active,display:trendTooltip.style.display,top:trendTooltip.style.top,index:hoveredLineIndex});
 console.log(JSON.stringify(results));
 """
         results = json.loads(subprocess.check_output(["node", "-e", program], text=True))
-        self.assertIn("Trend line 2 projection", results[0]["text"])
-        self.assertIn("Trend line 3 projection", results[1]["text"])
-        self.assertIn("2030", results[1]["text"])
-        self.assertTrue(results[1]["active"])
-        self.assertFalse(results[2]["active"])
-        self.assertEqual(results[2]["display"], "none")
+        self.assertEqual(results[0]["index"], 1)
+        self.assertEqual(results[1]["index"], 2)
+        self.assertEqual(results[3]["index"], 2)
+        self.assertIn('Trend line 3', results[3]["text"])
+        self.assertIn('2030', results[3]["text"])
+        for result in results:
+            self.assertTrue(result["active"])
+            self.assertEqual(result["display"], "block")
+        self.assertLessEqual(float(results[4]["top"].removesuffix("px")) + 150, 392)
 
 
 if __name__ == "__main__":
