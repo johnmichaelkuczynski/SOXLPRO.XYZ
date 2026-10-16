@@ -1658,6 +1658,7 @@ function inspectTrendLine(event) {
     ? Date.parse(chartData.dates[chartData.dates.length - 1]) : -Infinity;
   if (requestedLine !== '' || timestamp > lastPriceDate || nearest.distance <= 24) {
     var name = lines[nearest.index].label || ('Trend line ' + (nearest.index + 1));
+    trendTooltip.style.backgroundColor = lines[nearest.index].color || COLORS[nearest.index % COLORS.length];
     trendTooltip.replaceChildren();
     var heading = document.createElement('strong');
     heading.textContent = name + ' projection';

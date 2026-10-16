@@ -137,6 +137,7 @@ results = [1, 7, 30, 90, 365, 730, 1825].map(function(days) {
             "chartContainer.addEventListener('pointermove'", 1)[0]
         program = """
 var active = false;
+var COLORS = ['#888','#E53935','#43A047'];
 var chartContainer = {classList: {add:()=>active=true, remove:()=>active=false}};
 var trendTooltip = {style:{},offsetWidth:270,offsetHeight:150,innerHTML:'',
  replaceChildren:function(){this.innerHTML='';},appendChild:function(el){this.innerHTML+=el.textContent;}};
@@ -165,7 +166,7 @@ for (var y of [300,480,390]) {
 }
 picker.value='2';
 inspectTrendLine({clientX:700,clientY:120});
-results.push({active:active,display:trendTooltip.style.display,text:trendTooltip.innerHTML,index:hoveredLineIndex});
+results.push({active:active,display:trendTooltip.style.display,text:trendTooltip.innerHTML,index:hoveredLineIndex,color:trendTooltip.style.backgroundColor});
 inspectTrendLine({clientX:700,clientY:380});
 results.push({active:active,display:trendTooltip.style.display,top:trendTooltip.style.top,index:hoveredLineIndex});
 console.log(JSON.stringify(results));
@@ -174,6 +175,7 @@ console.log(JSON.stringify(results));
         self.assertEqual(results[0]["index"], 1)
         self.assertEqual(results[1]["index"], 2)
         self.assertEqual(results[3]["index"], 2)
+        self.assertEqual(results[3]["color"], "#43A047")
         self.assertIn('Trend line 3', results[3]["text"])
         self.assertIn('2030', results[3]["text"])
         for result in results:
