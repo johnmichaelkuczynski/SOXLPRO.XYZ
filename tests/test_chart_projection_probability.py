@@ -52,6 +52,43 @@ def _representative_history(count=90):
 
 
 class ChartProjectionProbabilityTests(unittest.TestCase):
+    def test_downside_probability_is_not_automatically_one(self):
+        results = _run_probability_checks(_representative_history(), """
+var model = getHitProbabilityModel();
+results = [.99,.9,.75,.5].map(m => estimateHitProbability(
+  model.latestPrice*m, model.latestTimestamp+365.25*86400000));
+""")
+        self.assertTrue(all(0 <= p < 1 for p in results))
+        self.assertEqual(results, sorted(results, reverse=True))
+
+    def test_downside_probability_increases_with_time(self):
+        results = _run_probability_checks(_representative_history(), """
+var model = getHitProbabilityModel();
+results = [1,30,365,1825].map(d => estimateHitProbability(
+  model.latestPrice*.9, model.latestTimestamp+d*86400000));
+""")
+        self.assertEqual(results, sorted(results))
+
+    def test_reflected_barriers_and_zero_drift_reference(self):
+        results = _run_probability_checks(_representative_history(), """
+var model = getHitProbabilityModel();
+model.annualLogDrift=0; model.annualVolatility=.4;
+var deadline=model.latestTimestamp+365.25*86400000;
+results.push(estimateHitProbability(model.latestPrice*Math.exp(.4),deadline));
+results.push(estimateHitProbability(model.latestPrice*Math.exp(-.4),deadline));
+model.annualLogDrift=.2;
+results.push(estimateHitProbability(model.latestPrice*Math.exp(.4),deadline));
+model.annualLogDrift=-.2;
+results.push(estimateHitProbability(model.latestPrice*Math.exp(-.4),deadline));
+results.push(estimateHitProbability(model.latestPrice*.5,model.latestTimestamp-1));
+results.push(estimateHitProbability(model.latestPrice*.5,model.latestTimestamp));
+""")
+        self.assertAlmostEqual(results[0], 0.3173105, places=6)
+        self.assertAlmostEqual(results[0], results[1], places=10)
+        self.assertAlmostEqual(results[2], results[3], places=10)
+        self.assertIsNone(results[4])
+        self.assertEqual(results[5], 0)
+
     def test_probabilities_are_finite_and_bounded(self):
         history = _representative_history()
         results = _run_probability_checks(

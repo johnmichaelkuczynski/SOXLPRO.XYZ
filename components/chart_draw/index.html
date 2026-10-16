@@ -1487,20 +1487,33 @@ function getHitProbabilityModel() {
   return hitProbabilityModel;
 }
 
+function logNormalCdf(value) {
+  if (value > -8) return Math.log(normalCdf(value));
+  var inverseSquare = 1 / (value * value);
+  var correction = 1 - inverseSquare + 3 * inverseSquare ** 2 -
+    15 * inverseSquare ** 3 + 105 * inverseSquare ** 4;
+  return -0.5 * value * value - Math.log(-value) -
+    0.5 * Math.log(2 * Math.PI) + Math.log(correction);
+}
+
 function estimateHitProbability(targetPrice, targetTimestamp) {
   var model = getHitProbabilityModel();
-  if (!model || !(targetPrice > 0) || !Number.isFinite(targetTimestamp)) return null;
-  if (targetPrice <= model.latestPrice) return 1;
+  if (!model || !(targetPrice > 0) || !Number.isFinite(targetPrice) || !Number.isFinite(targetTimestamp)) return null;
   var years = (targetTimestamp - model.latestTimestamp) / (365.25 * 86400000);
+  if (years < 0) return null;
+  if (targetPrice === model.latestPrice) return 1;
   if (!(years > 0)) return 0;
-  var barrier = Math.log(targetPrice / model.latestPrice);
+  var direction = targetPrice > model.latestPrice ? 1 : -1;
+  var barrier = Math.abs(Math.log(targetPrice / model.latestPrice));
   var sigma = model.annualVolatility;
-  var drift = model.annualLogDrift;
+  // Reflect the log-price process for a downside barrier: being above a
+  // lower target now does not mean a future fall to that target is certain.
+  var drift = direction * model.annualLogDrift;
   var scaledVolatility = sigma * Math.sqrt(years);
   var firstTerm = normalCdf((drift * years - barrier) / scaledVolatility);
   var exponent = 2 * drift * barrier / (sigma * sigma);
-  var secondTerm = Math.exp(Math.min(700, exponent)) *
-    normalCdf((-drift * years - barrier) / scaledVolatility);
+  var secondTerm = Math.exp(Math.min(0, exponent +
+    logNormalCdf((-drift * years - barrier) / scaledVolatility)));
   var probability = firstTerm + secondTerm;
   if (!Number.isFinite(probability)) return null;
   return Math.max(0, Math.min(1, probability));
@@ -1510,7 +1523,8 @@ function formatHitProbability(targetPrice, targetTimestamp) {
   var probability = estimateHitProbability(targetPrice, targetTimestamp);
   if (probability === null) return 'Unavailable';
   if (probability > 0 && probability < 0.001) return '<0.1%';
-  if (probability < 1 && probability > 0.999) return '>99.9%';
+  var model = getHitProbabilityModel();
+  if (probability > 0.999 && model && targetPrice !== model.latestPrice) return '>99.9%';
   return (probability * 100).toFixed(1) + '%';
 }
 

@@ -13,3 +13,13 @@ deadline, not merely closing at that price on the displayed date.
 
 **How to apply:** Preserve the exact probability interpretation and keep the
 estimate visibly qualified whenever future projection hover behavior changes.
+
+For targets below the starting price, “hitting” means a future downward touch,
+not simply being at or above the target already.
+
+**Why:** The user flagged the lower green line always reporting 100%. Treating
+all lower barriers as already reached contradicts the intended projection.
+
+**How to apply:** Use directional first-passage probabilities for both upside
+and downside barriers. Never force lower targets to certainty. These are
+historically fitted model estimates, not empirically verified success rates.
