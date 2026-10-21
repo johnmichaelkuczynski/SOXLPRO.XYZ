@@ -39,6 +39,10 @@ class ScorecardUITests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
         self.assertEqual(app.selectbox(key="daily_rating_category").value, "POSSIBLE BUY")
+        help_text = app.selectbox(key="daily_rating_signal_type").proto.help
+        self.assertIn("1 month for Short-term", help_text)
+        self.assertIn("6–12 months for Long-term", help_text)
+        self.assertIn("NOT mean how much past data", help_text)
         self.assertTrue(any("Reconstructed" in c.value for c in app.caption))
         app.selectbox(key="daily_rating_horizon").select("3 months (63 trading days)").run(timeout=30)
         app.selectbox(key="daily_rating_category").select("BUY").run(timeout=30)

@@ -6,6 +6,12 @@ description: User's trading horizon and strict frozen-holdout policy for short-t
 The user says paying users mostly trade one-month horizons; the composite
 historical-range indicator is a separate long-term signal.
 
+Explain long-term versus short-term as the forward holding/evaluation horizon,
+not the amount of historical data used to calculate a signal, using discreet help.
+
+**Why:** The user says most users will otherwise mistake these labels for the
+historical lookback period.
+
 **Why:** Their supplied analysis showed that Possible Buy underperformed the
 one-month baseline despite strong long-horizon ordering.
 

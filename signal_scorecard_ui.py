@@ -48,7 +48,11 @@ def render_rating_scorecard(closes, current_rating):
         "available by that date. The rating formula is not retuned for this scorecard."
     )
     signal_type = st.selectbox("Signal to evaluate", ["Long-term", "Short-term"],
-                               key="daily_rating_signal_type")
+                               key="daily_rating_signal_type",
+                               help="These labels mean how long after a signal we look for SOXL to finish higher: "
+                                    "about 1 month for Short-term, or 6–12 months for Long-term. "
+                                    "They do NOT mean how much past data is used to calculate the signal. "
+                                    "A rise is not guaranteed.")
     if signal_type == "Short-term":
         st.caption("Reconstructed deployment policy on 2019 onward—not recommendations issued in real time. "
                    "The untouched candidate's separate training/test results appear in the frozen study.")
