@@ -210,7 +210,7 @@ def render_landing_signal(price_data):
         return
 
     st.markdown("### SOXL Daily Signal")
-    from short_term_signal_ui import render_short_term_signal
+    from short_term_signal_ui import render_short_term_signal, render_full_signal_report
 
     long_term, short_term = st.columns(2)
     with long_term:
@@ -230,6 +230,7 @@ def render_landing_signal(price_data):
         )
     with short_term:
         render_short_term_signal(closes)
+    render_full_signal_report()
     from signal_scorecard_ui import render_rating_scorecard
     render_rating_scorecard(closes, display_signal_label(result["signal"]))
 

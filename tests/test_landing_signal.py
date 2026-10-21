@@ -148,6 +148,7 @@ class LandingSignalTests(unittest.TestCase):
     def test_landing_renders_both_signals_and_preserves_scorecard_call(self):
         short_ui = ModuleType("short_term_signal_ui")
         short_ui.render_short_term_signal = Mock()
+        short_ui.render_full_signal_report = Mock()
         scorecard_ui = ModuleType("signal_scorecard_ui")
         scorecard_ui.render_rating_scorecard = Mock()
         readings = pd.DataFrame([
@@ -166,6 +167,7 @@ class LandingSignalTests(unittest.TestCase):
             render_landing_signal(None)
             streamlit.columns.assert_called_once_with(2)
             short_ui.render_short_term_signal.assert_called_once_with(closes)
+            short_ui.render_full_signal_report.assert_called_once_with()
             scorecard_ui.render_rating_scorecard.assert_called_once_with(closes, "BUY")
 
     def test_all_requested_timeframes_are_present(self):
