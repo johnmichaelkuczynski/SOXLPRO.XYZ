@@ -1,20 +1,32 @@
 import unittest
+from contextlib import nullcontext
 from datetime import datetime
+from types import ModuleType
+from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 
 from landing_signal import (
+    DEFAULT_THRESHOLDS,
     TIMEFRAMES,
     TIMEFRAME_WEIGHTS,
+    _signal_card,
     completed_close_history,
     composite_signal,
     compute_timeframe_readings,
     condition_from_percentile,
     display_signal_label,
     price_range_percentile,
+    render_landing_signal,
     signal_from_percentile,
+)
+from signal_config import (
+    OLD_THRESHOLDS,
+    RATING_THRESHOLDS,
+    rating_bands,
+    rating_threshold_description,
 )
 from backtest_engine import (
     build_regime_consistency_summary,
@@ -64,9 +76,12 @@ class LandingSignalTests(unittest.TestCase):
     def test_signal_boundaries_match_requested_ranges(self):
         expected = {
             0: "STRONG BUY",
-            14.99: "STRONG BUY",
+            4.99: "STRONG BUY",
+            5: "STRONG BUY",
+            5.01: "BUY",
+            14.99: "BUY",
             15: "BUY",
-            34.99: "BUY",
+            15.01: "DO NOTHING",
             35: "DO NOTHING",
             64.99: "DO NOTHING",
             65: "SELL",
@@ -75,7 +90,83 @@ class LandingSignalTests(unittest.TestCase):
             100: "STRONG SELL",
         }
         for percentile, signal in expected.items():
-            self.assertEqual(signal_from_percentile(percentile), signal)
+            with self.subTest(percentile=percentile):
+                self.assertEqual(signal_from_percentile(percentile), signal)
+
+    def test_config_exports_new_and_old_thresholds(self):
+        self.assertEqual(DEFAULT_THRESHOLDS, (5.0, 15.0, 65.0, 85.0))
+        self.assertEqual(DEFAULT_THRESHOLDS, tuple(RATING_THRESHOLDS.values()))
+        self.assertEqual(OLD_THRESHOLDS, (15.0, 35.0, 65.0, 85.0))
+
+    def test_custom_thresholds_keep_buy_upper_bounds_inclusive(self):
+        thresholds = (3.0, 12.0, 70.0, 90.0)
+        expected = {
+            3: "STRONG BUY",
+            3.01: "BUY",
+            12: "BUY",
+            12.01: "DO NOTHING",
+            70: "SELL",
+            90: "STRONG SELL",
+        }
+        for percentile, signal in expected.items():
+            self.assertEqual(
+                signal_from_percentile(percentile, thresholds=thresholds), signal
+            )
+
+    def test_nonfinite_percentiles_are_unavailable(self):
+        for percentile in (np.nan, np.inf, -np.inf):
+            self.assertEqual(
+                signal_from_percentile(percentile), "INSUFFICIENT HISTORY"
+            )
+
+    def test_bar_and_prose_are_generated_from_config(self):
+        bands = rating_bands()
+        self.assertEqual([band["width"] for band in bands], [5, 10, 50, 20, 15])
+        self.assertEqual(sum(band["width"] for band in bands), 100)
+        card = _signal_card(5, "STRONG BUY", "2026-10-20")
+        self.assertIn("Long-term signal (6–12 months)", card)
+        self.assertIn("grid-template-columns:5% 10% 50% 20% 15%", card)
+        for band in bands:
+            self.assertIn(f'<span>{band["label"]}</span>', card)
+        prose = rating_threshold_description()
+        self.assertIn("BUY: 0% through 5% (inclusive)", prose)
+        self.assertIn("POSSIBLE BUY: above 5% through 15% (inclusive)", prose)
+        self.assertIn("DO NOTHING: above 15% to below 65%", prose)
+        self.assertIn("POSSIBLE SELL: 65% to below 85%", prose)
+        self.assertIn("SELL: 85% through 100% (inclusive)", prose)
+
+        with patch.dict(RATING_THRESHOLDS, buy_max=4, possible_buy_max=14):
+            changed_card = _signal_card(5, "BUY", "2026-10-20")
+            self.assertIn(
+                "grid-template-columns:4% 10% 51% 20% 15%", changed_card
+            )
+            self.assertIn(
+                "POSSIBLE BUY: above 4% through 14% (inclusive)",
+                rating_threshold_description(),
+            )
+
+    def test_landing_renders_both_signals_and_preserves_scorecard_call(self):
+        short_ui = ModuleType("short_term_signal_ui")
+        short_ui.render_short_term_signal = Mock()
+        scorecard_ui = ModuleType("signal_scorecard_ui")
+        scorecard_ui.render_rating_scorecard = Mock()
+        readings = pd.DataFrame([
+            {"Timeframe": "1 Week", "Percentile": 5, "Condition": "Oversold"},
+        ])
+        closes = pd.Series([10.0, 11.0], index=pd.bdate_range("2020-01-01", periods=2))
+        with (
+            patch.dict("sys.modules", {
+                "short_term_signal_ui": short_ui,
+                "signal_scorecard_ui": scorecard_ui,
+            }),
+            patch("landing_signal.compute_timeframe_readings", return_value=(readings, closes)),
+            patch("landing_signal.st") as streamlit,
+        ):
+            streamlit.columns.return_value = (nullcontext(), nullcontext())
+            render_landing_signal(None)
+            streamlit.columns.assert_called_once_with(2)
+            short_ui.render_short_term_signal.assert_called_once_with(closes)
+            scorecard_ui.render_rating_scorecard.assert_called_once_with(closes, "BUY")
 
     def test_all_requested_timeframes_are_present(self):
         readings, _ = compute_timeframe_readings(
@@ -102,6 +193,18 @@ class LandingSignalTests(unittest.TestCase):
         result = composite_signal(rows)
         self.assertAlmostEqual(result["percentile"], 200 / 3)
         self.assertEqual(result["signal"], "SELL")
+
+    def test_tightening_thresholds_does_not_change_composite_percentile(self):
+        rows = pd.DataFrame([
+            {"Timeframe": "1 Week", "Percentile": 5.0},
+            {"Timeframe": "10 Years", "Percentile": 20.0},
+            {"Timeframe": "All Time", "Percentile": np.nan},
+        ])
+        new = composite_signal(rows)
+        old_bounds = composite_signal(rows, thresholds=OLD_THRESHOLDS)
+        self.assertEqual(new["percentile"], old_bounds["percentile"])
+        self.assertEqual(new["percentile"], 15.0)
+        self.assertEqual(new["signal"], "BUY")
 
     def test_incomplete_current_session_is_excluded(self):
         today = pd.Timestamp("2026-09-02")

@@ -27,6 +27,7 @@ RATING_LABELS = (
     "DO NOTHING",
     "POSSIBLE SELL",
     "SELL",
+    "NO EDGE",
 )
 HISTORY_COLUMNS = (
     "Rating",
@@ -159,6 +160,7 @@ def _empty_history(horizon: int) -> pd.DataFrame:
 def build_rating_history(
     closes: pd.Series,
     horizon: int = 21,
+    ratings: pd.Series | None = None,
 ) -> pd.DataFrame:
     """Build one landing-signal rating and conditional outcome per close date.
 
@@ -175,11 +177,13 @@ def build_rating_history(
     dates = cleaned.index
     values = cleaned.to_numpy(dtype=float)
     rows = []
+    supplied_ratings = ratings.reindex(dates) if ratings is not None else None
 
     for position, rating_date in enumerate(dates):
         percentile = _rating_percentile(values, position)
         internal_signal = signal_from_percentile(percentile)
-        rating = display_signal_label(internal_signal)
+        rating = (display_signal_label(internal_signal) if supplied_ratings is None
+                  else supplied_ratings.iloc[position])
 
         row = {
             "Rating": rating,

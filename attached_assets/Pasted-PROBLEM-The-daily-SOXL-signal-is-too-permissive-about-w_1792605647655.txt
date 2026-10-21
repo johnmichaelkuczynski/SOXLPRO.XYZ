@@ -1,0 +1,18 @@
+PROBLEM: The daily SOXL signal is too permissive about when to buy. Backtesting with the app's own "How accurate were these ratings?" scorecard (2010-03-11 to 2026-10-20) shows that POSSIBLE BUY ratings (composite historical-range percentile ~15%-35%) underperform the all-day baseline at a 1-month horizon (53.0% finished higher vs 59.6% baseline; average return 0.6 pts below baseline) and beat it only modestly at 3 and 6 months. The signal fires too often, at percentiles that are not low enough to mark genuine mean-reversion opportunities.
+
+FIX: Keep the existing structure and the composite historical-range percentile calculation exactly as they are. Make the buy side much more severe by lowering the buy thresholds:
+- BUY: composite percentile <= 5% (currently ~0%-15%)
+- POSSIBLE BUY: composite percentile > 5% and <= 15% (currently ~15%-35%)
+- DO NOTHING: everything from > 15% up to the current lower bound of POSSIBLE SELL (the sell-side thresholds stay unchanged)
+Do not change the sell side, the percentile formula, the lookback windows, or the entry/exit conventions.
+
+IMPLEMENTATION REQUIREMENTS:
+1. Move all rating thresholds into a single, clearly named config object or constants block (e.g., RATING_THRESHOLDS) so they can be changed in one place. Remove any hardcoded threshold values elsewhere in the code.
+2. Update the colored signal bar, its band labels, and the explanatory text under it ("The broad 35%-65% middle is Do Nothing", etc.) so they reflect the new thresholds and are generated from the config, not hardcoded.
+3. Make sure the "Evaluate past daily ratings" scorecard reconstructs historical ratings with the NEW thresholds, using the same no-lookahead rule (each rating uses only prices available on that date).
+4. Make sure the "Use non-overlapping holding periods" option works correctly with the new thresholds.
+
+VALIDATION (report these results back to me in a table):
+For BUY and POSSIBLE BUY under the NEW thresholds, at 1 month (21 days), 3 months (63 days), and 6 months (126 days), each with non-overlapping holding periods OFF and then ON, report: number of completed observations, % finished higher, the all-day baseline % finished higher, the difference in percentage points, average return, all-day average return, median return, worst ending return, and average worst dip below entry. Also report the same figures for the OLD thresholds, so old and new can be compared side by side. If any cell has fewer than 20 non-overlapping observations, flag it as too thin to trust.
+
+Do not tune the thresholds further on your own based on these results. Implement exactly the thresholds above, run the validation, and report.

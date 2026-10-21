@@ -6,6 +6,16 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from signal_config import (
+    DEFAULT_THRESHOLDS,
+    OLD_THRESHOLDS,
+    RATING_THRESHOLDS,
+    SIGNAL_COLORS,
+    SIGNAL_DISPLAY_LABELS,
+    rating_bands,
+    rating_threshold_description,
+)
+
 
 TIMEFRAMES = OrderedDict([
     ("1 Week", 5),
@@ -33,24 +43,6 @@ TIMEFRAME_WEIGHTS = {
     "10 Years": 2.0,
     "All Time": 2.0,
 }
-
-SIGNAL_COLORS = {
-    "STRONG SELL": "#b91c1c",
-    "SELL": "#f97316",
-    "DO NOTHING": "#64748b",
-    "BUY": "#4ade80",
-    "STRONG BUY": "#047857",
-}
-
-SIGNAL_DISPLAY_LABELS = {
-    "STRONG BUY": "BUY",
-    "BUY": "POSSIBLE BUY",
-    "DO NOTHING": "DO NOTHING",
-    "SELL": "POSSIBLE SELL",
-    "STRONG SELL": "SELL",
-    "INSUFFICIENT HISTORY": "INSUFFICIENT HISTORY",
-}
-
 
 def display_signal_label(signal):
     return SIGNAL_DISPLAY_LABELS.get(signal, signal)
@@ -108,16 +100,13 @@ def condition_from_percentile(percentile):
     return "Neutral"
 
 
-DEFAULT_THRESHOLDS = (15.0, 35.0, 65.0, 85.0)
-
-
 def signal_from_percentile(percentile, thresholds=DEFAULT_THRESHOLDS):
     if not np.isfinite(percentile):
         return "INSUFFICIENT HISTORY"
     strong_buy, buy, sell, strong_sell = thresholds
-    if percentile < strong_buy:
+    if percentile <= strong_buy:
         return "STRONG BUY"
-    if percentile < buy:
+    if percentile <= buy:
         return "BUY"
     if percentile < sell:
         return "DO NOTHING"
@@ -172,11 +161,18 @@ def _signal_card(percentile, signal, close_date):
     marker = float(np.clip(percentile, 0.0, 100.0))
     color = SIGNAL_COLORS.get(signal, "#64748b")
     display_signal = display_signal_label(signal)
+    bands = rating_bands()
+    bar_segments = "".join(
+        f'<div style="width:{band["width"]:g}%;background:{band["color"]};"></div>'
+        for band in bands
+    )
+    grid_columns = " ".join(f'{band["width"]:g}%' for band in bands)
+    band_labels = "".join(f'<span>{band["label"]}</span>' for band in bands)
     return f"""
     <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px 22px;
                 background:#ffffff;margin:8px 0 12px;">
       <div style="font-size:.78rem;color:#64748b;letter-spacing:.09em;
-                  font-weight:800;">TODAY'S SOXL SIGNAL</div>
+                  font-weight:800;">Long-term signal (6–12 months)</div>
       <div style="font-size:2.25rem;font-weight:850;color:{color};margin:2px 0;">
         {display_signal}
       </div>
@@ -186,22 +182,17 @@ def _signal_card(percentile, signal, close_date):
       </div>
       <div style="position:relative;padding-top:14px;">
         <div style="display:flex;height:20px;border-radius:10px;overflow:hidden;">
-          <div style="width:15%;background:#047857;"></div>
-          <div style="width:20%;background:#4ade80;"></div>
-          <div style="width:30%;background:#cbd5e1;"></div>
-          <div style="width:20%;background:#fb923c;"></div>
-          <div style="width:15%;background:#b91c1c;"></div>
+          {bar_segments}
         </div>
         <div style="position:absolute;left:calc({marker:.2f}% - 8px);top:4px;
                     width:16px;height:34px;border-radius:5px;background:#111827;
                     border:3px solid white;box-shadow:0 1px 5px rgba(0,0,0,.4);">
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:15% 20% 30% 20% 15%;
+      <div style="display:grid;grid-template-columns:{grid_columns};
                   margin-top:7px;font-size:.68rem;font-weight:750;color:#475569;
                   text-align:center;">
-        <span>BUY</span><span>POSSIBLE BUY</span><span>DO NOTHING</span>
-        <span>POSSIBLE SELL</span><span>SELL</span>
+        {band_labels}
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:4px;
                   color:#94a3b8;font-size:.68rem;">
@@ -219,19 +210,26 @@ def render_landing_signal(price_data):
         return
 
     st.markdown("### SOXL Daily Signal")
-    st.markdown(
-        _signal_card(
-            result["percentile"],
-            result["signal"],
-            closes.index[-1].strftime("%Y-%m-%d"),
-        ),
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        "Mean-reversion reading: lower percentiles are closer to historical lows "
-        "and produce buy-side signals; higher percentiles are closer to historical "
-        "highs and produce sell-side signals. The broad 35%–65% middle is Do Nothing."
-    )
+    from short_term_signal_ui import render_short_term_signal
+
+    long_term, short_term = st.columns(2)
+    with long_term:
+        st.markdown(
+            _signal_card(
+                result["percentile"],
+                result["signal"],
+                closes.index[-1].strftime("%Y-%m-%d"),
+            ),
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Mean-reversion reading for 6–12 months: lower percentiles are closer "
+            "to historical lows and produce buy-side signals; higher percentiles "
+            "are closer to historical highs and produce sell-side signals. "
+            + rating_threshold_description()
+        )
+    with short_term:
+        render_short_term_signal(closes)
     from signal_scorecard_ui import render_rating_scorecard
     render_rating_scorecard(closes, display_signal_label(result["signal"]))
 
@@ -261,7 +259,7 @@ def render_landing_signal(price_data):
     )
     with st.expander("Calculation and signal thresholds"):
         st.markdown(
-            """
+            f"""
 For every timeframe:
 
 `(current close − minimum close) ÷ (maximum close − minimum close) × 100`
@@ -269,9 +267,7 @@ For every timeframe:
 **Condition labels:** Oversold below 20%; Neutral from 20% through 80%;
 Overbought above 80%.
 
-**Composite signal:** Buy from 0% to below 15%; Possible Buy from 15% to below
-35%; Do Nothing from 35% to below 65%; Possible Sell from 65% to below 85%;
-Sell from 85% through 100%.
+**Long-term signal (6–12 months):** {rating_threshold_description()}
 
 The dashboard uses completed daily closing prices beginning in 2010. It is a
 historical mean-reversion indicator, not a guarantee or personalized investment

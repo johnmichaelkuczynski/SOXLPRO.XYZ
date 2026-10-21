@@ -15,6 +15,22 @@ render_rating_scorecard(closes, "POSSIBLE BUY")
 
 
 class ScorecardUITests(unittest.TestCase):
+    def test_short_term_no_edge_scorecard_all_horizons(self):
+        script = SCRIPT.replace('"2015-01-01"', '"2019-01-02"')
+        app = AppTest.from_string(script).run(timeout=30)
+        app.button(key="daily_rating_scorecard_run").click().run(timeout=30)
+        app.selectbox(key="daily_rating_signal_type").select("Short-term").run(timeout=30)
+        app.selectbox(key="daily_rating_category").select("NO EDGE").run(timeout=30)
+        for period in ["1 month (21 trading days)", "3 months (63 trading days)",
+                       "6 months (126 trading days)", "1 year (252 trading days)"]:
+            app.selectbox(key="daily_rating_horizon").select(period).run(timeout=30)
+            app.checkbox(key="daily_rating_spaced").set_value(True).run(timeout=30)
+            self.assertFalse(app.exception)
+            self.assertFalse(app.error)
+            self.assertTrue(any("NO EDGE" in x.value for x in app.info))
+        app.selectbox(key="daily_rating_category").select("BUY").run(timeout=30)
+        self.assertTrue(any("No completed BUY" in x.value for x in app.info))
+
     def test_scorecard_opens_and_survives_horizon_rating_and_sampling_changes(self):
         app = AppTest.from_string(SCRIPT).run(timeout=30)
         self.assertFalse(app.exception)

@@ -9,3 +9,4 @@
 - [Stripe account ownership](stripe-account-ownership.md) — use only the owner's keys directly; do not create or modify account settings, products, or prices.
 - [Streamlit analytics semantics](streamlit-analytics-semantics.md) — eager tab rendering is not a feature view; preserve verified outcome events across reruns.
 - [Streamlit background ownership](streamlit-background-ownership.md) — session-state proxy identity is not per-user; scope research jobs and completion handoffs explicitly.
+- [Daily signal validation](daily-signal-validation.md) — one-month users; freeze short-term rules before holdout evaluation and enforce NO EDGE when evidence fails.

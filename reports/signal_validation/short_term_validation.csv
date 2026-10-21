@@ -1,0 +1,3 @@
+period,rule,observations,finished_higher_pct,baseline_pct,difference_pp,average_return_pct,median_return_pct,worst_return_pct,average_worst_dip_pct,too_thin
+Training 2010–2018,close / SMA20 − 1 <= -0.05 AND close crosses back above SMA5 after being at/below it,2,50.0,59.0,-8.999999999999996,8.516809556123285,8.516809556123285,-13.537824134772425,-8.252757837380026,True
+Test 2019–2026,close / SMA20 − 1 <= -0.05 AND close crosses back above SMA5 after being at/below it,4,75.0,56.17977528089888,18.82022471910112,21.904658571650828,33.549398138775544,-18.272182388196267,-14.130456144557579,True

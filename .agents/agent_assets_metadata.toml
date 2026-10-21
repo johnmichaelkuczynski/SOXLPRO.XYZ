@@ -453,3 +453,45 @@ mtime_ms = 1788548565267
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/176bb293-9a82-4c9f-a6be-aa2c450d0801/d5e61ac2-3e8f-4b51-aefa-79a4ab36c646"
 storage_version_token = "1788548577302361"
 content_type = "video/mp4"
+
+[[outputs]]
+id = "ieZiUP4gEiHAoBWHoG5EY"
+uri = "file://reports/signal_validation/report.html"
+type = "html"
+title = "SOXL signal validation — complete tables"
+description = "All 32 long-term old/new comparisons and frozen short-term training/test results, including baseline lift, returns, drawdowns, and thin-sample warnings."
+logical_id = "8cfe1ff7-0a83-4836-bec2-40bc41384b2f"
+content_hash = "sha256:95dec7ea47ea50fb52a41b9cf050b379e6aec0c38a439439f38c6c153ba859f8"
+size = 14676
+mtime_ms = 1792606055277
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/8cfe1ff7-0a83-4836-bec2-40bc41384b2f/1e00ce66-eeb1-47b1-af15-ba1943c1ec0d"
+storage_version_token = "1792606434989460"
+content_type = "text/html"
+
+[[outputs]]
+id = "BIbrzb-oQRDYdrMjFJHG9"
+uri = "file://reports/signal_validation/long_term_comparison.csv"
+type = "table"
+title = "Long-term comparisons — CSV"
+description = "BUY and POSSIBLE BUY at 1, 3, 6 and 12 months, overlapping and non-overlapping."
+logical_id = "8db0b883-a100-4ee7-9318-85224f0d0e80"
+content_hash = "sha256:dd20e5265f5e63d0c14afec5a3405a38767eec353ef2300999d082b008b8b0e9"
+size = 5438
+mtime_ms = 1792606055264
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/8db0b883-a100-4ee7-9318-85224f0d0e80/c531c278-2575-48f0-935a-8da51ec0835d"
+storage_version_token = "1792606435599342"
+content_type = "text/csv"
+
+[[outputs]]
+id = "ehtBOmy-1wRc3-8jlRMLn"
+uri = "file://reports/signal_validation/short_term_validation.csv"
+type = "table"
+title = "Frozen short-term validation — CSV"
+description = "Exact selected rule, training and holdout metrics. Failed acceptance: only four out-of-sample non-overlapping observations."
+logical_id = "a67d160b-ae05-4f8a-9280-a046a0f8181e"
+content_hash = "sha256:15a4da39ba7180f8d6ff538d9b1f82c55f066ce5522012ddf102552aea11e445"
+size = 606
+mtime_ms = 1792606055265
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/a67d160b-ae05-4f8a-9280-a046a0f8181e/d1d5964b-9ffc-4b6d-9348-699de816d32f"
+storage_version_token = "1792606436235976"
+content_type = "text/csv"

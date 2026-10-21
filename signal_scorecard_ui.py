@@ -15,7 +15,16 @@ HORIZONS = {
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _history(closes, horizon):
+def _history(closes, horizon, signal_type="Long-term"):
+    if signal_type == "Short-term":
+        from short_term_signal import short_term_ratings, TEST_START
+        from short_term_signal import load_manifest
+        manifest = load_manifest()
+        ratings = short_term_ratings(closes, manifest)
+        history = build_rating_history(closes, horizon, ratings=ratings)
+        # The final gate used holdout data: label this a reconstruction, never
+        # pretend these gated recommendations were issued before validation.
+        return history.loc[TEST_START:]
     return build_rating_history(closes, horizon)
 
 
@@ -38,13 +47,19 @@ def render_rating_scorecard(closes, current_rating):
         "an archive of recommendations actually issued. Each rating uses only prices "
         "available by that date. The rating formula is not retuned for this scorecard."
     )
+    signal_type = st.selectbox("Signal to evaluate", ["Long-term", "Short-term"],
+                               key="daily_rating_signal_type")
+    if signal_type == "Short-term":
+        st.caption("Reconstructed deployment policy on 2019 onward—not recommendations issued in real time. "
+                   "The untouched candidate's separate training/test results appear in the frozen study.")
     period_col, rating_col = st.columns(2)
     with period_col:
         period = st.selectbox("Check price after", list(HORIZONS), index=1,
                               key="daily_rating_horizon")
     with rating_col:
         rating = st.selectbox(
-            "Rating to evaluate", ["BUY", "POSSIBLE BUY"],
+            "Rating to evaluate", (["BUY", "POSSIBLE BUY", "NO EDGE"] if signal_type == "Short-term"
+                                   else ["BUY", "POSSIBLE BUY", "DO NOTHING", "POSSIBLE SELL", "SELL"]),
             index=1 if current_rating == "POSSIBLE BUY" else 0,
             key="daily_rating_category",
         )
@@ -58,7 +73,7 @@ def render_rating_scorecard(closes, current_rating):
     horizon = HORIZONS[period]
     try:
         with st.spinner("Evaluating historical daily ratings…"):
-            history = _history(closes, horizon)
+            history = _history(closes, horizon, signal_type)
             summary = summarize_ratings(history, non_overlapping=spaced)
     except Exception:
         st.error("The rating scorecard could not be calculated. No performance estimate is available.")
@@ -102,6 +117,8 @@ def render_rating_scorecard(closes, current_rating):
         st.info(f"No completed {rating} observations are available for this holding period.")
     if count < 30:
         st.warning("Fewer than 30 completed observations: too little evidence to judge this rating.")
+    if spaced and count < 20:
+        st.warning("Too thin to trust: fewer than 20 non-overlapping observations.")
     st.caption(f"{pending:,} selected-rating observations are still awaiting their full outcome and are excluded from performance statistics.")
     st.warning(
         "These are historical conditional outcomes, not a proven success probability for the "
@@ -139,6 +156,7 @@ def render_rating_scorecard(closes, current_rating):
         st.download_button(
             "Download rating scorecard (CSV)",
             summary.assign(
+                Signal=signal_type,
                 Horizon_sessions=horizon,
                 Sampling="Non-overlapping common schedule" if spaced else "Every rated day",
                 Entry_convention="Next session close",
