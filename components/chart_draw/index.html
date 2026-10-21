@@ -25,6 +25,7 @@
   #market-feed-status {
     position: absolute; top: 12px; left: 75px; z-index: 10;
     max-width: 70%; padding: 4px 7px; border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     background: rgba(255,255,255,0.9); color: #334155; font-size: 12px;
     pointer-events: none;
   }
@@ -2199,7 +2200,8 @@ function renderChart(options) {
     template: 'plotly_white',
     width: Math.round(document.getElementById('chart-scroll').clientWidth * currentChartWidth / 100),
     height: currentChartHeight,
-    margin: {l: 65, r: 20, t: 10, b: 40},
+    // Reserve a header row for the live quote so it cannot cover the legend.
+    margin: {l: 65, r: 20, t: 48, b: 40},
     uirevision: 'explicit-viewport-lock',
     showlegend: hasOverlay,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
