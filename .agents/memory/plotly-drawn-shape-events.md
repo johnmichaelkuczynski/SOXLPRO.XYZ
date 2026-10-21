@@ -30,3 +30,12 @@ Projection popup backgrounds must match their corresponding trendline color.
 **Why:** The user explicitly requires matching colors to identify each line's readout.
 
 **How to apply:** Preserve the match for automatic and explicitly selected lines.
+
+Keep projection inspection available while period-selection mode is enabled;
+hide it only during an active selection drag.
+
+**Why:** Users expect hovering a trendline to show its price without having to
+leave the analysis mode they previously enabled.
+
+**How to apply:** Distinguish an enabled mode from an active gesture when deciding
+whether to suppress readouts, and check that readouts return on mouse release.

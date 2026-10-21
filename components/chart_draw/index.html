@@ -1134,12 +1134,36 @@ window.addEventListener('resize', function() {
 
 function resetView() {
   if (!chartData) return;
-  Plotly.relayout(chartDiv, {
+  selecting = false;
+  selectedRange = null;
+  document.getElementById('analyze-bar').style.display = 'none';
+  setMode('pan');
+  currentChartHeight = chartData.chart_height || 900;
+  currentChartWidth = 100;
+  document.getElementById('heightSlider').value = currentChartHeight;
+  document.getElementById('heightValue').textContent = currentChartHeight + ' px';
+  document.getElementById('widthSlider').value = currentChartWidth;
+  document.getElementById('widthValue').textContent = '100%';
+  chartContainer.style.width = '100%';
+  trendTooltip.style.display = 'none';
+  document.body.classList.remove('projection-readout-active');
+  return Plotly.relayout(chartDiv, {
     'xaxis.range': [chartData.dates[0], getFutureEnd()],
+    'xaxis.autorange': false,
     'yaxis.type': scaleMode,
-    'yaxis.range': yAxisRange()
+    'yaxis.range': yAxisRange(),
+    'yaxis.autorange': false,
+    width: chartScroll.clientWidth,
+    height: currentChartHeight,
+    shapes: []
+  }).then(function() {
+    chartScroll.scrollLeft = 0;
+    chartScroll.scrollTop = 0;
+    positionRightControlRail();
+    setFrameHeight(document.body.scrollHeight + 20);
+    announce('View reset. Full history and normal chart size restored; trendlines preserved.');
+    trackEvent('chart_view_reset', {scale: scaleMode, horizon_years: futureHorizonYears});
   });
-  trackEvent('chart_view_reset', {scale: scaleMode, horizon_years: futureHorizonYears});
 }
 
 function clearAll() {
@@ -1603,7 +1627,8 @@ function inspectTrendLine(event) {
   hoveredLineIndex = -1;
   hoveredLineDistance = Infinity;
   trendTooltip.style.display = 'none';
-  if (currentMode === 'select' || lines.length === 0) {
+  // Selection mode still supports inspection; only an active drag hides it.
+  if (selecting || lines.length === 0) {
     trendTooltip.style.display = 'none';
     return;
   }
@@ -1800,6 +1825,7 @@ function dateToPx(dateMs) {
 selectOverlay.addEventListener('mousedown', function(e) {
   if (currentMode !== 'select') return;
   selecting = true;
+  inspectTrendLine(e);
   selectStartX = e.offsetX;
   e.preventDefault();
 });
@@ -1818,6 +1844,7 @@ selectOverlay.addEventListener('mousemove', function(e) {
 selectOverlay.addEventListener('mouseup', function(e) {
   if (!selecting) return;
   selecting = false;
+  inspectTrendLine(e);
   var endX = e.offsetX;
   var leftPx = Math.min(selectStartX, endX);
   var rightPx = Math.max(selectStartX, endX);

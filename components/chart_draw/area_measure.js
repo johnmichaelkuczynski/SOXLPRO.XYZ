@@ -109,7 +109,8 @@
         `Width: ${fmt(result.days)} calendar days\n` +
         `Price–time area: ${fmt(result.dollarDays)} dollar-days\n` +
         (result.logScale ? `Log-chart area: ${fmt(result.axisArea)} log₁₀-price × days\n` : "") +
-        "Held boxes move with the chart; panning and zooming preserve their area. Predictive value has not been tested.";
+        "Held boxes move with the chart; panning and zooming preserve their area. " +
+        "These custom boxes are not validated forecasts. See the separate fixed-rule area/channel study below the chart.";
     }
     function readPoint(event) {
       const p = event && event.points && event.points[0];

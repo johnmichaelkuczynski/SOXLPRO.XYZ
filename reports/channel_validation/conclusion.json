@@ -1,0 +1,3 @@
+{
+  "text": "No demonstrated area advantage in this experiment. 1,416 matched forecasts on 127 historical start dates. Pooled Brier score: lognormal 0.1008; area-enhanced 0.1052 (lower is better). Area had a lower score in 4 of 12 line/horizon comparisons; 0 had an improvement interval wholly above zero. Long-horizon evidence is thin: only 9 non-overlapping annual windows per line. Do not use this fixed area rule as a proven trading signal."
+}

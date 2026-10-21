@@ -184,7 +184,7 @@ var window={innerWidth:1000,innerHeight:900,
  frameElement:{getBoundingClientRect:()=>({left:0,top:100})},
  parent:{innerWidth:1000,innerHeight:500}};
 var chartData={dates:['1970-01-01']};
-var currentMode='pan', scaleMode='linear', hoveredLineIndex=-1, hoveredLineDistance=Infinity;
+var currentMode='pan', selecting=false, scaleMode='linear', hoveredLineIndex=-1, hoveredLineDistance=Infinity;
 var chartScroll={scrollLeft:0,clientWidth:1000};
 var chartDiv={getBoundingClientRect:()=>({left:0,top:0}),
   _fullLayout:{_size:{l:0,t:0,w:1000,h:600},xaxis:{range:[0,1000]},yaxis:{range:[0,100]}}};

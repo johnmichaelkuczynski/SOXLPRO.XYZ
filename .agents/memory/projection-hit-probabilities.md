@@ -23,3 +23,15 @@ all lower barriers as already reached contradicts the intended projection.
 **How to apply:** Use directional first-passage probabilities for both upside
 and downside barriers. Never force lower targets to certainty. These are
 historically fitted model estimates, not empirically verified success rates.
+
+Historical tests must refit channels using only data available at each forecast
+date and train probability adjustments only on outcomes already known then.
+Do not backtest today's full-history channels as if they were past forecasts.
+
+**Why:** The user explicitly raised lookahead contamination and requested a
+walk-forward comparison of area and channel projections against a plain baseline.
+
+**How to apply:** Keep exploratory area rules distinct from discretionary boxes
+and from the frozen daily-signal holdout. Report negative results and sampling
+limitations; do not silently replace live popup probabilities with a model
+selected after inspecting the historical results.

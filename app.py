@@ -591,6 +591,9 @@ with tab_chart:
 
     update_chart_market_feed()
 
+    from area_lab.channel_report_ui import render_channel_validation
+    render_channel_validation()
+
     if result is not None:
         action = result.get("action")
         if action == "set_all":

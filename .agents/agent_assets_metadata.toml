@@ -495,3 +495,17 @@ mtime_ms = 1792606055265
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/a67d160b-ae05-4f8a-9280-a046a0f8181e/d1d5964b-9ffc-4b6d-9348-699de816d32f"
 storage_version_token = "1792606436235976"
 content_type = "text/csv"
+
+[[outputs]]
+id = "t4v8GmHgvobnxPu4nL38I"
+uri = "file://reports/channel_validation/report.html"
+type = "html"
+title = "Area and channel walk-forward validation"
+description = "Complete report with frozen rules, baseline comparisons, uncertainty estimates, calibration, and every historical forecast with its training cutoff."
+logical_id = "f88c450b-530d-4903-a671-8b8114c0786e"
+content_hash = "sha256:3b3deafe9ba4c2742276a1ee9c8d46db6ebe455dc1291bfec255c9cde0fc5300"
+size = 1544267
+mtime_ms = 1792608975007
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/f88c450b-530d-4903-a671-8b8114c0786e/56d0aa8d-060c-40c7-948f-92eca3a8cabc"
+storage_version_token = "1792609037013074"
+content_type = "text/html"

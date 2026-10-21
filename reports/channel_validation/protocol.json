@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "horizons_sessions": [
+    21,
+    63,
+    126,
+    252
+  ],
+  "origin_stride_sessions": 21,
+  "minimum_channel_sessions": 252,
+  "minimum_training_origins": 60,
+  "channel": "Expanding log-price OLS slope; median/min/max intercept, matching chart defaults.",
+  "target": "Fixed price on each refitted channel at the deadline, not a moving barrier.",
+  "outcome": "Directional touch on a subsequent adjusted daily CLOSE, excluding origin close.",
+  "area": "20-session rectangle: elapsed calendar days times absolute log10 price change; signed companion.",
+  "baseline": "Lognormal first-passage estimate; expanding daily log-return mean and variance, annualized by 252.",
+  "models": "Raw lognormal; logistic calibration on baseline logit; same calibration plus signed and unsigned area.",
+  "fitting": "StandardScaler and L2 logistic regression C=1 fitted anew using only matured earlier windows.",
+  "uncertainty": "Paired moving-block bootstrap by forecast date; block length ceil(horizon/21), 1000 draws.",
+  "status": "Exploratory walk-forward study, not a new untouched holdout or trading recommendation.",
+  "source": "docs/soxl_signal_study_prices.csv",
+  "source_sha256": "7bcd10c27d99b9e7553ec3a275180e882fd7c276a57600a737e2e5bb0229ed16"
+}
