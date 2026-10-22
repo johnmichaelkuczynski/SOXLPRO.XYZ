@@ -10,6 +10,18 @@ that chart, replacing the former empty control-panel parking area.
 **Why:** The user explicitly rejected the standalone overnight dashboard and
 asked for one chart that works during regular and extended sessions.
 
+**Benchmark exception:** Show every selected benchmark's latest actual value
+without hovering, including custom stocks. This is separate from the normalized
+comparison lines; index values use points, not dollars.
+
+**Why:** The user says hovering over the chart tip is too delicate and mouse
+movement produces the wrong reading. They explicitly requested visible current
+amounts for all benchmarks, analogous to the prominent SOXL price.
+
+**How to apply:** Automatically refresh timestamped readouts without resetting
+the chart. Disclose delayed, stale, failed, and unavailable quotes; never label
+the latest daily historical point as a current quote.
+
 Refresh prices independently from the full Streamlit page.
 
 **Why:** The user has repeatedly reported losing the prepared historical-chart

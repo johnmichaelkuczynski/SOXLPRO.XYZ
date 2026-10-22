@@ -165,9 +165,10 @@ async def run(port):
     ], websocket_max_message_size=200 * 1024 * 1024)
     application.listen(port, address="0.0.0.0")
     print(f"SOXL public listener ready on {port}", flush=True)
-    processes = [subprocess.Popen([sys.executable, "streamlit_backend.py"])]
+    scripts = ["streamlit_backend.py"]
     if os.environ.get("SOXL_DISABLE_WORKER") != "1":
-        processes.append(subprocess.Popen([sys.executable, "market_state_worker.py"]))
+        scripts += ["market_state_worker.py", "benchmark_quotes.py"]
+    processes = [subprocess.Popen([sys.executable, script]) for script in scripts]
     try:
         while True:
             try:
@@ -177,7 +178,7 @@ async def run(port):
                 ready = False
             for idx, process in enumerate(processes):
                 if process.poll() is not None:
-                    script = "streamlit_backend.py" if idx == 0 else "market_state_worker.py"
+                    script = scripts[idx]
                     processes[idx] = subprocess.Popen([sys.executable, script])
             await asyncio.sleep(1)
     finally:

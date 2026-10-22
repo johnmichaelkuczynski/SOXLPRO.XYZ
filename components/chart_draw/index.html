@@ -326,6 +326,12 @@
   <div class="rail-resize-handle rail-resize-se" data-direction="se"></div>
   <div class="rail-resize-handle rail-resize-sw" data-direction="sw"></div>
 </div>
+<section id="benchmark-readouts" aria-label="Latest benchmark prices" aria-live="polite" hidden
+  style="padding:12px;background:#f8fafc;border:1px solid #dbe3ed;border-radius:8px;margin:8px 0">
+  <strong>Latest benchmark prices</strong>
+  <div id="benchmark-price-cards" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px"></div>
+  <small>Refreshes every minute. Quotes may be delayed; observation times are shown. Chart overlays are scaled for comparison; these are actual, unscaled values.</small>
+</section>
 <div id="chart-scroll">
   <div id="chart-container">
     <div id="chart"></div>
@@ -717,8 +723,58 @@ function configureKeyboardDateInputs() {
 }
 
 var latestMarketQuote = null;
+var benchmarkQuotes = {};
+function renderBenchmarkPrices() {
+  if (!chartData) return;
+  var cards = document.getElementById('benchmark-price-cards');
+  cards.replaceChildren();
+  var specs = ['QQQ','TQQQ','TLT','XLU','VIX','SOX','GUSH','BTC'].map(function(name) {
+    return {name:name, key:name.toLowerCase()};
+  });
+  if (chartData.custom_label) specs.push({name:chartData.custom_label, key:'custom'});
+  specs.forEach(function(spec) {
+    var dates = chartData[spec.key + '_dates'] || [];
+    if (!dates.length && spec.key !== 'custom' &&
+        (chartData.selected_benchmarks || []).indexOf(spec.name) === -1) return;
+    var q = benchmarkQuotes[spec.name] || {};
+    var card = document.createElement('div');
+    card.style.cssText = 'flex:1 1 185px;padding:10px;background:white;border:1px solid #dbe3ed;border-radius:6px;color:#172b4d';
+    var name = document.createElement('strong');
+    name.textContent = spec.name;
+    var value = document.createElement('div');
+    value.style.cssText = 'font-size:23px;font-weight:700;margin:4px 0';
+    var detail = document.createElement('small');
+    detail.style.cssText = 'display:block;line-height:1.5';
+    var valid = Number.isFinite(q.price) && q.price > 0 && Number.isFinite(Date.parse(q.observed_at));
+    if (valid) {
+      var points = q.unit === 'points' || spec.name === 'VIX' || spec.name === 'SOX';
+      value.textContent = (points ? '' : q.currency === 'USD' ? '$' : '') +
+        q.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) +
+        (points ? ' points' : q.currency && q.currency !== 'USD' ? ' ' + q.currency : '');
+      var old = Date.now() - Date.parse(q.observed_at) > 15*60*1000;
+      detail.textContent = (q.error ? 'Update unavailable — last available quote. ' : old ? 'Last available quote (not live). ' : 'Latest available quote; may be delayed. ') +
+        new Date(q.observed_at).toLocaleString('en-US', {timeZone:'America/New_York'}) +
+        ' ET · ' + q.source + (!q.currency && !points ? ' · Provider currency not supplied' : '');
+    } else {
+      value.textContent = 'Quote unavailable';
+      var actual = chartData[spec.key + '_actual'] || [];
+      var last = actual[actual.length-1];
+      detail.textContent = dates.length && Number.isFinite(last)
+        ? 'Chart history: ' + last.toFixed(2) + ' on ' + dates[dates.length-1] +
+          ' (daily historical value, not a current quote).'
+        : 'Awaiting a timestamped provider quote.';
+    }
+    if (q.checked_at) detail.textContent += ' Checked ' +
+      new Date(q.checked_at).toLocaleTimeString('en-US', {timeZone:'America/New_York'}) + ' ET.';
+    card.append(name, value, detail);
+    cards.appendChild(card);
+  });
+  document.getElementById('benchmark-readouts').hidden = !cards.childElementCount;
+}
 function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
+  benchmarkQuotes = payload.benchmark_quotes || {};
+  renderBenchmarkPrices();
   latestMarketQuote = payload.quote && Number.isFinite(payload.quote.price) &&
     payload.quote.price > 0 && Number.isFinite(Date.parse(payload.quote.observed_at))
     ? payload.quote : null;
@@ -859,6 +915,7 @@ window.addEventListener("message", function(event) {
       btc_prices: args.btc_prices || [],
       btc_actual: args.btc_actual || [],
       custom_label: args.custom_label || '',
+      selected_benchmarks: args.selected_benchmarks || [],
       custom_dates: args.custom_dates || [],
       custom_prices: args.custom_prices || [],
       custom_actual: args.custom_actual || [],
@@ -871,6 +928,7 @@ window.addEventListener("message", function(event) {
       document.getElementById('heightSlider').value = currentChartHeight;
       document.getElementById('heightValue').textContent = currentChartHeight + ' px';
     }
+     renderBenchmarkPrices();
      configureKeyboardDateInputs();
     if (!rendered) {
       lines = (args.lines || []).slice();

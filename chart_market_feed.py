@@ -62,8 +62,11 @@ def refresh_chart_market_feed():
 
 def fetch_chart_market_feed():
     from market_state_store import load_state
+    from benchmark_quotes import read_quotes
     saved = load_state()
-    return saved.get("market_feed", {}) if saved else {"points": [], "error": "Background refresh pending"}
+    payload = dict(saved.get("market_feed", {})) if saved else {"points": [], "error": "Background refresh pending"}
+    payload["benchmark_quotes"] = read_quotes(st.session_state.get("custom_benchmark"))
+    return payload
 
 
 @st.fragment(run_every="60s")
