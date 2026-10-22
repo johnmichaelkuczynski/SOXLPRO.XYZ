@@ -39,13 +39,15 @@ Use consistent price adjustment for the historical and intraday trace segments.
 meaning. The existing feed covers pre/post market, not a continuous
 8 p.m.–4 a.m. session; uncovered hours must not be fabricated.
 
-Treat Robinhood's public quote endpoint as best-effort, not a guaranteed
-continuous overnight service. Only an actual non-regular trade timestamp can
-establish an overnight observation; a response update timestamp cannot.
+Use Polygon exclusively for the current SOXL price: snapshot lastTrade.p and
+lastTrade.t, with the trade timestamp converted to ET and session labeled by
+time of day. EODHD is for historical daily data only.
 
-**Why:** Public endpoint checks supplied after-hours trades, but did not
-establish actual 8 p.m.–4 a.m. availability. The user's Robinhood screenshot
-expresses a need for true overnight prices, not merely relabeled after-hours.
+**Why:** The user explicitly replaced Robinhood and required Polygon errors or
+missing lastTrade to be shown on the page instead of silently substituting
+another source or a historical close.
 
-**How to apply:** Disclose source, observation time, and stale quotes. Keep raw
-latest-trade quotes separate from adjusted historical chart bars.
+**How to apply:** Never retain a previous price as current on a failed quote
+refresh. Guard saved snapshots during rollout as well as newly fetched quotes.
+Disclose observation time and delayed quotes; keep raw last trades separate
+from adjusted historical bars.

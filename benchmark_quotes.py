@@ -37,7 +37,7 @@ def _read_quotes(custom=None):
                 ON CONFLICT(symbol) DO UPDATE SET requested_at=now()
                 WHERE benchmark_quotes.requested_at < now()-interval '1 hour'""", (custom,))
         rows = query("SELECT symbol,payload,checked_at,error FROM benchmark_quotes", fetch=True)
-        return {symbol: {**(payload or {}),
+        return {symbol: {**(payload if payload and payload.get("source") != "EODHD" else {}),
                          "checked_at": checked.isoformat() if checked else None,
                          "error": error} for symbol, payload, checked, error in rows}
     except Exception:
@@ -93,15 +93,15 @@ def fetch_quote(symbol):
         timestamp, price = max(candidates, key=lambda pair: pair[0])
         return valid_quote(price, timestamp, meta.get("currency"), "Yahoo Finance",
                            "points" if symbol in ("VIX", "SOX") else None)
-    # Custom benchmarks use their existing EODHD symbol, not a guessed Yahoo mapping.
-    from data_providers import EODHD_KEY
-    response = requests.get("https://eodhd.com/api/real-time/" + symbol,
-                            params={"api_token": EODHD_KEY, "fmt": "json"}, timeout=12)
-    response.raise_for_status()
-    data = response.json()
-    return valid_quote(data["close"], data["timestamp"],
-                       data.get("currency") or ("USD" if symbol.endswith(".US") else None),
-                       "EODHD", "points" if symbol.endswith(".INDX") else None)
+    # EODHD is historical-only. Polygon's stock snapshot supports US stocks.
+    if not symbol.endswith(".US"):
+        raise ValueError("Polygon stock snapshot supports US custom benchmarks only")
+    from live_market_quote import fetch_polygon_quote
+    quote = fetch_polygon_quote(symbol[:-3])
+    if quote.get("error"):
+        raise ValueError("Polygon custom benchmark quote unavailable")
+    return valid_quote(quote["price"], datetime.fromisoformat(quote["observed_at"]).timestamp(),
+                       "USD", "Polygon")
 
 
 def refresh_one(symbol):

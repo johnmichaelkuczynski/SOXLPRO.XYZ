@@ -72,6 +72,13 @@ def _uncached(func):
 
 
 def download_history(symbol):
+    if symbol == "SOXL":
+        from data_providers import get_equity_history
+        history = _uncached(get_equity_history)("SOXL")
+        if history.empty:
+            raise ProviderUnavailable()
+        frame = history[["adj_close"]].rename(columns={"adj_close": "Close"})
+        return frame
     import yfinance as yf
     frame = yf.Ticker(symbol).history(period="max", auto_adjust=True, timeout=20)
     if frame.empty or "Close" not in frame:
@@ -197,8 +204,16 @@ def recompute(previous=None, *, refresh_history=True):
         elif not state["history"]:
             return None
 
-    update(state, "quote", refresh_quote, lambda value: bool(value and value.get("price")))
-    if state["quote"]:
+    from live_market_quote import quote_error
+    # A failed quote must replace the last good quote, never retain it silently.
+    state["quote"] = quote_error("Polygon refresh unavailable.")
+    if not update(state, "quote", refresh_quote, lambda value: isinstance(value, dict)):
+        state["quote"] = quote_error("Polygon refresh failed: " +
+            state["status"]["components"]["quote"].get("error", "Unknown error"))
+    if state["quote"].get("error"):
+        state["status"]["components"]["quote"]["stale"] = True
+        state["status"]["components"]["quote"]["error"] = state["quote"]["error"]
+    if state["quote"].get("price"):
         # Quote age is observation age, not worker age. Retained quotes cannot
         # become "live" just because another component was refreshed.
         try:
@@ -214,9 +229,10 @@ def recompute(previous=None, *, refresh_history=True):
     )
     if state["status"]["components"]["market_feed"]["stale"]:
         state["market_feed"]["error"] = "Market feed unavailable; retaining last-good prices."
+    state["market_feed"]["quote"] = state["quote"]
     update(
         state, "snapshot", lambda: refresh_snapshot(state["history"], state["quote"]),
-        lambda value: isinstance(value, dict) and bool(value.get("current_price")),
+        lambda value: isinstance(value, dict) and (bool(value.get("current_price")) or bool(value.get("error"))),
     )
     # Lower-priority overlays cannot starve the one-minute quote/feed cycle.
     # Every configured symbol is attempted or gets an explicit timeout status.
