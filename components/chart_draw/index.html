@@ -272,6 +272,7 @@
   <div id="axisAreaOutput" hidden style="white-space:pre-line;font-size:12px;line-height:1.5;padding:8px;background:#fffbeb;color:#78350f;border-radius:6px;"></div>
   <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
+  <button class="tbtn" id="tiltBtn" aria-pressed="false" onclick="setMode(currentMode === 'tilt' ? 'pan' : 'tilt')" title="Drag upward to steepen the chart, downward to flatten it. Only the display scale changes; prices and projections stay unchanged.">Adjust Inclination</button>
   <span class="scale-group" role="group" aria-label="Price scale">
     <button class="tbtn active" id="logScaleBtn" aria-pressed="true" onclick="setScale('log')">Log Scale</button>
     <button class="tbtn" id="linearScaleBtn" aria-pressed="false" onclick="setScale('linear')">Linear Scale</button>
@@ -885,6 +886,12 @@ sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
 
 function setMode(mode) {
   currentMode = mode;
+  var tiltBtn = document.getElementById('tiltBtn');
+  tiltBtn.classList.toggle('active', mode === 'tilt');
+  tiltBtn.setAttribute('aria-pressed', mode === 'tilt' ? 'true' : 'false');
+  tiltBtn.textContent = mode === 'tilt' ? 'Done Adjusting Inclination' : 'Adjust Inclination';
+  chartDiv.style.touchAction = mode === 'tilt' ? 'none' : '';
+  chartDiv.style.cursor = mode === 'tilt' ? 'ns-resize' : '';
   var drawBtn = document.getElementById('drawBtn');
   var selectBtn = document.getElementById('selectBtn');
   drawBtn.classList.toggle('active', mode === 'draw');
@@ -904,6 +911,7 @@ function setMode(mode) {
   var statusText = 'Right-click for Draw, Extend, Erase, and Undo \u2022 Double-click a line to erase it';
   if (mode === 'draw') statusText = 'Click and drag to draw a line \u2022 Right-click near the cursor for other line tools';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
+  if (mode === 'tilt') statusText = 'Drag up to steepen; down to flatten. Prices and projections are unchanged. Reset View restores the original inclination.';
   document.getElementById('status').textContent = statusText;
   var modeAnnouncement = mode === 'draw'
     ? 'Draw Line mode enabled.'
@@ -914,7 +922,7 @@ function setMode(mode) {
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
 
   Plotly.relayout(chartDiv, {
-    dragmode: mode === 'draw' ? 'drawline' : 'pan',
+    dragmode: mode === 'draw' ? 'drawline' : mode === 'tilt' ? false : 'pan',
     'newshape.line.color': '#888',
     'newshape.line.width': 2
   });
@@ -923,6 +931,60 @@ function setMode(mode) {
 
 function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
 function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
+
+// Change the displayed slope using the actual Plotly axis range, rather than
+// rotating its DOM: transformed SVGs break Plotly's pointer-to-price mapping.
+// This keeps dates upright and preserves drawing and projection hit-testing.
+var inclinationDrag = null;
+var inclinationFrame = null;
+var inclinationRange = null;
+function flushInclination() {
+  inclinationFrame = null;
+  if (!inclinationRange) return;
+  var range = inclinationRange;
+  inclinationRange = null;
+  Plotly.relayout(chartDiv, {'yaxis.range': range, 'yaxis.autorange': false});
+}
+chartDiv.addEventListener('pointerdown', function(event) {
+  if (currentMode !== 'tilt' || event.button !== 0 || !chartDiv._fullLayout) return;
+  if (event.target.closest('.modebar')) return;
+  var axis = chartDiv._fullLayout.yaxis;
+  inclinationDrag = {
+    id: event.pointerId, y: event.clientY,
+    low: Number(axis.range[0]), high: Number(axis.range[1]),
+    height: Math.max(1, axis._length)
+  };
+  chartDiv.setPointerCapture(event.pointerId);
+  trendTooltip.style.display = 'none';
+  document.body.classList.remove('projection-readout-active');
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+chartDiv.addEventListener('pointermove', function(event) {
+  var drag = inclinationDrag;
+  if (!drag || event.pointerId !== drag.id) return;
+  // Positive factor also works in log coordinates. The midpoint is fixed.
+  var factor = Math.exp(Math.max(-2.3, Math.min(2.3,
+    (event.clientY - drag.y) / drag.height * 3)));
+  var middle = (drag.low + drag.high) / 2;
+  var half = (drag.high - drag.low) * factor / 2;
+  inclinationRange = [middle - half, middle + half];
+  if (inclinationFrame === null) inclinationFrame = requestAnimationFrame(flushInclination);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+function finishInclination(event) {
+  if (!inclinationDrag || event.pointerId !== inclinationDrag.id) return;
+  inclinationDrag = null;
+  if (inclinationFrame !== null) cancelAnimationFrame(inclinationFrame);
+  flushInclination();
+  if (chartDiv.hasPointerCapture(event.pointerId)) chartDiv.releasePointerCapture(event.pointerId);
+  chartGestureActive = false;
+  if (pendingMarketUpdate) setTimeout(refreshMarketTrace, 150);
+}
+chartDiv.addEventListener('pointerup', finishInclination, true);
+chartDiv.addEventListener('pointercancel', finishInclination, true);
+chartDiv.addEventListener('lostpointercapture', finishInclination, true);
 
 function suggestedExtensionDate(line) {
   var latest = new Date(Math.max(lineTimestamp(line, 1), lineTimestamp(line, 2)));
@@ -2234,7 +2296,7 @@ function renderChart(options) {
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
     hovermode: 'closest',
     hoverdistance: 20,
-    dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
+    dragmode: currentMode === 'draw' ? 'drawline' : currentMode === 'tilt' ? false : 'pan',
     newshape: {
       line: { color: '#888', width: 2 }
     },

@@ -21,6 +21,16 @@ position. Erase, extend, undo, and double-click erase must preserve them too.
 ranges when a new line triggers a rerender, destroys the view the user prepared
 before drawing.
 
+**Inclination decision:** Adjust displayed slopes through the chart's axis scale,
+not CSS rotation of the Plotly SVG or the entire page.
+
+**Why:** Plotly's native pointer mapping assumes unrotated axes. A visual-only
+rotation would misalign drawing and projection hover targets. Keep dates readable
+and the underlying prices and trendlines unchanged.
+
+**How to apply:** Inclination adjustment must remain an explicit, separate gesture
+mode; Reset View returns to the original scale and pan mode.
+
 **Implementation constraint:** Do not rely only on Plotly `uirevision` for line
 operations. Capture the live axis ranges and chart scroll offsets before a
 rerender and put those exact values into the replacement layout. Do not
