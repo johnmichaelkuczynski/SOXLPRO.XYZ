@@ -509,3 +509,17 @@ mtime_ms = 1792608975007
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/f88c450b-530d-4903-a671-8b8114c0786e/56d0aa8d-060c-40c7-948f-92eca3a8cabc"
 storage_version_token = "1792609037013074"
 content_type = "text/html"
+
+[[outputs]]
+id = "uOTbmJ1jWicIIUDc6E30R"
+uri = "file://reports/startup/report.html"
+type = "html"
+title = "SOXL cold-start measurements and audit"
+description = "Before/after timings, startup audit, background-worker changes, verification scope, and limitations."
+logical_id = "89ab39c3-4149-4922-9078-89a03cd0403e"
+content_hash = "sha256:8666cb302848fb9199ee4c9f5e43d21e262c6b8c07a0ff801958067663280e7c"
+size = 3353
+mtime_ms = 1792692085952
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/89ab39c3-4149-4922-9078-89a03cd0403e/31fef1a4-c0a4-432e-a8fb-5ebbc4414308"
+storage_version_token = "1792692296880297"
+content_type = "text/html"

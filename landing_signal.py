@@ -202,9 +202,14 @@ def _signal_card(percentile, signal, close_date):
     """
 
 
-def render_landing_signal(price_data):
-    readings, closes = compute_timeframe_readings(price_data)
-    result = composite_signal(readings)
+def render_landing_signal(price_data, saved=None):
+    if saved is None:
+        readings, closes = compute_timeframe_readings(price_data)
+        result = composite_signal(readings)
+    else:
+        readings = pd.DataFrame(saved["readings"])
+        closes = price_data["Close"].loc[:saved["close_date"]]
+        result = saved["composite"]
     if closes.empty or not np.isfinite(result["percentile"]):
         st.warning("The daily SOXL signal is unavailable until price history loads.")
         return
@@ -229,7 +234,10 @@ def render_landing_signal(price_data):
             + rating_threshold_description()
         )
     with short_term:
-        render_short_term_signal(closes)
+        if saved is None:
+            render_short_term_signal(closes)
+        else:
+            render_short_term_signal(closes, saved=saved)
     render_full_signal_report()
     from signal_scorecard_ui import render_rating_scorecard
     render_rating_scorecard(closes, display_signal_label(result["signal"]))

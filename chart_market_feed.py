@@ -45,7 +45,7 @@ def make_market_payload(bars, periods, checked):
 
 
 @st.cache_data(ttl=50, show_spinner=False)
-def fetch_chart_market_feed():
+def refresh_chart_market_feed():
     checked = datetime.now(timezone.utc).isoformat()
     quote = fetch_live_quote()
     try:
@@ -58,6 +58,12 @@ def fetch_chart_market_feed():
     except Exception:
         return {"points": [], "checked": checked, "quote": quote,
                 "error": "Price update unavailable — retaining the last chart prices."}
+
+
+def fetch_chart_market_feed():
+    from market_state_store import load_state
+    saved = load_state()
+    return saved.get("market_feed", {}) if saved else {"points": [], "error": "Background refresh pending"}
 
 
 @st.fragment(run_every="60s")

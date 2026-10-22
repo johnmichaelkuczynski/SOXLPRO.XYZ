@@ -3,23 +3,25 @@ from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
-import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from chart_payload import clean_chart_points, normalize_overlay
 from data_providers import get_custom_benchmark_history, normalize_eodhd_symbol
-from strategy_builder import generate_strategy, parse_strategy_json, render_strategy_html, STRATEGY_CSS
-from vol_surface import render_vol_surface_tab
-from call_risk_reward import render_call_risk_reward_tab
-from dislocation import render_dislocation_tab
-from backtest_ui import render_backtest_tab
-from diagnostic import render_diagnostic_tab
-from backtest_sweep import render_backtest_sweep_tab
-from synthetic_user import render_synthetic_user_tab
-from quality_control import render_quality_control_tab
-from market_chat import answer_market_question
+def _lazy(module, name):
+    def call(*args, **kwargs):
+        from importlib import import_module
+        return getattr(import_module(module), name)(*args, **kwargs)
+    return call
+
+for _module, _name in [
+    ("vol_surface", "render_vol_surface_tab"), ("call_risk_reward", "render_call_risk_reward_tab"),
+    ("dislocation", "render_dislocation_tab"), ("backtest_ui", "render_backtest_tab"),
+    ("diagnostic", "render_diagnostic_tab"), ("backtest_sweep", "render_backtest_sweep_tab"),
+    ("synthetic_user", "render_synthetic_user_tab"), ("quality_control", "render_quality_control_tab"),
+    ("market_chat", "answer_market_question")]:
+    globals()[_name] = _lazy(_module, _name)
 from landing_signal import render_landing_signal
 from visitor_counter import render_visitor_counter
 from top_market_snapshot import render_market_snapshot
@@ -74,68 +76,80 @@ chart_component = components.declare_component("chart_draw", path="components/ch
 
 @st.cache_data(ttl=300)
 def fetch_soxl_data():
-    df = yf.Ticker("SOXL").history(period="max", auto_adjust=True)
-    df.index = df.index.tz_localize(None)
-    return df[["Close"]].copy()
+    from market_state_store import load_state
+    saved = load_state()
+    if not saved:
+        return pd.DataFrame(columns=["Close"])
+    st.session_state["_market_state"] = saved
+    return pd.DataFrame({"Close": saved["history"]["prices"]},
+                        index=pd.to_datetime(saved["history"]["dates"]))
 
 
 def fetch_soxl_quote():
-    from live_market_quote import fetch_live_quote
-    return fetch_live_quote()
+    return st.session_state.get("_market_state", {}).get("quote")
+
+
+def _saved_overlay(symbol):
+    from market_state_store import load_state
+    stored = (load_state() or {}).get("overlays", {}).get(symbol.lstrip("^"))
+    if not stored:
+        st.info(f"{symbol} history is awaiting background refresh.")
+        return pd.DataFrame(columns=["Close"])
+    return pd.DataFrame({"Close": stored["prices"]}, index=pd.to_datetime(stored["dates"]))
 
 
 @st.cache_data(ttl=300)
 def fetch_qqq_data():
-    df = yf.Ticker("QQQ").history(period="max", auto_adjust=True)
+    df = _saved_overlay("QQQ")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_tqqq_data():
-    df = yf.Ticker("TQQQ").history(period="max", auto_adjust=True)
+    df = _saved_overlay("TQQQ")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_tlt_data():
-    df = yf.Ticker("TLT").history(period="max", auto_adjust=True)
+    df = _saved_overlay("TLT")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_xlu_data():
-    df = yf.Ticker("XLU").history(period="max", auto_adjust=True)
+    df = _saved_overlay("XLU")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_vix_data():
-    df = yf.Ticker("^VIX").history(period="max", auto_adjust=True)
+    df = _saved_overlay("^VIX")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_sox_data():
-    df = yf.Ticker("^SOX").history(period="max", auto_adjust=True)
+    df = _saved_overlay("^SOX")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_gush_data():
-    df = yf.Ticker("GUSH").history(period="max", auto_adjust=True)
+    df = _saved_overlay("GUSH")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
 
 @st.cache_data(ttl=300)
 def fetch_btc_data():
-    df = yf.Ticker("BTC-USD").history(period="max", auto_adjust=True)
+    df = _saved_overlay("BTC-USD")
     df.index = df.index.tz_localize(None)
     return df[["Close"]].copy()
 
@@ -165,7 +179,13 @@ def convert_to_timedelta(value, unit):
 
 
 try:
-    data = fetch_soxl_data()
+    from market_state_store import load_state
+    saved_market = load_state()
+    if not saved_market:
+        st.info("Saved market results are not available yet. Background refresh is running.")
+        st.stop()
+    data = pd.DataFrame({"Close": saved_market["history"]["prices"]},
+                        index=pd.to_datetime(saved_market["history"]["dates"]))
     if data.empty:
         st.info("SOXL price data is temporarily unavailable. Please refresh and try again.")
         st.stop()
@@ -174,14 +194,15 @@ except Exception as e:
     st.stop()
 
 try:
-    quote = fetch_soxl_quote()
+    quote = saved_market.get("quote")
 except Exception:
     quote = None
 
-render_market_snapshot(data, quote=quote, refresh_quotes=True)
+st.caption("Saved market results · computed " + saved_market["computed_at"])
+render_market_snapshot(data, quote=quote, saved=saved_market)
 
 render_visitor_counter()
-render_landing_signal(data)
+render_landing_signal(data, saved=saved_market["signal"])
 
 def get_price_at_offset(df, days_ago):
     target_date = df.index[-1] - timedelta(days=days_ago)
@@ -324,7 +345,7 @@ for i, (label, pct, dollar) in enumerate(period_data):
             unsafe_allow_html=True,
         )
 
-tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_area, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "Area Research", "🩺 Diagnostic"])
+tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_area, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "Area Research", "🩺 Diagnostic"], on_change="rerun", key="main_tabs")
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
@@ -859,7 +880,7 @@ with tab_chart:
             bt_bench_sym = st.session_state.get("bt_bench", "QQQ")
             bt_bench_yf = "^VIX" if bt_bench_sym == "VIX" else "^SOX" if bt_bench_sym == "SOX" else bt_bench_sym
             try:
-                bench_hist = yf.Ticker(bt_bench_yf).history(period="max", auto_adjust=True)
+                bench_hist = _saved_overlay(bt_bench_yf)
                 bench_hist.index = bench_hist.index.tz_localize(None)
             except Exception:
                 bench_hist = pd.DataFrame()
@@ -1263,7 +1284,7 @@ with tab_chart:
             bench_sym = st.session_state.get("bench_ticker", "QQQ")
             bench_yf_sym = "^VIX" if bench_sym == "VIX" else "^SOX" if bench_sym == "SOX" else bench_sym
             try:
-                bench_df = yf.Ticker(bench_yf_sym).history(period="max", auto_adjust=True)
+                bench_df = _saved_overlay(bench_yf_sym)
                 bench_df.index = bench_df.index.tz_localize(None)
             except Exception:
                 st.error(f"Could not fetch {bench_sym} data.")
@@ -1575,24 +1596,25 @@ with tab_chart:
                 st.info(f"**Verdict:** A {r['magnitude']}%+ move in either direction happened {r['prob']:.0f}% of the time over {r['horizon_label']}.")
 
 with tab_vol:
-    if require_paid_access("Vol Surface", current_user, show_purchase_options):
+    if tab_vol.open and require_paid_access("Vol Surface", current_user, show_purchase_options):
         render_vol_surface_tab()
 
 with tab_call_rr:
-    if require_paid_access(
+    if tab_call_rr.open and require_paid_access(
         "Call Risk/Reward", current_user, show_purchase_options
     ):
         render_call_risk_reward_tab()
 
 with tab_disloc:
-    if require_paid_access("Dislocation", current_user, show_purchase_options):
+    if tab_disloc.open and require_paid_access("Dislocation", current_user, show_purchase_options):
         render_dislocation_tab()
 
 with tab_backtest:
-    if require_paid_access("Backtest", current_user, show_purchase_options):
+    if tab_backtest.open and require_paid_access("Backtest", current_user, show_purchase_options):
         render_backtest_tab()
 
 def _render_strategy_tab():
+    from strategy_builder import generate_strategy, parse_strategy_json, render_strategy_html, STRATEGY_CSS
     st.markdown("### 🎯 Strategy Builder")
     st.markdown(
         "Tell me about your situation — portfolio size, how much cash you have, "
@@ -1662,27 +1684,32 @@ def _render_strategy_tab():
 
 
 with tab_strategy:
-    if require_paid_access(
+    if tab_strategy.open and require_paid_access(
         "Strategy Builder", current_user, show_purchase_options
     ):
         _render_strategy_tab()
 
 with tab_area:
-    from area_lab.ui import render_area_lab
-    render_area_lab()
+    if tab_area.open:
+        from area_lab.ui import render_area_lab
+        render_area_lab()
 
 with tab_diag:
     diag_sub_system, diag_sub_synth, diag_sub_qc, diag_sub_sweep = st.tabs(
         ["System Check", "Synthetic User", "Quality Control", "Backtest Sweep"]
     )
     with diag_sub_system:
-        render_diagnostic_tab()
+        if tab_diag.open:
+            render_diagnostic_tab()
     with diag_sub_synth:
-        render_synthetic_user_tab()
+        if tab_diag.open:
+            render_synthetic_user_tab()
     with diag_sub_qc:
-        render_quality_control_tab()
+        if tab_diag.open:
+            render_quality_control_tab()
     with diag_sub_sweep:
-        render_backtest_sweep_tab()
+        if tab_diag.open:
+            render_backtest_sweep_tab()
 
 st.markdown(
     "<div style='text-align:center; margin-top:48px; padding:24px 0; "

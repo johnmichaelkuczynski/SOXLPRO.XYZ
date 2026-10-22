@@ -1,6 +1,7 @@
 - [Narrated demo videos](narrated-demo-video.md) — generateVideo caps at 8s; build long narrated demos as a PIL-slide + TTS + ffmpeg slideshow instead.
 - [Deployment environment detection](deployment-environment-detection.md) — use REPLIT_DEPLOYMENT=1 for production checks; REPLIT_CONTAINER may still say repl on published VMs.
 - [Always-on deployment](always-on-deployment.md) — user wants smallest Reserved VM; distinguish configured target, Publishing machine size, and live deployment.
+- [Startup latency](startup-latency.md) — DB-backed saved page within two seconds; distinguish initial results from interactive readiness and preserve proxy headers.
 - [Plotly heatmap hover safety](plotly-heatmap-hover-safety.md) — mixed customdata can trigger SVG NaN errors on hover; prefer preformatted hovertext.
 - [Plotly drawn-shape events](plotly-drawn-shape-events.md) — bind drawing events through Plotly after initialization; log-axis shape coordinates are already data values.
 - [Projection hit probabilities](projection-hit-probabilities.md) — show historically calibrated by-or-before hit odds directly beside projected date and price.

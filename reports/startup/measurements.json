@@ -1,0 +1,21 @@
+{
+  "before": {
+    "label": "before",
+    "environment": "fresh workspace process; existing provider disk caches retained",
+    "port_and_health_seconds": 12.739607021,
+    "html_seconds": 13.442050763,
+    "snapshot_seconds": 28.547616829,
+    "signals_seconds": 28.939783694000003,
+    "page_errors": []
+  },
+  "after": {
+    "label": "after",
+    "environment": "fresh workspace process; existing provider disk caches retained",
+    "port_and_health_seconds": 0.234893237,
+    "html_seconds": 0.4868041860000001,
+    "snapshot_seconds": 0.545412897,
+    "signals_seconds": 0.5490119340000001,
+    "page_errors": []
+  },
+  "scope": "Fresh workspace process, existing provider disk caches retained. Initial saved-data page is measured, not full interactive chart readiness. Not a production-idle benchmark. After run includes background worker. No live deployment or restart was performed by the agent."
+}

@@ -128,18 +128,23 @@ def _price_card(label, value, css_class):
 
 
 @st.fragment(run_every="60s")
-def render_market_snapshot(price_data, quote=None, refresh_quotes=False):
+def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=None):
+    if saved is not None:
+        from market_state_store import load_state
+        saved = load_state() or saved
     if refresh_quotes:
         from live_market_quote import fetch_live_quote
         quote = fetch_live_quote()
-    snapshot = compute_market_snapshot(price_data, quote=quote)
+    snapshot = saved["snapshot"] if saved else compute_market_snapshot(price_data, quote=quote)
     if snapshot is None:
         st.warning("Current SOXL market statistics are unavailable.")
         return
 
     return_cards = "".join(
         _return_card(label, value)
-        for label, value in snapshot["returns"].items()
+        for label in ["Day", *RETURN_PERIODS, "All Time"]
+        if label in snapshot["returns"]
+        for value in [snapshot["returns"][label]]
     )
     range_cards = (
         _price_card("52-Week High", snapshot["week_52_high"], "high")

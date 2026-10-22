@@ -25,11 +25,11 @@ def render_full_signal_report():
     components.html(REPORT_PATH.read_text(encoding="utf-8"), height=760, scrolling=True)
 
 
-def render_short_term_signal(closes):
+def render_short_term_signal(closes, saved=None):
     st.markdown("#### Short-term signal (1 month)")
     try:
-        manifest = load_manifest()
-        rating = short_term_ratings(closes, manifest).iloc[-1]
+        manifest = saved["manifest"] if saved else load_manifest()
+        rating = saved["short_rating"] if saved else short_term_ratings(closes, manifest).iloc[-1]
     except Exception:
         st.markdown("### NO EDGE")
         st.warning("Frozen validation results unavailable. Buy signals are disabled.")
