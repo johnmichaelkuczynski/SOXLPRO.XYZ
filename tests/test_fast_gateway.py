@@ -47,6 +47,13 @@ class GatewayTests(AsyncHTTPTestCase):
         self.assertEqual(result.code, 304)
         self.assertEqual(result.body, b"")
 
+    def test_reconnecting_tab_waits_for_backend(self):
+        fast_gateway.ready = False
+        self.io_loop.call_later(0.2, lambda: setattr(fast_gateway, "ready", True))
+        result = self.fetch("/_stcore/host-config")
+        self.assertEqual(result.code, 200)
+        self.assertIn(b"ready", result.body)
+
 
 if __name__ == "__main__":
     unittest.main()

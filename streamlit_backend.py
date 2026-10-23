@@ -37,6 +37,8 @@ class PublicDocumentHandler(RequestHandler):
 def install_public_routes(application, *, production: bool):
     """Prepend only exact document paths; leave all other routing untouched."""
     template = Path(file_util.get_static_dir(), "index.html").read_text()
+    recovery = Path(__file__).with_name("preview_recovery.js").read_text()
+    template = template.replace("</head>", "<script>" + recovery + "</script></head>")
     routes = []
     for path, body, content_type in [
         (r"/", render_index(template, production=production), "text/html; charset=utf-8"),

@@ -32,6 +32,9 @@ def payload():
 
 
 class StoreTests(unittest.TestCase):
+    def setUp(self):
+        store._last_good = None
+
     def connection(self, state=None):
         conn = MagicMock()
         cur = conn.cursor.return_value.__enter__.return_value
@@ -109,6 +112,34 @@ class StoreTests(unittest.TestCase):
         with patch.object(store, "get_conn") as connect:
             self.assertFalse(store.request_refresh())
             connect.assert_not_called()
+
+    def test_outage_retains_results_and_marks_them(self):
+        with patch.object(store, "_execute", return_value=(payload(),)):
+            self.assertIsNotNone(store.load_state())
+        with patch.object(store, "_execute", side_effect=store.StateStoreError("OperationalError")):
+            retained = store.load_state()
+        self.assertEqual(retained["history"], payload()["history"])
+        self.assertIn("_read_warning", retained)
+        retained["history"]["prices"][0] = 999
+        self.assertEqual(store._last_good["history"]["prices"][0], 20)
+
+    def test_busy_read_keeps_last_good(self):
+        store._last_good = payload()
+        with store._read_slot:
+            result = store.load_state()
+        self.assertEqual(result["computed_at"], payload()["computed_at"])
+        self.assertIn("_read_warning", result)
+
+    def test_late_success_is_kept_for_next_request(self):
+        def delayed(*args, **kwargs):
+            time.sleep(0.05)
+            return (payload(),)
+        with patch.object(store, "_execute", side_effect=delayed), \
+                patch.object(store, "READ_BUDGET_SECONDS", 0.005):
+            self.assertIsNone(store.load_state())
+            time.sleep(0.09)
+            with store._read_slot:
+                self.assertEqual(store.load_state()["history"], payload()["history"])
 
 
 class WorkerTests(unittest.TestCase):

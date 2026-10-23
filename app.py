@@ -178,12 +178,23 @@ def convert_to_timedelta(value, unit):
     return timedelta(days=0)
 
 
+@st.fragment(run_every="3s")
+def _wait_for_saved_market():
+    from market_state_store import load_state
+    recovered = load_state()
+    if recovered:
+        st.session_state["_market_state"] = recovered
+        st.rerun(scope="app")
+    st.info("Saved market data is temporarily unavailable. Automatically retrying every 3 seconds.")
+
+
 try:
     from market_state_store import load_state
-    saved_market = load_state()
+    saved_market = load_state() or st.session_state.get("_market_state")
     if not saved_market:
-        st.info("Saved market results are not available yet. Background refresh is running.")
+        _wait_for_saved_market()
         st.stop()
+    st.session_state["_market_state"] = saved_market
     data = pd.DataFrame({"Close": saved_market["history"]["prices"]},
                         index=pd.to_datetime(saved_market["history"]["dates"]))
     if data.empty:
@@ -199,6 +210,8 @@ except Exception:
     quote = None
 
 st.caption("Saved market results · computed " + saved_market["computed_at"])
+if saved_market.get("_read_warning"):
+    st.warning(saved_market["_read_warning"] + " Observation times remain unchanged.")
 render_market_snapshot(data, quote=quote, saved=saved_market)
 
 render_visitor_counter()

@@ -74,6 +74,15 @@ class Gateway(tornado.web.RequestHandler):
         if self.request.path == "/_stcore/health":
             self.finish("ok")
             return
+        # Existing preview tabs request this while Streamlit restarts. An
+        # immediate 503 can strand the browser's bootstrap/reconnect sequence.
+        if self.request.path == "/_stcore/host-config" and not ready:
+            for _ in range(450):
+                if ready or self.request.connection.stream.closed():
+                    break
+                await asyncio.sleep(0.1)
+            if self.request.connection.stream.closed():
+                return
         if self.request.path == "/" and not ready:
             # Database access has a bounded budget; never wait for a provider.
             global state

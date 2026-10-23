@@ -20,6 +20,16 @@ LOG = logging.getLogger(__name__)
 READ_BUDGET_SECONDS = 0.8
 STATEMENT_TIMEOUT_MS = 500
 _read_slot = threading.Lock()
+_last_good = None
+
+
+def _retained_state(reason):
+    if _last_good is None:
+        return None
+    result = copy.deepcopy(_last_good)
+    result["_read_warning"] = reason
+    return result
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS market_state (
     id SMALLINT PRIMARY KEY CHECK (id = 1),
@@ -133,14 +143,18 @@ def load_state():
     """
     if not _read_slot.acquire(blocking=False):
         LOG.warning("Market state read unavailable: ReadBusy")
-        return None
+        return _retained_state("Database read in progress; showing saved results.")
     done = threading.Event()
     result = []
 
     def read():
+        global _last_good
         try:
             row = _execute("SELECT payload FROM market_state WHERE id = 1", fetch=True)
             if row and _valid_state(row[0]):
+                # Retain even a response that arrives after the request's budget.
+                # Assignment is atomic; returned objects are always deep copies.
+                _last_good = copy.deepcopy(row[0])
                 result.append(row[0])
             elif row:
                 LOG.warning("Market state read unavailable: InvalidPayload")
@@ -153,8 +167,9 @@ def load_state():
     threading.Thread(target=read, name="market-state-read", daemon=True).start()
     if not done.wait(READ_BUDGET_SECONDS):
         LOG.warning("Market state read unavailable: ReadTimeout")
-        return None
-    return copy.deepcopy(result[0]) if result else None
+        return _retained_state("Database response delayed; showing saved results.")
+    return copy.deepcopy(result[0]) if result else _retained_state(
+        "Database update unavailable; showing saved results.")
 
 
 def request_refresh():
