@@ -700,6 +700,9 @@ def get_paid_access(user) -> bool:
     if is_owner(user):
         return True
     identity = user_identity(user)
+    from stripe_webhook import subscription_access
+    if subscription_access(identity):
+        return True
     plan = get_plan()
     if not plan.get("livemode"):
         return False

@@ -39,3 +39,23 @@ checkout readiness.
 Do not disable Managed Payments, even per-session, or edit product tax settings
 without permission. Preserve Stripe's tax calculation when validating totals;
 base price and final charge can differ because of tax.
+
+Preserve verified one-time purchasers when adding subscription support.
+Subscription cancellation removes the subscription entitlement, not an
+independent permanent purchase or owner access.
+
+**Why:** The user is changing payment arrangements; adding webhooks is not
+permission to take away purchases made under the previous offer.
+
+**How to apply:** Keep entitlement sources independent, and require a verified
+app checkout to link a subscription to an authenticated account. Never link
+accounts by email alone.
+
+Convert Stripe SDK resources explicitly to plain dictionaries before storing
+or manipulating nested payloads.
+
+**Why:** The installed SDK rejects `dict(event)` with TypeError despite older
+Stripe examples treating resources as mappings.
+
+**How to apply:** Use the SDK's `to_dict()` at provider boundaries; test signature
+verification with actual SDK event objects rather than only mocked dictionaries.

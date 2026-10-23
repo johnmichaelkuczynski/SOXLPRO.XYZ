@@ -169,12 +169,14 @@ class Socket(tornado.websocket.WebSocketHandler):
 
 async def run(port):
     global ready, state
+    from stripe_webhook import StripeWebhook
     application = tornado.web.Application([
+        (r"/api/stripe/webhook", StripeWebhook),
         (r"/(_stcore/stream)", Socket), (r"/(.*)", Gateway)
     ], websocket_max_message_size=200 * 1024 * 1024)
     application.listen(port, address="0.0.0.0")
     print(f"SOXL public listener ready on {port}", flush=True)
-    scripts = ["streamlit_backend.py"]
+    scripts = ["streamlit_backend.py", "stripe_webhook.py"]
     if os.environ.get("SOXL_DISABLE_WORKER") != "1":
         scripts += ["market_state_worker.py", "benchmark_quotes.py"]
     processes = [subprocess.Popen([sys.executable, script]) for script in scripts]
