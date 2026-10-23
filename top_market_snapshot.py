@@ -44,9 +44,6 @@ def _price_at_or_before(closes, target):
 
 
 def compute_market_snapshot(price_data, quote=None):
-    if quote and quote.get("error"):
-        return {"current_price": None, "price_context": "Polygon quote unavailable",
-                "error": quote["error"]}
     closes = _clean_closes(price_data)
     if closes.empty:
         return None
@@ -135,20 +132,12 @@ def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=N
     if saved is not None:
         from market_state_store import load_state
         saved = load_state() or saved
-        from live_market_quote import polygon_only
-        quote = polygon_only(saved.get("quote"))
-        if quote.get("error"):
-            st.error("SOXL current price unavailable — " + quote["error"])
-            return
     if refresh_quotes:
         from live_market_quote import fetch_live_quote
         quote = fetch_live_quote()
     snapshot = saved["snapshot"] if saved else compute_market_snapshot(price_data, quote=quote)
     if snapshot is None:
         st.warning("Current SOXL market statistics are unavailable.")
-        return
-    if snapshot.get("error"):
-        st.error("SOXL current price unavailable — " + snapshot["error"])
         return
 
     return_cards = "".join(
@@ -215,4 +204,11 @@ def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=N
         </div>
         """
     st.markdown(html.replace("\n", ""), unsafe_allow_html=True)
-    st.caption("Polygon last trade, checked every minute. Observation time is Eastern Time; quotes may be delayed by your data subscription.")
+    if refresh_quotes:
+        warning = (quote or {}).get("feed_warning")
+        st.caption(
+            (f"{warning}. " if warning else "")
+            + ("Quote feeds unavailable; showing historical close. " if not quote else "")
+            + "Quotes checked every minute. Robinhood overnight quotes are best-effort; "
+            "continuous 8 p.m.–4 a.m. coverage is not guaranteed."
+        )

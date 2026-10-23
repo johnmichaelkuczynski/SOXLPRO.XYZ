@@ -65,8 +65,6 @@ def fetch_chart_market_feed():
     from benchmark_quotes import read_quotes
     saved = load_state()
     payload = dict(saved.get("market_feed", {})) if saved else {"points": [], "error": "Background refresh pending"}
-    from live_market_quote import polygon_only
-    payload["quote"] = polygon_only(saved.get("quote") if saved else None)
     payload["benchmark_quotes"] = read_quotes(st.session_state.get("custom_benchmark"))
     return payload
 

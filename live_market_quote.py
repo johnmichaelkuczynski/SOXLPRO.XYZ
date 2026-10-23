@@ -1,93 +1,94 @@
-"""Polygon last-trade quotes. Errors are data, never an alternate price."""
-import os
+"""Timestamped public quotes; an overnight observation is not a continuous feed."""
 from datetime import datetime, timezone
 from math import isfinite
 from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
+import yfinance as yf
 
 ET = ZoneInfo("America/New_York")
-ENDPOINT = "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/"
 
 
-def quote_error(message, now=None):
+def select_quote(yahoo, robinhood, now=None):
     now = now or datetime.now(timezone.utc)
-    return {"source": "Polygon", "error": str(message), "price": None,
-            "checked_at": now.isoformat()}
+    candidates = []
 
-
-def parse_polygon_quote(data, now=None):
-    now = now or datetime.now(timezone.utc)
-    if not isinstance(data, dict):
-        return quote_error("Polygon returned an invalid response.", now)
-    if data.get("error") or str(data.get("status", "")).upper() in ("ERROR", "NOT_AUTHORIZED"):
-        return quote_error(data.get("error") or data.get("message") or data["status"], now)
-    ticker = data.get("ticker") or {}
-    trade = ticker.get("lastTrade")
-    if not isinstance(trade, dict) or not trade:
-        return quote_error(data.get("message") or "Polygon returned no lastTrade.", now)
-    try:
-        price = float(trade["p"])
-        # Polygon lastTrade.t is Unix nanoseconds, NOT seconds/milliseconds.
-        timestamp = int(trade["t"])
-        observed = datetime.fromtimestamp(timestamp / 1_000_000_000, timezone.utc)
-        if not isfinite(price) or price <= 0 or timestamp < 1_000_000_000_000_000_000:
-            raise ValueError()
-        if (observed - now).total_seconds() > 60:
-            raise ValueError()
-    except (KeyError, TypeError, ValueError, OverflowError, OSError):
-        return quote_error("Polygon returned invalid lastTrade.p or lastTrade.t.", now)
-    minutes = observed.astimezone(ET).hour * 60 + observed.astimezone(ET).minute
-    state, session = (("PRE", "Pre-market") if minutes < 570 else
-                      ("REGULAR", "Regular") if minutes < 960 else
-                      ("POST", "After-hours"))
-    previous = (ticker.get("prevDay") or {}).get("c")
-    try:
-        previous = float(previous)
-        if not isfinite(previous) or previous <= 0:
-            previous = None
-    except (ValueError, TypeError):
-        previous = None
-    return {"source": "Polygon", "price": price, "error": None,
-            "observed_at": observed.isoformat(),
-            "observed_label": observed.astimezone(ET).strftime("%b %d, %Y %I:%M:%S %p ET"),
-            "state": state, "session": session, "extended": state != "REGULAR",
-            "prev_close": previous, "stale": (now-observed).total_seconds() > 900,
-            "checked_at": now.isoformat()}
-
-
-def fetch_polygon_quote(symbol="SOXL"):
-    key = os.environ.get("POLYGON_API_KEY")
-    if not key:
-        return quote_error("POLYGON_API_KEY is not configured.")
-    try:
-        response = requests.get(ENDPOINT + symbol, params={"apiKey": key}, timeout=10)
+    def add(price, timestamp, state, source, previous=None):
         try:
-            data = response.json()
-        except ValueError:
-            return quote_error("Polygon HTTP %s: %s" %
-                               (response.status_code, response.text[:1000].replace(key, "[redacted]")))
-        if not response.ok:
-            detail = data.get("error") or data.get("message") or data.get("status") if isinstance(data, dict) else str(data)
-            return quote_error(("Polygon HTTP %s: %s" %
-                                (response.status_code, detail or "Request failed")).replace(key, "[redacted]"))
-        quote = parse_polygon_quote(data)
-        if quote.get("error"):
-            quote["error"] = quote["error"].replace(key, "[redacted]")
-        return quote
-    except requests.RequestException as exc:
-        # Request exception strings can contain the URL (and its API key).
-        return quote_error("Polygon request failed: " + type(exc).__name__)
+            price = float(price)
+            if isinstance(timestamp, (float, int)):
+                observed = datetime.fromtimestamp(timestamp, timezone.utc)
+            elif isinstance(timestamp, str):
+                observed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            else:
+                return
+            if observed.tzinfo is None or not isfinite(price) or price <= 0:
+                return
+            if (observed - now).total_seconds() > 60:
+                return
+            try:
+                previous = float(previous)
+                if not isfinite(previous) or previous <= 0:
+                    previous = None
+            except (ValueError, TypeError):
+                previous = None
+            if state is None:
+                local = observed.astimezone(ET)
+                minutes = local.hour * 60 + local.minute
+                state = ("OVERNIGHT" if minutes >= 1200 or minutes < 240 else
+                         "PRE" if minutes < 570 else
+                         "POST" if minutes >= 960 else "NONREGULAR")
+            candidates.append(dict(price=price, observed_at=observed.isoformat(),
+                                   state=state, source=source, prev_close=previous,
+                                   extended=state != "REGULAR"))
+        except (ValueError, TypeError, OverflowError, OSError):
+            return
 
-
-def polygon_only(quote):
-    """Do not display legacy DB quotes during the first refresh after rollout."""
-    if not isinstance(quote, dict) or quote.get("source") != "Polygon":
-        return quote_error("Awaiting Polygon last trade; no substitute price is displayed.")
-    return quote
+    add(yahoo.get("regularMarketPrice"), yahoo.get("regularMarketTime"),
+        "REGULAR", "Yahoo Finance", yahoo.get("regularMarketPreviousClose"))
+    add(yahoo.get("preMarketPrice"), yahoo.get("preMarketTime"), "PRE", "Yahoo Finance")
+    add(yahoo.get("postMarketPrice"), yahoo.get("postMarketTime"), "POST", "Yahoo Finance")
+    add(robinhood.get("last_trade_price"), robinhood.get("venue_last_trade_time"),
+        "REGULAR", "Robinhood", robinhood.get("previous_close"))
+    add(robinhood.get("last_non_reg_trade_price"),
+        robinhood.get("venue_last_non_reg_trade_time"), None, "Robinhood")
+    if not candidates:
+        return None
+    result = max(candidates, key=lambda q: datetime.fromisoformat(q["observed_at"])).copy()
+    observed = datetime.fromisoformat(result["observed_at"])
+    if result["extended"]:
+        regular = [q for q in candidates if not q["extended"]
+                   and datetime.fromisoformat(q["observed_at"]) <= observed]
+        if regular:
+            result["prev_close"] = max(
+                regular, key=lambda q: datetime.fromisoformat(q["observed_at"]))["price"]
+    result["session"] = {"REGULAR": "Regular session", "PRE": "Pre-market",
+                         "POST": "After-hours", "OVERNIGHT": "Overnight",
+                         "NONREGULAR": "Non-regular session"}[result["state"]]
+    result["stale"] = (now - observed).total_seconds() > 900
+    result["observed_label"] = observed.astimezone(ET).strftime("%b %d, %Y %I:%M:%S %p ET")
+    result["checked_at"] = now.isoformat()
+    return result
 
 
 @st.cache_data(ttl=50, show_spinner=False)
 def fetch_live_quote():
-    return fetch_polygon_quote("SOXL")
+    errors = []
+    try:
+        yahoo = yf.Ticker("SOXL").info
+    except Exception:
+        yahoo = {}
+        errors.append("Yahoo Finance unavailable")
+    try:
+        response = requests.get("https://api.robinhood.com/quotes/",
+                                params={"symbols": "SOXL"}, timeout=8)
+        response.raise_for_status()
+        robinhood = response.json()["results"][0] or {}
+    except Exception:
+        robinhood = {}
+        errors.append("Robinhood quote unavailable")
+    quote = select_quote(yahoo, robinhood)
+    if quote:
+        quote["feed_warning"] = "; ".join(errors)
+    return quote

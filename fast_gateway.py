@@ -22,11 +22,6 @@ def saved_page(value):
         content = "<h1>SOXL Analysis</h1><p>Saved market data is temporarily unavailable. Background refresh is running.</p>"
     else:
         snapshot = value["snapshot"]
-        saved_quote = value.get("quote") or {}
-        error = (saved_quote.get("error") if saved_quote.get("source") == "Polygon"
-                 else "Awaiting Polygon last trade; no substitute price is displayed.")
-        if error:
-            snapshot = {"price_context": "SOXL current price unavailable — " + error}
         signal = value["signal"]
         quote = snapshot.get("current_price")
         content = (

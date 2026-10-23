@@ -127,7 +127,7 @@ class WorkerTests(unittest.TestCase):
         self.assertIsInstance(result["readings"], list)
         json.dumps(result, allow_nan=False)
 
-    def test_failed_quote_clears_price_while_historical_feed_is_retained(self):
+    def test_failed_feeds_keep_last_good_and_mark_stale(self):
         previous = payload()
         previous["quote"] = {
             "price": 21.5, "observed_at": "2026-01-05T18:00:00+00:00", "source": "Yahoo Finance",
@@ -139,10 +139,8 @@ class WorkerTests(unittest.TestCase):
              patch.object(worker, "refresh_snapshot", side_effect=ValueError("secret URL")):
             updated = worker.recompute(previous, refresh_history=False)
         self.assertEqual(previous, before)
-        self.assertIsNone(updated["quote"]["price"])
-        self.assertEqual(updated["quote"]["source"], "Polygon")
-        self.assertIn("Polygon refresh failed", updated["quote"]["error"])
-        self.assertEqual(updated["market_feed"]["quote"], updated["quote"])
+        self.assertEqual(updated["quote"]["price"], 21.5)
+        self.assertTrue(updated["quote"]["stale"])
         self.assertEqual(updated["market_feed"]["points"], before["market_feed"]["points"])
         self.assertEqual(updated["snapshot"]["current_price"], 21.0)
         self.assertTrue(updated["status"]["stale"])
