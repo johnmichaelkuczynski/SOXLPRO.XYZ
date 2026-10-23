@@ -272,6 +272,7 @@
   <div id="axisAreaOutput" hidden style="white-space:pre-line;font-size:12px;line-height:1.5;padding:8px;background:#fffbeb;color:#78350f;border-radius:6px;"></div>
   <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
+  <button class="tbtn" onclick="openRotationView()">Rotate Graph / Fit Screen</button>
   <button class="tbtn" id="tiltBtn" aria-pressed="false" onclick="setMode(currentMode === 'tilt' ? 'pan' : 'tilt')" title="Drag upward to steepen the chart, downward to flatten it. Only the display scale changes; prices and projections stay unchanged.">Adjust Inclination</button>
   <span class="scale-group" role="group" aria-label="Price scale">
     <button class="tbtn active" id="logScaleBtn" aria-pressed="true" onclick="setScale('log')">Log Scale</button>
@@ -332,6 +333,18 @@
   <div id="benchmark-price-cards" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px"></div>
   <small>Refreshes every minute. Quotes may be delayed; observation times are shown. Chart overlays are scaled for comparison; these are actual, unscaled values.</small>
 </section>
+<div id="inclination-bar" style="position:relative;z-index:400;background:#edf3fa;border:1px solid #cad7e5;border-radius:7px;padding:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <label for="inclination-slider"><strong>Chart incline</strong> — Flatter</label>
+  <input id="inclination-slider" aria-label="Chart incline: flatter to steeper"
+    type="range" min="20" max="180" value="100" step="5"
+    style="flex:1;min-width:150px;max-width:500px;cursor:ew-resize"
+    onpointerdown="captureInclinationBase()" onkeydown="captureInclinationBase()"
+    oninput="applyInclinationSlider(this.value)">
+  <span>Steeper</span>
+  <output id="inclination-value" for="inclination-slider">100%</output>
+  <button class="tbtn" onclick="resetView()">Reset View</button>
+  <small style="width:100%">Changes the live chart’s visual slope only. Prices, dates, trendlines and projection popups remain unchanged.</small>
+</div>
 <div id="chart-scroll">
   <div id="chart-container">
     <div id="chart"></div>
@@ -1199,6 +1212,7 @@ function soxlYAxisRange() {
 }
 
 function fitSoxlPrices(event) {
+  resetInclinationSlider();
   if (event) {
     event.preventDefault();
     event.stopPropagation();
@@ -1213,6 +1227,7 @@ function fitSoxlPrices(event) {
 }
 
 function setScale(mode) {
+  resetInclinationSlider();
   if (mode !== 'log' && mode !== 'linear') return;
   scaleMode = mode;
   var logBtn = document.getElementById('logScaleBtn');
@@ -1253,6 +1268,7 @@ window.addEventListener('resize', function() {
 });
 
 function resetView() {
+  resetInclinationSlider();
   if (!chartData) return;
   selecting = false;
   selectedRange = null;
@@ -2409,6 +2425,36 @@ function renderLineList() {
   }
   el.innerHTML = html;
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+</script>
+<script src="rotation_view.js"></script>
+<script>
+var sliderInclinationBase = null;
+function resetInclinationSlider() {
+  sliderInclinationBase = null;
+  document.getElementById('inclination-slider').value = 100;
+  document.getElementById('inclination-value').textContent = '100%';
+}
+function captureInclinationBase() {
+  if (!chartDiv._fullLayout) return;
+  var range = chartDiv._fullLayout.yaxis.range;
+  var value = Number(document.getElementById('inclination-slider').value);
+  sliderInclinationBase = {
+    middle: (Number(range[0]) + Number(range[1])) / 2,
+    span: (Number(range[1]) - Number(range[0])) * value / 100
+  };
+}
+function applyInclinationSlider(value) {
+  if (!sliderInclinationBase) {
+    var range = chartDiv._fullLayout.yaxis.range;
+    sliderInclinationBase = {middle:(Number(range[0])+Number(range[1]))/2,
+      span:Number(range[1])-Number(range[0])};
+  }
+  var half = sliderInclinationBase.span * 100 / Number(value) / 2;
+  document.getElementById('inclination-value').textContent = value + '%';
+  Plotly.relayout(chartDiv, {'yaxis.range':[
+    sliderInclinationBase.middle-half, sliderInclinationBase.middle+half],
+    'yaxis.autorange':false});
 }
 </script>
 </body>

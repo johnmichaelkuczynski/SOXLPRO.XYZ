@@ -21,15 +21,25 @@ position. Erase, extend, undo, and double-click erase must preserve them too.
 ranges when a new line triggers a rerender, destroys the view the user prepared
 before drawing.
 
-**Inclination decision:** Adjust displayed slopes through the chart's axis scale,
-not CSS rotation of the Plotly SVG or the entire page.
+**Rotation requirement:** The user explicitly wants actual press-and-drag graph
+rotation and to see the whole graph without shrinking the browser page. Changing
+axis scale is not a substitute; they repeated this after the inclination control.
 
-**Why:** Plotly's native pointer mapping assumes unrotated axes. A visual-only
-rotation would misalign drawing and projection hover targets. Keep dates readable
-and the underlying prices and trendlines unchanged.
+**Why:** The user cannot see the whole graph in the available viewport.
 
-**How to apply:** Inclination adjustment must remain an explicit, separate gesture
-mode; Reset View returns to the original scale and pan mode.
+**How to apply:** Preserve actual rotation as a separate fitted viewing mode.
+Its current snapshot limitation must be disclosed: live projection hover and
+drawing remain in the unrotated interactive chart, because Plotly's native
+pointer mapping assumes unrotated axes. Do not present scaling as rotation.
+
+**Live incline accessibility:** Also keep a direct Flatter–Steeper adjustment
+above the live chart, outside the floating controls.
+
+**Why:** The user reiterated that moderating the overly steep graph must be easy;
+a separate snapshot or hard-to-find mode does not address that interaction.
+
+**How to apply:** Keep prices, dates, hover projections and lines intact while
+adjusting display scale; don't require browser zoom or panel manipulation.
 
 **Implementation constraint:** Do not rely only on Plotly `uirevision` for line
 operations. Capture the live axis ranges and chart scroll offsets before a
