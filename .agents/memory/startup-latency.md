@@ -47,3 +47,15 @@ remained blank with delta-path errors and disconnected-session messages.
 **How to apply:** A fresh screenshot does not prove an existing tab recovered.
 Distinguish server readiness from that tab's state and give an explicit fresh
 session link when its previously loaded frontend cannot receive the fix.
+
+Gateway shortcuts must preserve Streamlit's XSRF cookie bootstrap, even for GET
+pages and health responses.
+
+**Why:** Streamlit silently ignores an otherwise valid login cookie when the
+WebSocket's XSRF token is missing. A custom HTML root plus an intercepted health
+response left real browsers without the token, making completed Google logins
+appear signed out.
+
+**How to apply:** Retain the backend health response once ready, and issue the
+framework's XSRF cookie from any custom entry document. Verify token presence in
+a fresh browser and validation by Streamlit; never disable XSRF as a workaround.

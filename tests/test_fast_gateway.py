@@ -47,6 +47,17 @@ class GatewayTests(AsyncHTTPTestCase):
         self.assertEqual(result.code, 304)
         self.assertEqual(result.body, b"")
 
+    def test_ready_health_preserves_backend_cookies(self):
+        result = self.fetch("/_stcore/health")
+        self.assertEqual(result.code, 200)
+        self.assertEqual(len(result.headers.get_list("Set-Cookie")), 2)
+
+    def test_boot_health_remains_fast(self):
+        fast_gateway.ready = False
+        result = self.fetch("/_stcore/health")
+        self.assertEqual(result.code, 200)
+        self.assertEqual(result.body, b"ok")
+
     def test_reconnecting_tab_waits_for_backend(self):
         fast_gateway.ready = False
         self.io_loop.call_later(0.2, lambda: setattr(fast_gateway, "ready", True))

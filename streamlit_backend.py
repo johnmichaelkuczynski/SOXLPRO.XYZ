@@ -23,6 +23,10 @@ class PublicDocumentHandler(RequestHandler):
         self.production = production
 
     def get(self):
+        if self.request.path == "/" and self.settings.get("xsrf_cookies"):
+            # Streamlit requires this browser-readable token alongside its signed
+            # identity cookie when opening the authenticated WebSocket.
+            _ = self.xsrf_token
         self.set_header("Content-Type", self.content_type)
         self.set_header("Cache-Control", "no-cache")
         self.set_header("X-Content-Type-Options", "nosniff")

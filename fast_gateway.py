@@ -71,7 +71,7 @@ class Gateway(tornado.web.RequestHandler):
             self.set_status(200 if ready else 503)
             self.finish("ready" if ready else "starting")
             return
-        if self.request.path == "/_stcore/health":
+        if self.request.path == "/_stcore/health" and not ready:
             self.finish("ok")
             return
         # Existing preview tabs request this while Streamlit restarts. An
