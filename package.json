@@ -4,7 +4,8 @@
   "description": "**Quantitative Analysis, Probability Engine, and AI Strategy Builder for SOXL (3× Semiconductor ETF)**",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:chart-session": "node tests/chart_session_recovery.cjs"
   },
   "keywords": [],
   "author": "",
