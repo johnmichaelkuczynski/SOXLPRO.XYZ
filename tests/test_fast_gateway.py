@@ -65,6 +65,40 @@ class GatewayTests(AsyncHTTPTestCase):
         self.assertEqual(result.code, 200)
         self.assertIn(b"ready", result.body)
 
+    def test_cached_fallback_rechecks_database_and_labels_retained_results(self):
+        from datetime import datetime, timezone
+        import market_state_store as store
+        from test_market_state import payload
+        saved = payload()
+        saved["quote"] = {"price": 21, "observed_at": datetime.now(timezone.utc).isoformat()}
+        with patch.object(fast_gateway, "ready", False), \
+                patch.object(fast_gateway, "state", None), \
+                patch.object(store, "_last_good", None), \
+                patch.object(store, "_execute", side_effect=[
+                    (saved,), None,
+                    store.StateStoreError("OperationalError"),
+                    store.StateStoreError("OperationalError"),
+                ]) as execute:
+            first = self.fetch("/")
+            second = self.fetch("/")
+        self.assertIn(b"Current timestamped observation", first.body)
+        self.assertIn(b"Retained saved results", second.body)
+        self.assertIn(b"Database read: Failed", second.body)
+        self.assertNotIn(b"Current timestamped observation", second.body)
+        self.assertEqual(execute.call_count, 4)
+
+    def test_cached_fallback_displays_newly_read_snapshot(self):
+        import market_state_store as store
+        from test_market_state import payload
+        old, new = payload(), payload()
+        new["computed_at"] = "2026-01-06T18:00:00+00:00"
+        with patch.object(fast_gateway, "ready", False), \
+                patch.object(fast_gateway, "state", old), \
+                patch.object(store, "_execute", side_effect=[(new,), None]):
+            page = self.fetch("/").body.decode()
+        self.assertIn("Saved results computed at " + new["computed_at"], page)
+        self.assertIn("Displayed analysis snapshot: " + new["computed_at"], page)
+
 
 if __name__ == "__main__":
     unittest.main()

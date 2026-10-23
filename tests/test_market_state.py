@@ -231,9 +231,12 @@ class WorkerTests(unittest.TestCase):
                  patch.object(worker, "ensure_schema"), \
                  patch.object(worker, "load_state", return_value=previous), \
                  patch.object(worker, "recompute", return_value=None), \
+                 patch.object(worker, "save_worker_health") as heartbeat, \
                  patch.object(worker, "save_state") as save:
                 self.assertEqual(worker.run(once=True), expected)
                 save.assert_not_called()
+                self.assertEqual([c.args[0] for c in heartbeat.call_args_list],
+                                 ["updating", "update_failed"])
 
 
 if __name__ == "__main__":

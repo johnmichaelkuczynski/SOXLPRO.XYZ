@@ -19,7 +19,7 @@ ready = False
 
 def saved_page(value):
     if not value:
-        content = "<h1>SOXL Analysis</h1><p>Saved market data is temporarily unavailable. Background refresh is running.</p>"
+        content = "<h1>SOXL Analysis</h1><p>Saved market data is temporarily unavailable. Background-update health is shown below.</p>"
     else:
         snapshot = value["snapshot"]
         signal = value["signal"]
@@ -44,6 +44,9 @@ def saved_page(value):
             html.escape(value["computed_at"]) + ". Close through " +
             html.escape(signal["close_date"]) + ".</p>"
         )
+    from market_health import diagnostics_html
+    from market_state_store import read_health
+    content += diagnostics_html(value, read_health())
     return ("<!doctype html><html><head><meta charset='utf-8'><title>SOXL Analysis</title>"
             "<style>body{background:#f0f4fa;color:#172033;font:16px system-ui;padding:5%;}"
             "section{background:white;border:1px solid #ddd;border-radius:14px;padding:24px;margin:12px 0}"
@@ -86,14 +89,14 @@ class Gateway(tornado.web.RequestHandler):
         if self.request.path == "/" and not ready:
             # Database access has a bounded budget; never wait for a provider.
             global state
-            if state is None:
-                try:
-                    from market_state_store import load_state
-                    state = await asyncio.wait_for(asyncio.to_thread(load_state), .8)
-                except Exception:
-                    pass
+            # Recheck on every fallback request, even when a snapshot is cached.
+            # load_state owns the bounded read and records failures independently.
+            from market_state_store import load_state
+            state = await asyncio.to_thread(load_state) or state
             self.set_header("Content-Type", "text/html; charset=utf-8")
             self.set_header("Cache-Control", "no-store")
+            from market_state_store import read_health
+            await asyncio.to_thread(read_health, refresh=True)
             self.finish(saved_page(state))
             return
         headers = self.request.headers.copy()

@@ -186,6 +186,8 @@ def _wait_for_saved_market():
         st.session_state["_market_state"] = recovered
         st.rerun(scope="app")
     st.info("Saved market data is temporarily unavailable. Automatically retrying every 3 seconds.")
+    from market_health import render_diagnostics
+    render_diagnostics(None)
 
 
 try:
@@ -210,6 +212,16 @@ except Exception:
     quote = None
 
 st.caption("Saved market results · computed " + saved_market["computed_at"])
+
+
+@st.fragment(run_every="30s")
+def _background_update_diagnostics(saved):
+    from market_health import render_diagnostics
+    from market_state_store import load_state
+    render_diagnostics(saved, latest=load_state())
+
+
+_background_update_diagnostics(saved_market)
 if saved_market.get("_read_warning"):
     st.warning(saved_market["_read_warning"] + " Observation times remain unchanged.")
 render_market_snapshot(data, quote=quote, saved=saved_market)

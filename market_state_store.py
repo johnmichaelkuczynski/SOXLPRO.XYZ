@@ -12,7 +12,7 @@ import json
 import logging
 import math
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 
 from db import get_conn
 
@@ -21,6 +21,48 @@ READ_BUDGET_SECONDS = 0.8
 STATEMENT_TIMEOUT_MS = 500
 _read_slot = threading.Lock()
 _last_good = None
+_read_health = {"status": "not_checked"}
+_worker_health = None
+_worker_read_status = "not_checked"
+_health_slot = threading.Lock()
+
+
+def read_health(*, refresh=False):
+    """Last database-read evidence in this process; never a worker liveness probe."""
+    if refresh:
+        _refresh_worker_health()
+    return copy.deepcopy({**_read_health, "worker": _worker_health,
+                          "worker_read_status": _worker_read_status})
+
+
+def _refresh_worker_health():
+    """Optional, independently bounded read; never gates saved market results."""
+    global _worker_read_status
+    if not _health_slot.acquire(blocking=False):
+        _worker_read_status = "busy"
+        return
+    done = threading.Event()
+
+    def read():
+        global _worker_health, _worker_read_status
+        try:
+            row = _execute("SELECT payload FROM market_worker_health WHERE id = 1", fetch=True)
+            _worker_health = row[0] if row else None
+            _worker_read_status = "ok"
+        except StateStoreError:
+            _worker_read_status = "failed"
+        finally:
+            _health_slot.release()
+            done.set()
+
+    threading.Thread(target=read, name="market-health-read", daemon=True).start()
+    if not done.wait(READ_BUDGET_SECONDS):
+        _worker_read_status = "timeout"
+
+
+def _record_read(status):
+    global _read_health
+    _read_health = {"status": status, "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
 def _retained_state(reason):
@@ -117,6 +159,25 @@ def _execute(sql, params=None, *, fetch=False, timeout_ms=STATEMENT_TIMEOUT_MS):
 def ensure_schema():
     """Explicit worker/setup operation; never called by load_state/save_state."""
     _execute(_SCHEMA, timeout_ms=3000)
+    try:
+        _execute("""
+            CREATE TABLE IF NOT EXISTS market_worker_health (
+                id SMALLINT PRIMARY KEY CHECK (id = 1),
+                payload JSONB NOT NULL
+            )
+        """, timeout_ms=3000)
+    except StateStoreError:
+        LOG.warning("Optional worker-health schema unavailable; market updates will continue.")
+
+
+def save_worker_health(phase):
+    """Worker-only heartbeat, independent of successful market downloads."""
+    _execute(
+        "INSERT INTO market_worker_health (id, payload) VALUES (1, %s::jsonb) "
+        "ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload",
+        (json.dumps({"heartbeat_at": datetime.now(timezone.utc).isoformat(),
+                     "phase": phase}),), timeout_ms=3000,
+    )
 
 
 def save_state(payload):
@@ -142,6 +203,7 @@ def load_state():
     attempt to create schema. Only one bounded database read can be in flight.
     """
     if not _read_slot.acquire(blocking=False):
+        _record_read("busy")
         LOG.warning("Market state read unavailable: ReadBusy")
         return _retained_state("Database read in progress; showing saved results.")
     done = threading.Event()
@@ -156,9 +218,14 @@ def load_state():
                 # Assignment is atomic; returned objects are always deep copies.
                 _last_good = copy.deepcopy(row[0])
                 result.append(row[0])
-            elif row:
+                _record_read("ok")
+            elif row and row[0] is not None:
+                _record_read("invalid_payload")
                 LOG.warning("Market state read unavailable: InvalidPayload")
+            else:
+                _record_read("empty")
         except StateStoreError as exc:
+            _record_read("failed")
             LOG.warning("Market state read unavailable: %s", exc)
         finally:
             _read_slot.release()
@@ -166,6 +233,7 @@ def load_state():
 
     threading.Thread(target=read, name="market-state-read", daemon=True).start()
     if not done.wait(READ_BUDGET_SECONDS):
+        _record_read("timeout")
         LOG.warning("Market state read unavailable: ReadTimeout")
         return _retained_state("Database response delayed; showing saved results.")
     return copy.deepcopy(result[0]) if result else _retained_state(

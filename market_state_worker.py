@@ -16,7 +16,9 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from db import get_conn
-from market_state_store import ensure_schema, load_state, save_state, _valid_state
+from market_state_store import (
+    ensure_schema, load_state, save_state, save_worker_health, StateStoreError, _valid_state,
+)
 
 LOG = logging.getLogger(__name__)
 LOCK_ID = 736_853_001
@@ -150,7 +152,7 @@ def _component(state, name, operation, usable, now, *, timeout=PROVIDER_TIMEOUT)
             raise ProviderUnavailable()
         state[name] = _jsonable(value)
         status[name] = {
-            "last_success_at": now, "last_attempt_at": now, "stale": False,
+            "last_success_at": _now(), "last_attempt_at": now, "stale": False,
         }
         return True
     except Exception as exc:
@@ -172,6 +174,7 @@ def recompute(previous=None, *, refresh_history=True):
         "market_feed": {"points": [], "error": "Market feed unavailable"},
         "snapshot": None, "signal": {}, "overlays": {},
     }
+    state.pop("_read_warning", None)
     state["status"] = {
         **state.get("status", {}),
         "source": "background-worker",
@@ -265,6 +268,13 @@ def _check_lock_connection(conn):
         cur.fetchone()
 
 
+def _heartbeat(phase):
+    try:
+        save_worker_health(phase)
+    except StateStoreError:
+        LOG.warning("Worker heartbeat could not be saved; market updates will continue.")
+
+
 def run(*, once=False):
     try:
         with worker_lock() as lock_conn:
@@ -275,6 +285,8 @@ def run(*, once=False):
             state = load_state()
             next_history = 0.0
             while True:
+                _check_lock_connection(lock_conn)
+                _heartbeat("updating")
                 started = time.monotonic()
                 history_due = started >= next_history
                 updated = recompute(state, refresh_history=history_due)
@@ -282,6 +294,10 @@ def run(*, once=False):
                 if updated is not None:
                     save_state(updated)
                     state = updated
+                _heartbeat(
+                    "update_failed" if updated is None else
+                    "partial_failure" if updated["status"].get("stale") else "idle"
+                )
                 if once:
                     LOG.info("Market worker usable_state=%s", state is not None)
                     return 0 if state is not None else 1
