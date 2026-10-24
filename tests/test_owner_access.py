@@ -67,7 +67,9 @@ def test_owner_does_not_grant_access_to_next_user():
     with patch.object(auth, "get_current_user", return_value=other):
         assert not access.has_unlimited_credits()
     assert access.access_tier(other, paid_verified=False, preview=False) == access.SIGNED_IN
-    assert not access.has_paid_access(other, paid_verified=False, preview=False)
+    # Public features are open, but this user still has no owner privileges.
+    assert access.has_paid_access(other, paid_verified=False, preview=False)
+    assert not auth.is_owner(other)
     assert access.has_paid_access(other, paid_verified=True, preview=False)
     assert access.access_tier({"is_logged_in": False}, preview=False) == access.GUEST
 

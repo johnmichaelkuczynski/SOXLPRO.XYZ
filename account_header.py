@@ -145,23 +145,12 @@ def _handle_checkout_return():
 
 def render_account_header():
     flush_analytics()
-    _handle_checkout_return()
-    paid = False
-    st.session_state["_paid_access_verified"] = False
-    try:
-        paid = paid_access_for_current_user()
-        st.session_state["_paid_access_verified"] = paid
-    except Exception as exc:
-        _billing_failure("access-check", exc)
-        st.info("Purchase status is temporarily unavailable. If you have paid, please refresh before trying to buy again.")
-    user = get_current_user()
-    if user.get("is_logged_in") and not is_development_preview():
-        track_event("signed_in_session", {"tier": "paid" if paid else "signed_in"},
-                    once_key=user.get("sub", "signed-in"))
+    # Public investor access: do not require identity, query billing, or launch
+    # checkout from legacy query parameters. Existing purchase records remain.
     logo = Path("attached_assets/zhi_logoc_1787826573212.png")
     logo_uri = "data:image/png;base64," + base64.b64encode(logo.read_bytes()).decode("ascii")
     with st.container(key="account_header"):
-        title, login, buy, contact, refresh = st.columns([3.3, 1.65, 0.8, 1.15, 0.85])
+        title, contact, refresh = st.columns([5.75, 1.15, 0.85])
         with title:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:12px;min-height:44px;">'
@@ -172,18 +161,6 @@ def render_account_header():
                 f'SOXL Analysis</h1></div>',
                 unsafe_allow_html=True,
             )
-        with login:
-            render_google_login()
-        with buy:
-            if is_owner(user):
-                st.button("Owner", key="owner_access_active", disabled=True,
-                          help="Permanent highest-tier access with unlimited app credits. No payment or renewal required.",
-                          width="stretch")
-            elif paid:
-                st.button("Full access", key="paid_access_active", disabled=True,
-                          help="Your payment has been verified with Stripe.", width="stretch")
-            elif st.button("Buy", key="buy_access", type="primary", width="stretch"):
-                show_purchase_options()
         with contact:
             st.link_button("Contact Us", "mailto:contact@zhisystems.ai", width="stretch")
         with refresh:
@@ -191,7 +168,4 @@ def render_account_header():
                 st.session_state.pop("_billing_access", None)
                 st.cache_data.clear()
                 st.rerun()
-    if st.query_params.get("checkout") == "buy":
-        del st.query_params["checkout"]
-        show_purchase_options()
     flush_analytics()

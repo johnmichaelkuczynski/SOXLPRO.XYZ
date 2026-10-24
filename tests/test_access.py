@@ -18,22 +18,22 @@ SIGNED_IN_USER = {"is_logged_in": True, "sub": "user-1"}
 
 
 class AccessTests(unittest.TestCase):
-    def test_guest_keeps_public_surfaces_but_not_chat_or_paid_features(self):
+    def test_guest_has_all_public_features_without_identity_upgrade(self):
         self.assertEqual(access_tier(GUEST_USER, preview=False), GUEST)
         self.assertTrue(can_access("Chart & Probabilities", GUEST_USER, preview=False))
         self.assertTrue(can_access("Snapshot", GUEST_USER, preview=False))
-        self.assertFalse(can_use_market_chat(GUEST_USER, preview=False))
-        self.assertFalse(
+        self.assertTrue(can_use_market_chat(GUEST_USER, preview=False))
+        self.assertTrue(
             can_access("Vol Surface", GUEST_USER, paid_verified=True, preview=False)
         )
 
-    def test_signed_in_unpaid_user_gets_chat_without_paid_features(self):
+    def test_signed_in_unpaid_user_gets_all_features(self):
         self.assertEqual(
             access_tier(SIGNED_IN_USER, paid_verified=False, preview=False),
             SIGNED_IN,
         )
         self.assertTrue(can_use_market_chat(SIGNED_IN_USER, preview=False))
-        self.assertFalse(
+        self.assertTrue(
             has_paid_access(SIGNED_IN_USER, paid_verified=False, preview=False)
         )
 
@@ -57,7 +57,7 @@ class AccessTests(unittest.TestCase):
                 )
             )
 
-    def test_preview_is_full_access_only_while_preview_user_is_signed_in(self):
+    def test_preview_access_does_not_change_guest_identity(self):
         self.assertTrue(
             has_paid_access(
                 SIGNED_IN_USER, paid_verified=False, preview=True
@@ -65,10 +65,10 @@ class AccessTests(unittest.TestCase):
         )
         self.assertEqual(access_tier(GUEST_USER, preview=True), GUEST)
 
-    def test_rendering_guard_blocks_entry_and_renders_gate(self):
+    def test_rendering_guard_never_renders_purchase_gate(self):
         purchase_dialog = lambda: None
         with patch("access.render_paid_gate") as render_gate:
-            self.assertFalse(
+            self.assertTrue(
                 require_paid_access(
                     "Backtest",
                     SIGNED_IN_USER,
@@ -77,7 +77,7 @@ class AccessTests(unittest.TestCase):
                     preview=False,
                 )
             )
-            render_gate.assert_called_once_with("Backtest", purchase_dialog)
+            render_gate.assert_not_called()
 
             render_gate.reset_mock()
             self.assertTrue(

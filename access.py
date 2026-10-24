@@ -84,10 +84,8 @@ def has_paid_access(
     paid_verified: bool | None = None,
     preview: bool | None = None,
 ) -> bool:
-    """Whether the authenticated session may enter a paid feature."""
-    return access_tier(
-        user, paid_verified=paid_verified, preview=preview
-    ) in (PAID, OWNER)
+    """All product features are public for the investor presentation."""
+    return True
 
 
 def can_use_market_chat(
@@ -96,10 +94,8 @@ def can_use_market_chat(
     paid_verified: bool | None = None,
     preview: bool | None = None,
 ) -> bool:
-    """Market chat is available to every signed-in user, not just paid users."""
-    return access_tier(
-        user, paid_verified=paid_verified, preview=preview
-    ) != GUEST
+    """Market chat is available anonymously."""
+    return True
 
 
 def can_access(
