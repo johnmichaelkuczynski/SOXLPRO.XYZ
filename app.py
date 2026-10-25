@@ -370,7 +370,12 @@ for i, (label, pct, dollar) in enumerate(period_data):
             unsafe_allow_html=True,
         )
 
-tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_area, tab_diag = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "Area Research", "🩺 Diagnostic"], on_change="rerun", key="main_tabs")
+tab_chart, tab_vol, tab_call_rr, tab_disloc, tab_strategy, tab_backtest, tab_area, tab_diag, tab_options = st.tabs(["📊 Chart & Probabilities", "🌊 Vol Surface", "Call Risk/Reward", "⚖️ SOXL-QQQ Dislocation", "🎯 Strategy Builder", "🔬 Backtest", "Area Research", "🩺 Diagnostic", "Options Projection"], on_change="rerun", key="main_tabs")
+
+with tab_options:
+    if tab_options.open:
+        from options_projection_ui import render_options_projection
+        render_options_projection(data)
 
 with tab_chart:
     overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
