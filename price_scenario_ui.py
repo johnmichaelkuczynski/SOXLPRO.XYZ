@@ -1,4 +1,4 @@
-"""Interactive historical price scenarios, separate from the daily signal."""
+"""Interactive model-based price scenarios, separate from the daily signal."""
 
 import math
 
@@ -14,7 +14,7 @@ _TIMEFRAMES = {"One month": 21, "Six months": 126, "Twelve months": 252}
 @st.cache_data(show_spinner=False)
 def _prepare_history(closes: pd.Series) -> pd.DataFrame:
     """Cache historical preparation independently of slider interactions."""
-    from price_scenario_model import prepare_history
+    from continuous_price_model import prepare_history
 
     return prepare_history(closes)
 
@@ -32,30 +32,36 @@ def _return_description(price, value):
 
 
 def _method_help():
-    with st.expander("How this historical scenario works"):
+    with st.expander("How this price model works"):
         st.markdown(
             """
-Historical dates are matched within **10 composite percentile points** of
-the selected price's composite historical-range percentile. Each historical
-date uses only the trailing ranges available at that date.
+The model regresses **forward log return** on **log entry price relative to
+the trailing 252-session geometric mean**.
 
-- Observations are non-overlapping for the selected horizon: **21, 126, or
-  252 trading sessions**.
-- Outcomes use close-to-close returns. At least **10 observations** are needed
-  before odds or price estimates are displayed.
-- The finishing-higher frequency counts positive returns. Its **95% Wilson
-  interval** describes sampling uncertainty, not a guaranteed probability range
-  for your next trade.
-- The estimated range uses the **10th and 90th return percentiles**, not
-  absolute minimum and maximum outcomes. Losses can exceed the displayed range.
-- Conditional upside is the median return among positive outcomes only; it
-  excludes losses and is not the overall expected return.
+- Training uses nonoverlapping, completed historical periods for the selected
+  horizon: **21, 126, or 252 trading sessions**. At least **8 training periods**
+  are required globally for that horizon, not separately at each entry price.
+- A **Student-t prediction** includes residual and coefficient uncertainty.
+  The probability of finishing higher is a model estimate, not an observed
+  historical frequency.
+- The **approximate 95% parameter-uncertainty interval** describes uncertainty
+  in the estimated probability under the model assumptions. It is not a
+  prediction interval for the next trade's outcome.
+- The **80% model prediction range** spans the model's 10th–90th percentiles,
+  not absolute minimum and maximum outcomes. Losses can exceed this range.
+- Conditional upside is the median among **modeled gains** only; it excludes
+  losing and flat outcomes and is not the overall expected return.
+- Entry prices beyond the observed relative-price range are marked
+  **extrapolation**, not rejected.
 - Fees, slippage, taxes, and financing costs are not included.
 
-Historical analogues are not a guarantee. SOXL is a leveraged ETF; path
-dependence and changing market conditions can make future outcomes materially
-different. This is hypothetical entry-price research, not the probability that
-SOXL will reach the selected entry price.
+These estimates rely purely on model assumptions and are **NOT validated
+predictive probabilities**. This method is separate from the old analogue
+validation; that validation does not validate this model. SOXL is a leveraged
+ETF; path dependence and changing market conditions can make future outcomes
+materially different. This is hypothetical entry-price research, not the
+probability that SOXL will reach the selected entry price. The original daily
+signal, including **NO EDGE**, remains unchanged.
             """
         )
 
@@ -65,7 +71,7 @@ def render_price_scenario(closes, current_price, quote_label):
     """Render an automatically updating scenario without changing signal state."""
     st.markdown("### What if SOXL were this price?")
     st.caption(
-        "Explore a hypothetical starting price against historical evidence. "
+        "Explore model estimates for a hypothetical starting price. "
         "This is not the probability that SOXL will hit that price."
     )
     if quote_label is not None:
@@ -107,7 +113,7 @@ def render_price_scenario(closes, current_price, quote_label):
     horizon = _TIMEFRAMES[timeframe]
 
     try:
-        from price_scenario_model import estimate
+        from continuous_price_model import estimate
         from price_probability_slider import probability_slider
 
         prepared = _prepare_history(closes)
@@ -116,11 +122,11 @@ def render_price_scenario(closes, current_price, quote_label):
             st.session_state.get("price_scenario_reset_token", 0),
         )
         st.session_state[_PRICE_KEY] = float(selected_price)
-        result = estimate(prepared, selected_price=float(selected_price), horizon=horizon)
+        result = estimate(prepared, float(selected_price), horizon)
     except Exception:
         st.error(
-            "Historical scenario research is unavailable right now. "
-            "No odds or price estimates are shown. The daily signal is unchanged."
+            "Model unavailable right now. "
+            "No model probabilities or price estimates are shown. The daily signal is unchanged."
         )
         st.button("Retry scenario", key="price_scenario_retry")
         _method_help()
@@ -129,18 +135,19 @@ def render_price_scenario(closes, current_price, quote_label):
     count = result.get("count", 0)
     history_date = result.get("history_date") or "unavailable"
     st.caption(
-        f"{count} non-overlapping historical observations · "
+        f"{count} nonoverlapping completed training periods · "
         f"{horizon} trading sessions · History through {history_date}"
     )
 
     if not result.get("supported", False):
         st.warning(
             result.get("reason")
-            or "There is not enough historical evidence for this scenario."
+            or "Model unavailable: insufficient completed training periods for this horizon."
         )
         st.caption(
-            "No numeric odds or forecasts are shown for unsupported scenarios. "
-            "Try another entry price or timeframe."
+            "No numeric model estimates are shown when the model is unavailable. "
+            "At least 8 completed training periods are required for the selected "
+            "horizon, regardless of entry price. Try another timeframe."
         )
         _method_help()
         return
@@ -153,20 +160,30 @@ def render_price_scenario(closes, current_price, quote_label):
     ci_low = _finite(result.get("ci_low"))
     ci_high = _finite(result.get("ci_high"))
 
-    st.markdown(f"#### Historical outcomes from a ${selected_price:,.2f} entry")
+    st.markdown(f"#### Model estimates from a ${selected_price:,.2f} entry")
+    st.caption(str(result.get("model_label") or "Continuous price model"))
+    if result.get("extrapolated", False):
+        st.warning(
+            "Extrapolated model estimate: this entry price is beyond the observed "
+            "relative-price range. The model still provides an estimate, but its "
+            "assumptions may be less reliable here."
+        )
     frequency_column, median_column = st.columns(2)
     with frequency_column:
         st.metric(
-            "Historical probability of finishing higher",
-            f"{probability:.1%}" if probability is not None else "Unavailable",
+            "Model-estimated probability of finishing higher",
+            f"{probability:.4%}" if probability is not None else "Unavailable",
         )
         if ci_low is not None and ci_high is not None:
-            st.caption(f"95% Wilson interval: {ci_low:.1%}–{ci_high:.1%}")
+            st.caption(
+                f"Approximate 95% parameter-uncertainty interval: "
+                f"{ci_low:.1%}–{ci_high:.1%}"
+            )
         else:
-            st.caption("95% Wilson interval unavailable.")
+            st.caption("Approximate 95% parameter-uncertainty interval unavailable.")
     with median_column:
         st.metric(
-            "Median future price",
+            "Model-estimated median future price",
             f"${selected_price * (1 + median):,.2f}" if median is not None else "Unavailable",
         )
         if median is not None:
@@ -176,30 +193,31 @@ def render_price_scenario(closes, current_price, quote_label):
             )
 
     if low is not None and high is not None:
-        st.markdown("**Estimated outcome range · 10th–90th percentile**")
+        st.markdown("**80% model prediction range · 10th–90th percentile**")
         st.text(
             f"Lower outcome: {_return_description(selected_price, low)}\n"
             f"Upper outcome: {_return_description(selected_price, high)}"
         )
         st.caption(
-            "This range includes losses when present in the matched outcomes. "
+            "This range includes losses when implied by the model. "
             "It is not a floor or ceiling: losses can fall below it, and SOXL "
             "can lose substantially more."
         )
     else:
-        st.caption("Estimated outcome range unavailable.")
+        st.caption("80% model prediction range unavailable.")
 
     if upside is not None:
-        st.markdown("**Conditional upside · positive outcomes only**")
+        st.markdown("**Conditional upside · modeled gains only**")
         st.text(_return_description(selected_price, upside))
         st.caption(
-            "Median among historical gains only. Losing and flat outcomes are "
-            "excluded; this is not the expected return for all observations."
+            "Median among modeled gains only. Losing and flat outcomes are "
+            "excluded; this is not the overall modeled expected return."
         )
 
     st.caption(
-        "These are exploratory historical frequencies, NOT validated "
-        "next-trade probabilities or a recommendation. The existing daily "
+        "These estimates rely purely on model assumptions, NOT validated "
+        "predictive probabilities or a recommendation. This method is separate "
+        "from the old analogue validation. The existing daily "
         "rating is not a guarantee; NO EDGE and all daily signal readings "
         "remain unchanged."
     )

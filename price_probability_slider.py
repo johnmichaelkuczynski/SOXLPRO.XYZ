@@ -1,10 +1,10 @@
 """Local component for an in-drag probability readout above the price thumb."""
 from pathlib import Path
 
-import numpy as np
 import streamlit.components.v1 as components
+import streamlit as st
 
-from landing_signal import TIMEFRAMES, TIMEFRAME_WEIGHTS
+from continuous_price_model import probability_curve
 
 
 _slider = components.declare_component(
@@ -13,21 +13,16 @@ _slider = components.declare_component(
 )
 
 
+@st.cache_data(show_spinner=False, max_entries=12)
+def _curve(prepared, horizon):
+    return probability_curve(prepared, horizon)
+
+
 def probability_slider(prepared, value, horizon, horizon_label, reset_token=0):
-    ranges = []
-    if not prepared.empty:
-        latest = prepared.iloc[-1]
-        for label in TIMEFRAMES:
-            low, high = latest[f"low:{label}"], latest[f"high:{label}"]
-            if np.isfinite(low) and np.isfinite(high) and high > low:
-                ranges.append(dict(low=float(low), high=float(high),
-                                   weight=TIMEFRAME_WEIGHTS[label]))
+    count, curve = _curve(prepared, horizon)
     return _slider(
         value=float(value), reset_token=reset_token, horizon=horizon,
-        horizon_label=horizon_label, ranges=ranges,
-        closes=prepared["close"].tolist(),
-        scores=[float(v) if np.isfinite(v) else None for v in prepared["score"]],
-        min_price=float(prepared["close"].min()) if len(prepared) else None,
-        max_price=float(prepared["close"].max()) if len(prepared) else None,
+        horizon_label=horizon_label, probability_curve=curve, model_count=count,
+        model_error="",
         default=float(value), key=f"price_probability_thumb_{reset_token}",
     )

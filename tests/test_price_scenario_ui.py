@@ -29,8 +29,8 @@ render_price_scenario(closes, 40.55, 'Saved test quote')
     selection["value"] = 500.0
     app.run()
     assert not app.exception
-    assert len(app.metric) == 0
-    assert any("outside" in item.value for item in app.warning)
+    assert len(app.metric) == 2
+    assert any("extrapolat" in item.value.lower() for item in app.warning)
     app.button[0].click().run()
     assert app.session_state["price_scenario_selected_price"] == 40.55
     assert not app.exception

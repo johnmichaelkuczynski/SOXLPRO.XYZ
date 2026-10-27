@@ -32,13 +32,13 @@
     <div class="slider-area" id="area">
       <output class="bubble" id="bubble" for="price" aria-live="polite" aria-atomic="true">
         <span class="price" id="price-label">$1.00</span>
-        <span class="odds" id="odds">Insufficient evidence</span>
-        <span class="detail" id="detail">Historical estimate</span>
+        <span class="odds" id="odds">Model unavailable</span>
+        <span class="detail" id="detail">Model estimate · Chosen horizon</span>
       </output>
       <input id="price" type="range" min="1" max="500" step="0.01" value="1" aria-label="Hypothetical entry price (USD)" aria-describedby="qualification">
     </div>
     <div class="endpoints" aria-hidden="true"><span>$1</span><span>$500</span></div>
-    <p class="qualification" id="qualification">Growth means finishing above the selected starting price at the end of the chosen horizon. Historical evidence, not a guarantee.</p>
+    <p class="qualification" id="qualification">Growth means finishing above the selected starting price at the chosen horizon. Model assumptions, not validated predictive probabilities.</p>
   </main>
   <script>
     (() => {
@@ -56,38 +56,26 @@
       const post = (type, extra = {}) => window.parent.postMessage({ isStreamlitMessage: true, type, ...extra }, "*");
 
       function estimate(price) {
-        const unsupported = count => ({ supported: false, count });
-        if (!finite(args.min_price) || !finite(args.max_price) ||
-            price < args.min_price || price > args.max_price ||
-            !Number.isInteger(args.horizon) || args.horizon <= 0 ||
-            !Array.isArray(args.ranges) || !Array.isArray(args.closes) ||
-            !Array.isArray(args.scores)) return unsupported(0);
-        let numerator = 0;
-        let denominator = 0;
-        for (const range of args.ranges) {
-          if (!range || !finite(range.low) || !finite(range.high) ||
-              range.high <= range.low || !finite(range.weight) || range.weight <= 0) continue;
-          numerator += clamp((price - range.low) / (range.high - range.low), 0, 1) * 100 * range.weight;
-          denominator += range.weight;
+        const curve = args.probability_curve;
+        if (!Array.isArray(curve) || !curve.length) return { supported: false };
+        let low = 0;
+        let high = curve.length - 1;
+        while (low < high) {
+          const middle = Math.floor((low + high) / 2);
+          if (curve[middle].price < price) low = middle + 1;
+          else high = middle;
         }
-        if (!denominator) return unsupported(0);
-        const target = numerator / denominator;
-        let nextAllowed = 0;
-        let count = 0;
-        let positive = 0;
-        for (let i = 0; i < args.scores.length && i + args.horizon < args.closes.length; i++) {
-          const score = args.scores[i];
-          if (i < nextAllowed || !finite(score) || Math.abs(score - target) > 10) continue;
-          const start = args.closes[i];
-          const end = args.closes[i + args.horizon];
-          if (!finite(start) || !finite(end) || start <= 0) continue;
-          const change = end / start - 1;
-          if (!finite(change)) continue;
-          count++;
-          if (change > 0) positive++;
-          nextAllowed = i + args.horizon;
-        }
-        return count >= 10 ? { supported: true, count, probability: positive / count * 100 } : unsupported(count);
+        const right = curve[low];
+        const left = low > 0 && right.price > price ? curve[low - 1] : right;
+        if (!left || !right || !finite(left.price) || !finite(right.price) ||
+            !finite(left.probability) || !finite(right.probability)) return { supported: false };
+        const fraction = right.price > left.price
+          ? clamp((price - left.price) / (right.price - left.price), 0, 1) : 0;
+        return {
+          supported: true,
+          probability: clamp(left.probability + fraction * (right.probability - left.probability), 0, 1) * 100,
+          extrapolated: Boolean(left.extrapolated || right.extrapolated)
+        };
       }
 
       function positionBubble() {
@@ -105,13 +93,18 @@
         const price = Number(slider.value);
         const result = estimate(price);
         const formatted = "$" + price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const odds = result.supported ? result.probability.toFixed(1) + "% probability of growth" : "Insufficient evidence";
+        const odds = result.supported ? result.probability.toFixed(4) + "% probability of growth" : "Model unavailable";
         const horizon = typeof args.horizon_label === "string" && args.horizon_label.trim()
           ? args.horizon_label.trim()
           : (Number.isInteger(args.horizon) && args.horizon > 0 ? args.horizon + " trading sessions" : "Chosen horizon");
         priceLabel.textContent = formatted;
         oddsLabel.textContent = odds;
-        detail.textContent = horizon + " · historical estimate" + (result.count ? " · n=" + result.count : "");
+        const label = result.extrapolated ? "Extrapolated model estimate" : "Model estimate";
+        const count = Number.isInteger(args.model_count) && args.model_count > 0
+          ? " · n=" + args.model_count : "";
+        detail.textContent = label + " · " + horizon + (result.supported ? count : "");
+        bubble.title = !result.supported && typeof args.model_error === "string"
+          ? args.model_error : "";
         slider.setAttribute("aria-valuetext", formatted + "; " + odds + "; " + detail.textContent);
         positionBubble();
       }
