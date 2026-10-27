@@ -202,7 +202,7 @@ def _signal_card(percentile, signal, close_date):
     """
 
 
-def render_landing_signal(price_data, saved=None):
+def render_landing_signal(price_data, saved=None, quote=None):
     if saved is None:
         readings, closes = compute_timeframe_readings(price_data)
         result = composite_signal(readings)
@@ -238,6 +238,19 @@ def render_landing_signal(price_data, saved=None):
             render_short_term_signal(closes)
         else:
             render_short_term_signal(closes, saved=saved)
+    from price_scenario_ui import render_price_scenario
+    quote_price = (quote or {}).get("price")
+    if quote_price and np.isfinite(float(quote_price)) and float(quote_price) > 0:
+        scenario_price = float(quote_price)
+        observed = (quote or {}).get("observed_at") or "timestamp unavailable"
+        quote_label = (
+            f"Latest available SOXL quote: ${scenario_price:,.2f} · Observed: {observed}. "
+            "Same saved snapshot as the market summary above; not guaranteed real-time."
+        )
+    else:
+        scenario_price = float(closes.iloc[-1])
+        quote_label = f"Latest quote unavailable; using closing price from {closes.index[-1]:%Y-%m-%d}."
+    render_price_scenario(closes, scenario_price, quote_label)
     render_full_signal_report()
     from signal_scorecard_ui import render_rating_scorecard
     render_rating_scorecard(closes, display_signal_label(result["signal"]))

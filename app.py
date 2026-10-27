@@ -227,7 +227,7 @@ if saved_market.get("_read_warning"):
 render_market_snapshot(data, quote=quote, saved=saved_market)
 
 render_visitor_counter()
-render_landing_signal(data, saved=saved_market["signal"])
+render_landing_signal(data, saved=saved_market["signal"], quote=quote)
 
 def get_price_at_offset(df, days_ago):
     target_date = df.index[-1] - timedelta(days=days_ago)

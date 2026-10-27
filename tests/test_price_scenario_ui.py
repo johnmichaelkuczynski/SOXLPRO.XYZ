@@ -1,0 +1,27 @@
+from streamlit.testing.v1 import AppTest
+
+
+def test_slider_timeframe_and_reset():
+    app = AppTest.from_string("""
+import numpy as np
+import pandas as pd
+from price_scenario_ui import render_price_scenario
+rng = np.random.default_rng(43)
+closes = pd.Series(40*np.exp(np.cumsum(rng.normal(0,.025,4000))),
+                   index=pd.bdate_range('2010-01-01',periods=4000))
+render_price_scenario(closes, 40.55, 'Saved test quote')
+""").run(timeout=20)
+    assert not app.exception
+    assert app.slider[0].value == 40.55
+    app.selectbox[0].select("One month").run()
+    app.slider[0].set_value(35.0).run()
+    assert not app.exception
+    assert app.slider[0].value == 35.0
+    assert len(app.metric) == 2
+    app.slider[0].set_value(500.0).run()
+    assert not app.exception
+    assert len(app.metric) == 0
+    assert any("outside" in item.value for item in app.warning)
+    app.button[0].click().run()
+    assert app.slider[0].value == 40.55
+    assert not app.exception

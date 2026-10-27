@@ -16,3 +16,4 @@
 - [Daily signal validation](daily-signal-validation.md) — one-month users; freeze short-term rules before holdout evaluation and enforce NO EDGE when evidence fails.
 - [Fragment regression evidence](fragment-regression-evidence.md) — unchanged iframe HTML can suppress new messages; observe actual completed fragment runs.
 - [Market health evidence](market-health-evidence.md) — optional telemetry must not gate saved results or imply an open chart adopted newer background data.
+- [Hypothetical entry slider](hypothetical-entry-slider.md) — chosen price is a hypothetical entry, not a target-hit question; preserve the existing daily indicator.
