@@ -70,10 +70,6 @@ def render_price_scenario(closes, current_price, quote_label):
     )
     if quote_label is not None:
         st.caption(str(quote_label))
-    st.info(
-        "Exploratory historical frequencies — NOT validated next-trade "
-        "probabilities. The daily signal, including NO EDGE, is unchanged."
-    )
 
     latest = _finite(current_price)
     valid_latest = latest is not None and latest > 0
@@ -98,22 +94,10 @@ def render_price_scenario(closes, current_price, quote_label):
         disabled=not valid_latest,
     ):
         st.session_state[_PRICE_KEY] = default_price
+        st.session_state["price_scenario_reset_token"] = st.session_state.get("price_scenario_reset_token", 0) + 1
     if _PRICE_KEY not in st.session_state:
         st.session_state[_PRICE_KEY] = default_price
 
-    selected_price = st.slider(
-        "Hypothetical entry price (USD)",
-        min_value=1.0,
-        max_value=500.0,
-        step=0.01,
-        format="$%.2f",
-        key=_PRICE_KEY,
-        help="Release the slider to update the historical scenario. No submit needed.",
-    )
-    left_endpoint, right_endpoint = st.columns(2)
-    left_endpoint.caption("$1 per share")
-    right_endpoint.markdown('<div style="text-align:right;font-size:.85rem;color:#64748b">$500 per share</div>',
-                            unsafe_allow_html=True)
     timeframe = st.selectbox(
         "Timeframe",
         options=list(_TIMEFRAMES),
@@ -124,8 +108,14 @@ def render_price_scenario(closes, current_price, quote_label):
 
     try:
         from price_scenario_model import estimate
+        from price_probability_slider import probability_slider
 
         prepared = _prepare_history(closes)
+        selected_price = probability_slider(
+            prepared, st.session_state[_PRICE_KEY], horizon, timeframe,
+            st.session_state.get("price_scenario_reset_token", 0),
+        )
+        st.session_state[_PRICE_KEY] = float(selected_price)
         result = estimate(prepared, selected_price=float(selected_price), horizon=horizon)
     except Exception:
         st.error(
