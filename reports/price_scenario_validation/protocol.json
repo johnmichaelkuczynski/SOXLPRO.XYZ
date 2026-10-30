@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "holdout_start": "2019-01-01",
+  "horizons": [
+    21,
+    126,
+    252
+  ],
+  "matching": "Existing estimator, +/-10 score points, earliest-first nonoverlap, minimum 10",
+  "origins": "First holdout session then every horizon sessions; never reschedule abstentions",
+  "entry": "Observed origin close within slider bounds; no rounding; close-to-close outcome",
+  "training": "Expanding history ending at origin; only outcomes matured by origin",
+  "baseline": "Unconditional finite-score origins, earliest-first nonoverlap, minimum 10",
+  "interval": "10th/90th empirical quantiles (nominal 80%)",
+  "calibration_bins": [
+    0,
+    0.2,
+    0.4,
+    0.6,
+    0.8,
+    1
+  ],
+  "uncertainty": "95% Wilson event intervals and paired circular block bootstrap, 3 origins/block, 2000 draws, seed 48",
+  "claims": "Exploratory only; no tuning or promotion using this holdout",
+  "source": "docs/soxl_signal_study_prices.csv",
+  "source_sha256": "7bcd10c27d99b9e7553ec3a275180e882fd7c276a57600a737e2e5bb0229ed16",
+  "code_sha256": {
+    "price_scenario_model.py": "3a5bd99d5650d8362deb84bde2407dca83ca243cdadc430084816ea71a09050e",
+    "price_scenario_validation.py": "54e4f02703fb19c71e3f56187f445e2e02576966d913f8fcd5b0661e992e7696",
+    "landing_signal.py": "ec69b4f325334dcde6f711da0577a087ba66fc3c77db7f72771824d77887b530"
+  }
+}

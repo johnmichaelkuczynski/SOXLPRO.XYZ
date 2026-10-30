@@ -19,3 +19,4 @@
 - [Hypothetical entry slider](hypothetical-entry-slider.md) — chosen price is a hypothetical entry, not a target-hit question; preserve the existing daily indicator.
 - [Mean reversion statistics](mean-reversion-statistics.md) — R/S on log increments; anti-persistence is not proof of profitable price-level reversion.
 - [Landing chart priority](landing-chart-priority.md) — daily signal first, actual interactive SOXL chart immediately below; analytics follow.
+- [Price scenario validation](price-scenario-validation.md) — observed entry closes cannot validate same-date counterfactual prices; retrospective holdouts are not prospective trials.

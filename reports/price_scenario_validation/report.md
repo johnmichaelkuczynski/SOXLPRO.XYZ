@@ -1,0 +1,632 @@
+# Hypothetical entry-price validation
+
+Status: exploratory, NOT validated next-trade probabilities. Daily NO EDGE is unchanged.
+Conclusion: no demonstrated forecast advantage. One- and six-month Brier-difference
+uncertainty intervals include zero; nominal 80% ranges substantially under-cover realized returns.
+Only two supported twelve-month observations are available, so that horizon is inconclusive.
+
+Source: soxl_signal_study_prices.csv, 2010-03-11 through 2026-10-20.
+Rules and source/code hashes were persisted before this evaluation; no parameters were tuned.
+2019 onward is held out from method selection in this study, not previously unseen data across the project.
+Older matured holdout outcomes enter later training sets by the predeclared walk-forward rule.
+This is a retrospective pseudo-out-of-sample study, not a prospective independent trial.
+
+Only observed entry closes have observable outcomes. Arbitrary counterfactual slider prices cannot
+be validated by relabeling a realized return. This study tests range matching at actual historical
+entry prices, not causal effects of buying at a different price on the same date.
+The saved adjusted-close snapshot is not a point-in-time vintage; future corporate-action adjustments
+may affect absolute dollar eligibility. Fees, slippage and execution at the signal close are not modeled.
+
+Fixed non-overlapping origin calendars are shared by matched and unconditional forecasts.
+Unsupported forecasts are excluded from BOTH sides of paired comparisons, not silently rescheduled.
+Pending outcomes are never scored. Unconditional training uses all eligible score-history dates,
+without score matching, the same maturity cutoff and earliest-first horizon spacing.
+
+Brier and 80% interval scores: lower is better. Deltas are matched minus unconditional.
+Calibration bias is mean forecast probability minus observed frequency; ideal is zero.
+Coverage target is 80%. Wilson intervals are descriptive binomial approximations.
+Circular three-origin block-bootstrap 95% intervals allow some serial dependence but are approximate
+with few blocks and regime changes; they do not establish independent effective sample sizes.
+Intervals are not multiplicity-adjusted across horizons. Fewer than six scored origins suppress bootstrap intervals.
+
+## 21 sessions
+
+```json
+{
+  "horizon": 21,
+  "scheduled": 94,
+  "scored": 93,
+  "unsupported": 0,
+  "pending": 1,
+  "observed_higher": 0.5913978494623656,
+  "observed_higher_wilson95": [
+    0.4897977403042717,
+    0.6857466538403933
+  ],
+  "matched": {
+    "mean_probability": 0.5942046242216723,
+    "brier": 0.24325697211435207,
+    "calibration_bias": 0.0028067747593067006,
+    "calibration_bias_block95": [
+      -0.09089770941877177,
+      0.10162930208249327
+    ],
+    "coverage": 0.6559139784946236,
+    "coverage_wilson95": [
+      0.5549073090695003,
+      0.7445507750596343
+    ],
+    "coverage_block95": [
+      0.5483870967741935,
+      0.7634408602150538
+    ],
+    "mean_width": 0.5339251912744344,
+    "interval_score": 1.260168321690638
+  },
+  "unconditional": {
+    "mean_probability": 0.5637124831919882,
+    "brier": 0.24379619425024635,
+    "calibration_bias": -0.027685366270377362,
+    "calibration_bias_block95": [
+      -0.12394822373012705,
+      0.07132552701343979
+    ],
+    "coverage": 0.6344086021505376,
+    "coverage_wilson95": [
+      0.5330090301523664,
+      0.7251444906486115
+    ],
+    "coverage_block95": [
+      0.5268817204301075,
+      0.7311827956989247
+    ],
+    "mean_width": 0.48306640132432754,
+    "interval_score": 1.3082726255223542
+  },
+  "brier_delta": -0.0005392221358941811,
+  "brier_delta_block95": [
+    -0.009516882013208649,
+    0.008533524826320138
+  ],
+  "interval_score_delta": -0.04810430383171622,
+  "interval_score_delta_block95": [
+    -0.1597847768138409,
+    0.04802125871387124
+  ]
+}
+```
+
+## 126 sessions
+
+```json
+{
+  "horizon": 126,
+  "scheduled": 16,
+  "scored": 11,
+  "unsupported": 4,
+  "pending": 1,
+  "observed_higher": 0.7272727272727273,
+  "observed_higher_wilson95": [
+    0.4343497069897537,
+    0.9025411942607853
+  ],
+  "matched": {
+    "mean_probability": 0.696377822944319,
+    "brier": 0.20783916010564746,
+    "calibration_bias": -0.030894904328408166,
+    "calibration_bias_block95": [
+      -0.27167072058376407,
+      0.23387008212375848
+    ],
+    "coverage": 0.36363636363636365,
+    "coverage_wilson95": [
+      0.15166223614131383,
+      0.6462032231083628
+    ],
+    "coverage_block95": [
+      0.18181818181818182,
+      0.5454545454545454
+    ],
+    "mean_width": 1.1505868370255887,
+    "interval_score": 4.625762228486604
+  },
+  "unconditional": {
+    "mean_probability": 0.6778484990508584,
+    "brier": 0.20839972867590095,
+    "calibration_bias": -0.04942422822186888,
+    "calibration_bias_block95": [
+      -0.32277539459935106,
+      0.21956077830215748
+    ],
+    "coverage": 0.45454545454545453,
+    "coverage_wilson95": [
+      0.21270957543988045,
+      0.7199122443100118
+    ],
+    "coverage_block95": [
+      0.2727272727272727,
+      0.6363636363636364
+    ],
+    "mean_width": 1.2204004180155594,
+    "interval_score": 4.572862102281343
+  },
+  "brier_delta": -0.0005605685702535349,
+  "brier_delta_block95": [
+    -0.026111077229831303,
+    0.026298100612371762
+  ],
+  "interval_score_delta": 0.05290012620526041,
+  "interval_score_delta_block95": [
+    -0.5268946204995133,
+    0.6440169334695105
+  ]
+}
+```
+
+## 252 sessions
+
+```json
+{
+  "horizon": 252,
+  "scheduled": 8,
+  "scored": 2,
+  "unsupported": 5,
+  "pending": 1,
+  "observed_higher": 1.0,
+  "observed_higher_wilson95": [
+    0.34237195288961925,
+    1.0
+  ],
+  "matched": {
+    "mean_probability": 0.6590909090909092,
+    "brier": 0.1415289256198347,
+    "calibration_bias": -0.3409090909090909,
+    "calibration_bias_block95": [
+      null,
+      null
+    ],
+    "coverage": 1.0,
+    "coverage_wilson95": [
+      0.34237195288961925,
+      1.0
+    ],
+    "coverage_block95": [
+      null,
+      null
+    ],
+    "mean_width": 1.6653374310886164,
+    "interval_score": 1.6653374310886164
+  },
+  "unconditional": {
+    "mean_probability": 0.5993589743589745,
+    "brier": 0.16077005259697563,
+    "calibration_bias": -0.4006410256410256,
+    "calibration_bias_block95": [
+      null,
+      null
+    ],
+    "coverage": 1.0,
+    "coverage_wilson95": [
+      0.34237195288961925,
+      1.0
+    ],
+    "coverage_block95": [
+      null,
+      null
+    ],
+    "mean_width": 2.4542151627616984,
+    "interval_score": 2.4542151627616984
+  },
+  "brier_delta": -0.01924112697714095,
+  "brier_delta_block95": [
+    null,
+    null
+  ],
+  "interval_score_delta": -0.788877731673082,
+  "interval_score_delta_block95": [
+    null,
+    null
+  ]
+}
+```
+
+## Calibration by fixed probability bin
+
+```json
+[
+  {
+    "horizon": 21,
+    "model": "matched",
+    "bin_low": 0.0,
+    "bin_high": 0.2,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "matched",
+    "bin_low": 0.2,
+    "bin_high": 0.4,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "matched",
+    "bin_low": 0.4,
+    "bin_high": 0.6,
+    "n": 51,
+    "predicted": 0.5617839853611948,
+    "observed": 0.5882352941176471,
+    "observed_wilson95": [
+      0.4516509274741746,
+      0.7124580700751311
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "matched",
+    "bin_low": 0.6,
+    "bin_high": 0.8,
+    "n": 42,
+    "predicted": 0.6335725428379666,
+    "observed": 0.5952380952380952,
+    "observed_wilson95": [
+      0.44494045528177417,
+      0.7295735232879093
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "matched",
+    "bin_low": 0.8,
+    "bin_high": 1.0,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "unconditional",
+    "bin_low": 0.0,
+    "bin_high": 0.2,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "unconditional",
+    "bin_low": 0.2,
+    "bin_high": 0.4,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "unconditional",
+    "bin_low": 0.4,
+    "bin_high": 0.6,
+    "n": 93,
+    "predicted": 0.5637124831919882,
+    "observed": 0.5913978494623656,
+    "observed_wilson95": [
+      0.4897977403042717,
+      0.6857466538403933
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "unconditional",
+    "bin_low": 0.6,
+    "bin_high": 0.8,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 21,
+    "model": "unconditional",
+    "bin_low": 0.8,
+    "bin_high": 1.0,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "matched",
+    "bin_low": 0.0,
+    "bin_high": 0.2,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "matched",
+    "bin_low": 0.2,
+    "bin_high": 0.4,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "matched",
+    "bin_low": 0.4,
+    "bin_high": 0.6,
+    "n": 1,
+    "predicted": 0.5714285714285714,
+    "observed": 1.0,
+    "observed_wilson95": [
+      0.20654329147389294,
+      1.0
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "matched",
+    "bin_low": 0.6,
+    "bin_high": 0.8,
+    "n": 10,
+    "predicted": 0.7088727480958938,
+    "observed": 0.7,
+    "observed_wilson95": [
+      0.39677321997956516,
+      0.892210712513788
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "matched",
+    "bin_low": 0.8,
+    "bin_high": 1.0,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "unconditional",
+    "bin_low": 0.0,
+    "bin_high": 0.2,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "unconditional",
+    "bin_low": 0.2,
+    "bin_high": 0.4,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "unconditional",
+    "bin_low": 0.4,
+    "bin_high": 0.6,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "unconditional",
+    "bin_low": 0.6,
+    "bin_high": 0.8,
+    "n": 11,
+    "predicted": 0.6778484990508584,
+    "observed": 0.7272727272727273,
+    "observed_wilson95": [
+      0.4343497069897537,
+      0.9025411942607853
+    ]
+  },
+  {
+    "horizon": 126,
+    "model": "unconditional",
+    "bin_low": 0.8,
+    "bin_high": 1.0,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "matched",
+    "bin_low": 0.0,
+    "bin_high": 0.2,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "matched",
+    "bin_low": 0.2,
+    "bin_high": 0.4,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "matched",
+    "bin_low": 0.4,
+    "bin_high": 0.6,
+    "n": 1,
+    "predicted": 0.5,
+    "observed": 1.0,
+    "observed_wilson95": [
+      0.20654329147389294,
+      1.0
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "matched",
+    "bin_low": 0.6,
+    "bin_high": 0.8,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "matched",
+    "bin_low": 0.8,
+    "bin_high": 1.0,
+    "n": 1,
+    "predicted": 0.8181818181818182,
+    "observed": 1.0,
+    "observed_wilson95": [
+      0.20654329147389294,
+      1.0
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "unconditional",
+    "bin_low": 0.0,
+    "bin_high": 0.2,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "unconditional",
+    "bin_low": 0.2,
+    "bin_high": 0.4,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "unconditional",
+    "bin_low": 0.4,
+    "bin_high": 0.6,
+    "n": 1,
+    "predicted": 0.5833333333333334,
+    "observed": 1.0,
+    "observed_wilson95": [
+      0.20654329147389294,
+      1.0
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "unconditional",
+    "bin_low": 0.6,
+    "bin_high": 0.8,
+    "n": 1,
+    "predicted": 0.6153846153846154,
+    "observed": 1.0,
+    "observed_wilson95": [
+      0.20654329147389294,
+      1.0
+    ]
+  },
+  {
+    "horizon": 252,
+    "model": "unconditional",
+    "bin_low": 0.8,
+    "bin_high": 1.0,
+    "n": 0,
+    "predicted": null,
+    "observed": null,
+    "observed_wilson95": [
+      null,
+      null
+    ]
+  }
+]
+```
+
+No stronger claims or changes to the slider/daily trading rule are authorized by this retrospective study.
+Reproduce: python scripts/price_scenario_validation_report.py
+Audit: protocol.json, predictions.csv and summary.json in this directory.

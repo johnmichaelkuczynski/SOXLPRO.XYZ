@@ -1,6 +1,8 @@
 """Interactive model-based price scenarios, separate from the daily signal."""
 
 import math
+import json
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -64,6 +66,42 @@ probability that SOXL will reach the selected entry price. The original daily
 signal, including **NO EDGE**, remains unchanged.
             """
         )
+        report_dir = Path(__file__).resolve().parent / "reports" / "price_scenario_validation"
+        try:
+            study = json.loads((report_dir / "summary.json").read_text())
+            report = (report_dir / "report.md").read_text()
+        except (OSError, ValueError):
+            st.caption("Held-out historical validation report is unavailable.")
+        else:
+            st.markdown("**Frozen historical validation · exploratory**")
+            st.caption(
+                "Walk-forward evaluation from 2019, at observed entry closes only. "
+                "This does not validate arbitrary hypothetical prices. "
+                "Only matured outcomes available at each forecast date were used."
+            )
+            for row in study["summary"]:
+                if not row["scored"]:
+                    st.caption(f"{row['horizon']} sessions: no supported completed forecasts.")
+                    continue
+                matched, baseline = row["matched"], row["unconditional"]
+                st.caption(
+                    f"{row['horizon']} sessions · {row['scored']} paired forecasts · "
+                    f"{row['unsupported']} unsupported · {row['pending']} pending. "
+                    f"Brier score: matched {matched['brier']:.3f}, "
+                    f"unconditional {baseline['brier']:.3f} (lower is better). "
+                    f"80% range coverage: {matched['coverage']:.1%} vs "
+                    f"{baseline['coverage']:.1%}."
+                )
+            st.caption(
+                "No demonstrated advantage over unconditional forecasts. One- and six-month "
+                "ranges covered substantially less than their nominal 80%; twelve-month "
+                "evidence is insufficient. Small, dependent samples limit confidence. Download includes calibration, "
+                "uncertainty intervals, source dates and counterfactual limitations. "
+                "The daily NO EDGE rule is unchanged."
+            )
+            st.download_button("Download historical validation report", report,
+                               file_name="price-scenario-validation.md", mime="text/markdown",
+                               key="price_scenario_validation_download")
 
 
 @st.fragment
