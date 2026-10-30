@@ -50,7 +50,7 @@
       const oddsLabel = document.getElementById("odds");
       const detail = document.getElementById("detail");
       let args = {};
-      let lastReceivedValue;
+      let initialized = false;
       const finite = value => typeof value === "number" && Number.isFinite(value);
       const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
       const post = (type, extra = {}) => window.parent.postMessage({ isStreamlitMessage: true, type, ...extra }, "*");
@@ -117,9 +117,12 @@
       window.addEventListener("message", event => {
         if (event.source !== window.parent || !event.data || event.data.type !== "streamlit:render") return;
         args = event.data.args || {};
-        if (finite(args.value) && args.value !== lastReceivedValue) {
+        // Component arguments contain the previous Python selection during the
+        // round trip that delivers a new user value. Do not overwrite newer
+        // local input with that echo. Explicit resets mount a new keyed iframe.
+        if (finite(args.value) && !initialized) {
           slider.value = String(clamp(args.value, 1, 500));
-          lastReceivedValue = args.value;
+          initialized = true;
         }
         slider.disabled = Boolean(event.data.disabled);
         update();
