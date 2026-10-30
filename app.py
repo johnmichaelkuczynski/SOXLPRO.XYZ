@@ -601,6 +601,19 @@ with tab_chart:
                 "unavailable from EODHD."
             )
 
+    from mean_reversion_ui import render_mean_reversion
+    reversion_frames = {"SOXL": data}
+    for symbol in ("qqq", "tqqq", "tlt", "xlu", "vix", "sox", "gush", "btc"):
+        if st.session_state.get("show_" + symbol):
+            dates = locals().get(symbol + "_dates_list", [])
+            values = locals().get(symbol + "_actual_list", [])
+            reversion_frames[symbol.upper()] = pd.DataFrame(
+                {"Close": values}, index=pd.to_datetime(dates))
+    if custom_benchmark_label:
+        reversion_frames[custom_benchmark_label] = pd.DataFrame(
+            {"Close": custom_actual_list}, index=pd.to_datetime(custom_dates_list))
+    render_mean_reversion(reversion_frames)
+
     result = chart_component(
         dates=dates_list,
         prices=prices_list,

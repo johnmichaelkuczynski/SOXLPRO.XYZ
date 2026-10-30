@@ -17,3 +17,4 @@
 - [Fragment regression evidence](fragment-regression-evidence.md) — unchanged iframe HTML can suppress new messages; observe actual completed fragment runs.
 - [Market health evidence](market-health-evidence.md) — optional telemetry must not gate saved results or imply an open chart adopted newer background data.
 - [Hypothetical entry slider](hypothetical-entry-slider.md) — chosen price is a hypothetical entry, not a target-hit question; preserve the existing daily indicator.
+- [Mean reversion statistics](mean-reversion-statistics.md) — R/S on log increments; anti-persistence is not proof of profitable price-level reversion.
