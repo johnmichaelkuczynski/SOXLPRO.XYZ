@@ -16,6 +16,23 @@ _SCORE_HELP = (
     "This is a descriptive statistical score, not a trading signal or "
     "a probability of profit."
 )
+_TREND_HELP = (
+    "Trend Direction Score = clamp(MA200 60-session percent change, -10, 10) * 10; "
+    "absolute changes below 0.5% score zero. Positive means upward drift; negative "
+    "means downward drift. Requires 260 observations, independently of the Hurst lookback."
+)
+_K_HELP = (
+    "Signed K = Mean Reversion Score * Trend Direction Score / 100. "
+    "Edge-only K = max(0, Signed K). This is an unvalidated heuristic factor, "
+    "not a profit probability or proven alpha. It does not replace either "
+    "component or the daily signal. A zero edge-only value can still conceal "
+    "a downtrend; read the label."
+)
+_CROSS_HELP = (
+    "Current moving-average state: Yes when MA50 > MA200, No when MA50 <= MA200. "
+    "This is not a newly observed crossover event. Requires 200 observations; "
+    "N/A means insufficient or unavailable history."
+)
 
 
 def _finite(value):
@@ -28,9 +45,9 @@ def _finite(value):
 
 
 def _method_help():
-    st.markdown("#### Method and interpretation")
-    st.markdown(
-        """
+    with st.expander("Method and interpretation", expanded=False):
+        st.markdown(
+            """
 - **Hurst exponent (H):** R/S analysis on **daily log-price increments**
   calculated from closing prices, not on price levels, which biases H.
   Rescaled-range statistics are computed across blocks at multiple scales;
@@ -38,9 +55,19 @@ def _method_help():
 - **Interpretation:** H < 0.5 suggests anti-persistence, H around 0.5 suggests
   random behavior, and H > 0.5 suggests persistence. Estimates are approximate
   and noisy in finite samples; changing the lookback can change the result.
-- **Score:** `clamp((0.5 - H) * 200, 0, 100)`. A higher score describes
+- **Mean Reversion Score:** `clamp((0.5 - H) * 200, 0, 100)`. A higher score describes
   stronger estimated anti-persistence. It is **not a trading signal or a
   probability of profit**.
+- **Trend Direction Score:** the MA200's 60-session percent change, clamped
+  to -10% through +10%, then multiplied by 10. Absolute changes below 0.5%
+  score zero. Positive means upward drift; negative means downward drift.
+  This requires **260 observations**, independently of the Hurst lookback.
+- **K Metric:** Signed K = Mean Reversion Score × Trend Direction Score / 100;
+  Edge-only K = max(0, Signed K). This **unvalidated heuristic factor is not
+  a profit probability or proven alpha** and replaces neither component nor
+  the daily signal. Edge-only zero can conceal downward drift: read the label.
+- **Golden cross:** current MA50 > MA200 state, not a newly observed crossover.
+  Yes means above; No means at or below. Requires **200 observations**.
 - **Reversion speed (half-life):** estimated by regressing price change on
   lagged price level. A half-life is reported only for positive mean-reversion
   rate theta; failed or unsupported estimates are **N/A**. This separate
@@ -51,19 +78,33 @@ def _method_help():
 
 This comparison uses only the supplied historical frames. It does not fetch
 prices or change charts, daily signals, or benchmark selections.
-        """
-    )
+            """
+        )
 
 
 @st.fragment
 def render_mean_reversion(frames: dict):
     """Compare supplied symbols without mutating price frames or signal state."""
-    with st.expander("Mean Reversion Score", expanded=True):
+    with st.expander("K Metric · Reversion & Trend", expanded=True):
         st.caption(
-            "Compare statistical anti-persistence across SOXL and your selected "
-            "chart benchmarks. Descriptive research only; charts and signals "
-            "remain unchanged."
+            "Compare memory versus drift across SOXL and your selected chart "
+            "benchmarks. Screening heuristics, not proven recommendations; "
+            "charts and daily signals remain unchanged."
         )
+        k_mode = st.radio(
+            "K calculation",
+            ["Edge-only K", "Signed K"],
+            horizontal=True,
+            key="mean_reversion_k_mode",
+            help=_K_HELP,
+        )
+        ranking = st.selectbox(
+            "Rank by",
+            ["K Metric", "Mean Reversion Score", "Trend Direction Score"],
+            key="mean_reversion_ranking",
+            help="Descending numeric ranking; unavailable values appear last.",
+        )
+        k_key = "k_signed" if k_mode == "Signed K" else "k_edge"
         lookback = int(
             st.number_input(
                 "Lookback (trading sessions)",
@@ -111,6 +152,14 @@ def render_mean_reversion(frames: dict):
                 hurst = _finite(result.get("H"))
                 score = _finite(result.get("score"))
                 half_life = _finite(result.get("half_life"))
+                trend = _finite(result.get("trend"))
+                slope = _finite(result.get("slope"))
+                k_value = _finite(result.get(k_key))
+                k_label = str(result.get("k_label") or "N/A")
+                golden_cross = result.get("golden_cross")
+                trend_reason = str(result.get("trend_reason") or "").strip()
+                if trend is None and not trend_reason:
+                    trend_reason = "Trend unavailable: requires 260 usable observations."
                 count = max(0, int(result.get("count") or 0))
                 date = str(result.get("date") or "N/A")
                 reason = str(result.get("reason") or "").strip()
@@ -128,12 +177,20 @@ def render_mean_reversion(frames: dict):
                 rows.append(
                     {
                         "Symbol": str(symbol),
-                        "H": f"{hurst:.4f}" if hurst is not None else "N/A",
-                        "Score / 100": (
-                            f"{min(100.0, max(0.0, score)):.1f} / 100"
+                        "Mean Reversion Score": (
+                            min(100.0, max(0.0, score))
                             if score is not None and hurst is not None
-                            else "N/A"
+                            else None
                         ),
+                        "Trend Direction Score": trend,
+                        "K Metric": k_value,
+                        "K label": k_label,
+                        "Golden cross": (
+                            "Yes" if golden_cross is True
+                            else "No" if golden_cross is False else "N/A"
+                        ),
+                        "H": hurst,
+                        "MA200 change (60 sessions)": slope,
                         "Reversion speed": (
                             f"{half_life:,.1f} trading days"
                             if half_life is not None and half_life > 0
@@ -141,7 +198,7 @@ def render_mean_reversion(frames: dict):
                         ),
                         "Observation date": date,
                         "Observations": count,
-                        "Explanation": reason,
+                        "Explanation": " ".join(part for part in (reason, trend_reason) if part),
                     }
                 )
             except Exception:
@@ -149,8 +206,13 @@ def render_mean_reversion(frames: dict):
                 rows.append(
                     {
                         "Symbol": str(symbol),
-                        "H": "N/A",
-                        "Score / 100": "N/A",
+                        "Mean Reversion Score": None,
+                        "Trend Direction Score": None,
+                        "K Metric": None,
+                        "K label": "N/A",
+                        "Golden cross": "N/A",
+                        "H": None,
+                        "MA200 change (60 sessions)": None,
                         "Reversion speed": "N/A",
                         "Observation date": "N/A",
                         "Observations": 0,
@@ -161,6 +223,24 @@ def render_mean_reversion(frames: dict):
                     }
                 )
 
+        # Sort numeric model values before display formatting; N/A is never zero.
+        rows.sort(
+            key=lambda row: (
+                row[ranking] is None,
+                -row[ranking] if row[ranking] is not None else 0,
+            )
+        )
+        for row in rows:
+            for column in ("Mean Reversion Score", "Trend Direction Score", "K Metric"):
+                value = row[column]
+                row[column] = f"{value:.1f}" if value is not None else "N/A"
+            hurst = row["H"]
+            row["H"] = f"{hurst:.4f}" if hurst is not None else "N/A"
+            slope = row["MA200 change (60 sessions)"]
+            row["MA200 change (60 sessions)"] = (
+                f"{slope:+.2f}%" if slope is not None else "N/A"
+            )
+
         st.dataframe(
             pd.DataFrame(rows),
             hide_index=True,
@@ -168,8 +248,25 @@ def render_mean_reversion(frames: dict):
             column_config={
                 "Symbol": st.column_config.TextColumn("Symbol"),
                 "H": st.column_config.TextColumn("H", help=_H_HELP),
-                "Score / 100": st.column_config.TextColumn(
-                    "Score / 100", help=_SCORE_HELP
+                "Mean Reversion Score": st.column_config.TextColumn(
+                    "Mean Reversion Score", help=_SCORE_HELP
+                ),
+                "Trend Direction Score": st.column_config.TextColumn(
+                    "Trend Direction Score", help=_TREND_HELP
+                ),
+                "K Metric": st.column_config.TextColumn(
+                    "K Metric", help=_K_HELP
+                ),
+                "K label": st.column_config.TextColumn(
+                    "K label",
+                    help="Model interpretation, including downtrend warnings even when Edge-only K is zero.",
+                ),
+                "Golden cross": st.column_config.TextColumn(
+                    "Golden cross", help=_CROSS_HELP
+                ),
+                "MA200 change (60 sessions)": st.column_config.TextColumn(
+                    "MA200 change (60 sessions)",
+                    help="Raw percent change in MA200 over 60 sessions, before clamping or the 0.5% neutral threshold.",
                 ),
                 "Reversion speed": st.column_config.TextColumn(
                     "Reversion speed",
