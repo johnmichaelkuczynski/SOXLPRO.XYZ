@@ -59,8 +59,10 @@ def trend_metrics(closes):
 
 
 def analyze(frame, lookback=252):
+    from hurst_uncertainty import hurst_evidence
     history = completed_close_history(frame)
     result = _reversion(frame, lookback)
+    result["hurst_evidence"] = hurst_evidence(result.get("H"), result.get("count"))
     result.update(trend_metrics(history))
     score, trend = result["score"], result["trend"]
     signed = None if score is None or trend is None else float(score * trend/100)

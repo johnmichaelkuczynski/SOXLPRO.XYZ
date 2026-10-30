@@ -58,6 +58,15 @@ def _method_help():
 - **Mean Reversion Score:** `clamp((0.5 - H) * 200, 0, 100)`. A higher score describes
   stronger estimated anti-persistence. It is **not a trading signal or a
   probability of profit**.
+- **Hurst evidence:** a separate one-sided comparison against 2,000 simulated
+  Gaussian random walks at exactly 100, 252 or 500 usable closes (one fewer
+  log increments). Evidence requires raw H < 0.5 and lower-tail p ≤ 0.05.
+  Other counts are N/A; no interpolation is used. The null 95% range is a
+  sampling reference, **not a confidence interval for the asset's true H**.
+  The p-value is not a profit probability. These single-window comparisons
+  are not adjusted for selecting multiple symbols or windows and may not
+  apply to fat tails or changing volatility. H, score, K and half-life
+  are unchanged. Half-life is not calibrated by these simulations.
 - **Trend Direction Score:** the MA200's 60-session percent change, clamped
   to -10% through +10%, then multiplied by 10. Absolute changes below 0.5%
   score zero. Positive means upward drift; negative means downward drift.
@@ -150,6 +159,15 @@ def render_mean_reversion(frames: dict):
                     lookback,
                 )
                 hurst = _finite(result.get("H"))
+                evidence = result.get("hurst_evidence") or {}
+                null_range = evidence.get("null_range")
+                evidence_detail = evidence.get("reason", "")
+                if evidence.get("p_lower") is not None:
+                    evidence_detail += (
+                        f" Lower-tail p={evidence['p_lower']:.4f}; random-walk H 95% range "
+                        f"{null_range[0]:.3f}–{null_range[1]:.3f}; "
+                        f"null bias {evidence['null_bias']:+.3f}."
+                    )
                 score = _finite(result.get("score"))
                 half_life = _finite(result.get("half_life"))
                 trend = _finite(result.get("trend"))
@@ -190,6 +208,8 @@ def render_mean_reversion(frames: dict):
                             else "No" if golden_cross is False else "N/A"
                         ),
                         "H": hurst,
+                        "Hurst evidence": evidence.get("label", "N/A"),
+                        "Evidence details": evidence_detail,
                         "MA200 change (60 sessions)": slope,
                         "Reversion speed": (
                             f"{half_life:,.1f} trading days"
@@ -212,6 +232,8 @@ def render_mean_reversion(frames: dict):
                         "K label": "N/A",
                         "Golden cross": "N/A",
                         "H": None,
+                        "Hurst evidence": "N/A",
+                        "Evidence details": "H unavailable.",
                         "MA200 change (60 sessions)": None,
                         "Reversion speed": "N/A",
                         "Observation date": "N/A",
@@ -248,6 +270,14 @@ def render_mean_reversion(frames: dict):
             column_config={
                 "Symbol": st.column_config.TextColumn("Symbol"),
                 "H": st.column_config.TextColumn("H", help=_H_HELP),
+                "Hurst evidence": st.column_config.TextColumn(
+                    "Hurst evidence",
+                    help="Separate Gaussian random-walk test, not a change to H, score, K or half-life. See Method and interpretation.",
+                ),
+                "Evidence details": st.column_config.TextColumn(
+                    "Evidence details", width="large",
+                    help="Null sampling range is not an asset-specific confidence interval; p is not a profit probability.",
+                ),
                 "Mean Reversion Score": st.column_config.TextColumn(
                     "Mean Reversion Score", help=_SCORE_HELP
                 ),
