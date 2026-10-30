@@ -418,6 +418,7 @@ var railFreeLeft = null;
 var railFreeTop = null;
 var railTopOffset = 0;
 var railCollapsed = false;
+var railManuallySized = false;
 
 function visibleRailBounds() {
   var bounds = {top: 12, bottom: window.innerHeight - 12};
@@ -447,8 +448,16 @@ function positionRightControlRail() {
   } else {
     top = Math.max(bounds.top, Math.min(bounds.top + railTopOffset, bounds.bottom - railHeight));
   }
+  // The incline bar is above the chart and must never cover the panel header.
+  var inclineBar = document.getElementById('inclination-bar');
+  var safeTop = inclineBar.offsetTop + inclineBar.offsetHeight + 12;
+  if (!railManuallySized && (railDock === 'right' || railDock === 'left')) {
+    top = safeTop + railTopOffset;
+  }
+  top = Math.max(safeTop, top);
   toolbarEl.style.top = top + 'px';
-  toolbarEl.style.maxHeight = Math.max(140, availableHeight) + 'px';
+  // A partly visible iframe is not a request to shrink all controls.
+  toolbarEl.style.maxHeight = 'none';
   if (railDock === 'left') {
     toolbarEl.style.left = '12px';
     toolbarEl.style.right = 'auto';
@@ -463,7 +472,7 @@ function positionRightControlRail() {
   }
 
   var tab = document.getElementById('rail-collapsed-tab');
-  tab.style.top = bounds.top + 'px';
+  tab.style.top = Math.max(safeTop, bounds.top) + 'px';
   if (railDock === 'left') {
     tab.style.left = '8px';
     tab.style.right = 'auto';
@@ -477,6 +486,13 @@ function positionRightControlRail() {
 
 function fitRailContent() {
   railContentEl.style.transform = 'none';
+  if (!railManuallySized) {
+    railContentEl.classList.remove('wide-layout');
+    toolbarEl.style.width = Math.min(280, document.documentElement.clientWidth - 24) + 'px';
+    railContentEl.style.width = toolbarEl.clientWidth + 'px';
+    toolbarEl.style.height = (railContentEl.scrollHeight + 4) + 'px';
+    return;
+  }
   var useWideLayout = toolbarEl.clientWidth >= 320 &&
     toolbarEl.clientWidth / Math.max(1, toolbarEl.clientHeight) >= 1.05;
   railContentEl.classList.toggle('wide-layout', useWideLayout);
@@ -552,6 +568,7 @@ function parkControlRail(event) {
 
 function resetControlRailSize(event) {
   if (event) event.stopPropagation();
+  railManuallySized = false;
   if (railCollapsed) showControlRail();
   toolbarEl.style.width = '250px';
   toolbarEl.style.height = '720px';
@@ -665,6 +682,7 @@ document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
       top = Math.max(8, top);
       railFreeLeft = left;
       railFreeTop = top;
+      railManuallySized = true;
       toolbarEl.style.width = width + 'px';
       toolbarEl.style.height = height + 'px';
       positionRightControlRail();

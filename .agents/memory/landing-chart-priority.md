@@ -8,3 +8,7 @@ The long-term/daily signal should be the first main content, and the actual inte
 **Why:** The user explicitly said the chart must be the second thing users see, not buried below analytics.
 
 **How to apply:** Preserve the actual drawing/projection chart and controls; do not substitute a static duplicate. New analytics should not push the chart down again.
+
+Chart controls must start expanded and readable, with the header fully below the incline bar. Do not auto-shrink the panel to the small portion of the iframe visible when it first enters the viewport.
+
+**Why:** The user rejected the clipped header and compressed initial panel as unrecognizable. Allow deliberate user resizing/collapse, but not automatic miniature controls.
