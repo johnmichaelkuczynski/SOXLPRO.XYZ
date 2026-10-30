@@ -1,0 +1,8 @@
+{
+  "text": "K remains an unvalidated screening heuristic, not a profit probability or proven edge. Primary historical criterion not met. The predeclared 21-session high edge-K versus high trend-only comparison: return difference nan percentage points; Insufficient sample; interval withheld. Mean drawdown difference nan percentage points (positive means less severe). No promotion is permitted from this reused historical sample. Rank ties are kept together, and sparse groups are not evidence of success. A genuinely untouched holdout and cross-symbol ranking validation remain unavailable.",
+  "status": "Unvalidated",
+  "freshness": "K-specific held-out evaluation only. These dates were examined in other studies; not a genuinely untouched holdout.",
+  "primary_criterion_met": false,
+  "usable_snapshots": 784,
+  "unavailable_snapshots": 0
+}

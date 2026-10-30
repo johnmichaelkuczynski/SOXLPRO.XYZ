@@ -1,0 +1,52 @@
+{
+  "protocol": {
+    "version": 1,
+    "lookback": 252,
+    "training_end": "2018-12-31",
+    "holdout_start": "2019-01-01",
+    "data_end": "2026-10-20",
+    "stride_sessions": 5,
+    "horizons_sessions": [
+      5,
+      21,
+      63
+    ],
+    "primary_horizon_sessions": 21,
+    "formula": "R=clip((0.5-H)*200,0,100); T=0 if abs(s)<0.5 else clip(s,-10,10)*10; signed=R*T/100; edge=max(0,signed)",
+    "slope": "s=100*(MA200[t]/MA200[t-60]-1)",
+    "hurst": "Existing R/S on 252 closing prices' log increments; frozen implementation hash",
+    "ranks": "Training-only 1/3 and 2/3 quantiles per score; equality belongs to lower bucket; never split ties",
+    "entry": "Next session close after signal; exit h sessions after entry",
+    "drawdown": "Worst peak-to-trough decline on daily closes including entry and exit; negative percent",
+    "bootstrap": "Paired circular time-block bootstrap, block=ceil((h+1)/5), 2000 replicates, seed=54; exploratory 95% intervals",
+    "minimum_nonoverlap": 20,
+    "primary_comparison": "High edge-K return minus high trend-only return at 21 sessions, with mean drawdown no worse; require 95% return-difference interval above zero and >=20 non-overlapping observations in both groups",
+    "promotion_rule": "Never promote on reused historical data; prospective independent replication required",
+    "freshness": "K-specific held-out evaluation only. These dates were examined in other studies; not a genuinely untouched holdout.",
+    "scope": "SOXL single-symbol temporal ranks, not cross-sectional investment rankings"
+  },
+  "hashes": {
+    "docs/soxl_signal_study_prices.csv": "7bcd10c27d99b9e7553ec3a275180e882fd7c276a57600a737e2e5bb0229ed16",
+    "mean_reversion_model.py": "3bdd4c1da009f7e4fb37b0b1b3412e6bcc8a47c78b858e24dba00403a4e2de55",
+    "k_validation.py": "08fb11816c87ccd55f8be973e70d2cb578966633750004b1d27c46e7480afbf9",
+    "scripts/k_validation_report.py": "7fcdc7122fbe0c45251db2aab097065e9fe61f938a46befbdc61364c6dd2b73b"
+  },
+  "cutoffs": {
+    "k_edge": [
+      0.0,
+      0.0
+    ],
+    "k_signed": [
+      0.0,
+      0.0
+    ],
+    "trend": [
+      15.084294589539521,
+      100.0
+    ],
+    "reversion": [
+      0.0,
+      0.0
+    ]
+  }
+}

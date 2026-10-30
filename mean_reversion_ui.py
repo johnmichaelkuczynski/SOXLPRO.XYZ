@@ -330,3 +330,5 @@ def render_mean_reversion(frames: dict):
             "definitions. Dates and usable history may differ by symbol."
         )
         _method_help()
+        from k_validation_ui import render_k_validation
+        render_k_validation()

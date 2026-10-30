@@ -1,0 +1,181 @@
+horizon,group,baseline,return_difference_pp,return_ci_low,return_ci_high,drawdown_difference_pp,drawdown_ci_low,drawdown_ci_high,status
+5,Unconditional,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Unconditional,reversion: High,3.604147549992203,,,1.3446137087736023,,,Insufficient sample; interval withheld
+5,k_edge: Low,Unconditional,0.11903915152747313,-0.10227223696304022,0.37674509131525935,0.02047629220571423,-0.0969698888333748,0.15981690888060315,Exploratory; not multiplicity-adjusted
+5,k_edge: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+5,k_edge: Low,reversion: High,3.7231867015196762,,,1.3650900009793165,,,Insufficient sample; interval withheld
+5,k_edge: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,k_edge: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+5,k_edge: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+5,k_edge: High,Unconditional,-4.535391673196731,,,-0.780146733037741,,,Insufficient sample; interval withheld
+5,k_edge: High,trend: High,,,,,,,Insufficient sample; interval withheld
+5,k_edge: High,reversion: High,-0.9312441232045277,,,0.5644669757358614,,,Insufficient sample; interval withheld
+5,k_signed: Low,Unconditional,0.11903915152747313,-0.10227223696304022,0.37674509131525935,0.02047629220571423,-0.0969698888333748,0.15981690888060315,Exploratory; not multiplicity-adjusted
+5,k_signed: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+5,k_signed: Low,reversion: High,3.7231867015196762,,,1.3650900009793165,,,Insufficient sample; interval withheld
+5,k_signed: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,k_signed: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+5,k_signed: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+5,k_signed: High,Unconditional,-4.535391673196731,,,-0.780146733037741,,,Insufficient sample; interval withheld
+5,k_signed: High,trend: High,,,,,,,Insufficient sample; interval withheld
+5,k_signed: High,reversion: High,-0.9312441232045277,,,0.5644669757358614,,,Insufficient sample; interval withheld
+5,trend: Low,Unconditional,0.10693098873975937,-1.6779046701104734,1.8540908416582222,0.3029317529928335,-0.8143614175262988,1.399701747311579,Exploratory; not multiplicity-adjusted
+5,trend: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+5,trend: Low,reversion: High,3.7110785387319627,,,1.6475454617664358,,,Insufficient sample; interval withheld
+5,trend: Middle,Unconditional,-0.06442153829813435,-1.125119210120238,1.0058202443349993,-0.18250396594240748,-0.8461172763558844,0.5043895429311496,Exploratory; not multiplicity-adjusted
+5,trend: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+5,trend: Middle,reversion: High,3.5397260116940688,,,1.1621097428311948,,,Insufficient sample; interval withheld
+5,trend: High,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,trend: High,reversion: High,,,,,,,Insufficient sample; interval withheld
+5,reversion: Low,Unconditional,0.11411548970951557,-0.17665015726675676,0.4318964315623132,0.04257352112211876,-0.09681940081093292,0.20911124324088456,Exploratory; not multiplicity-adjusted
+5,reversion: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+5,reversion: Low,reversion: High,3.7182630397017187,,,1.387187229895721,,,Insufficient sample; interval withheld
+5,reversion: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,reversion: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+5,reversion: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+5,reversion: High,Unconditional,-3.604147549992203,,,-1.3446137087736023,,,Insufficient sample; interval withheld
+5,reversion: High,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Prime: Growth + Reversion,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,Label: Prime: Growth + Reversion,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Prime: Growth + Reversion,reversion: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Good: Reverting Uptrend,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,Label: Good: Reverting Uptrend,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Good: Reverting Uptrend,reversion: High,,,,,,,Insufficient sample; interval withheld
+5,"Label: Weak: Mild Reversion, Mild Uptrend",Unconditional,-4.535391673196731,,,-0.780146733037741,,,Insufficient sample; interval withheld
+5,"Label: Weak: Mild Reversion, Mild Uptrend",trend: High,,,,,,,Insufficient sample; interval withheld
+5,"Label: Weak: Mild Reversion, Mild Uptrend",reversion: High,-0.9312441232045277,,,0.5644669757358614,,,Insufficient sample; interval withheld
+5,Label: No Edge: Flat,Unconditional,-1.2244931356681388,,,0.037321976499180565,,,Insufficient sample; interval withheld
+5,Label: No Edge: Flat,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: No Edge: Flat,reversion: High,2.3796544143240643,,,1.3819356852727829,,,Insufficient sample; interval withheld
+5,Label: No Edge: Flat or Random,Unconditional,0.1356480681338208,-0.173281614511389,0.4885777453494163,0.0426579963707443,-0.10768631171673664,0.21983355781110714,Exploratory; not multiplicity-adjusted
+5,Label: No Edge: Flat or Random,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: No Edge: Flat or Random,reversion: High,3.739795618126024,,,1.3872717051443466,,,Insufficient sample; interval withheld
+5,Label: Caution: Reverting Downtrend,Unconditional,1.0520730660304367,,,-4.166948587452909,,,Insufficient sample; interval withheld
+5,Label: Caution: Reverting Downtrend,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Caution: Reverting Downtrend,reversion: High,4.65622061602264,,,-2.8223348786793068,,,Insufficient sample; interval withheld
+5,"Label: Value Trap: Strong Reversion, Falling Mean",Unconditional,,,,,,,Insufficient sample; interval withheld
+5,"Label: Value Trap: Strong Reversion, Falling Mean",trend: High,,,,,,,Insufficient sample; interval withheld
+5,"Label: Value Trap: Strong Reversion, Falling Mean",reversion: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Avoid: Violent Reversion into Decline,Unconditional,,,,,,,Insufficient sample; interval withheld
+5,Label: Avoid: Violent Reversion into Decline,trend: High,,,,,,,Insufficient sample; interval withheld
+5,Label: Avoid: Violent Reversion into Decline,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,Unconditional,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Unconditional,reversion: High,-5.472324618260655,,,-0.022661292405761202,,,Insufficient sample; interval withheld
+21,k_edge: Low,Unconditional,-0.025344919740852845,-0.9650449961012653,0.7456813593916068,-0.000828114707719152,-0.13056278998177842,0.1667431605829575,Exploratory; not multiplicity-adjusted
+21,k_edge: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+21,k_edge: Low,reversion: High,-5.4976695380015075,,,-0.023489407113480354,,,Insufficient sample; interval withheld
+21,k_edge: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,k_edge: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+21,k_edge: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,k_edge: High,Unconditional,0.9580379662042757,,,0.03130273595164823,,,Insufficient sample; interval withheld
+21,k_edge: High,trend: High,,,,,,,Insufficient sample; interval withheld
+21,k_edge: High,reversion: High,-4.514286652056379,,,0.008641443545887029,,,Insufficient sample; interval withheld
+21,k_signed: Low,Unconditional,-0.025344919740852845,-0.9650449961012653,0.7456813593916068,-0.000828114707719152,-0.13056278998177842,0.1667431605829575,Exploratory; not multiplicity-adjusted
+21,k_signed: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+21,k_signed: Low,reversion: High,-5.4976695380015075,,,-0.023489407113480354,,,Insufficient sample; interval withheld
+21,k_signed: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,k_signed: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+21,k_signed: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,k_signed: High,Unconditional,0.9580379662042757,,,0.03130273595164823,,,Insufficient sample; interval withheld
+21,k_signed: High,trend: High,,,,,,,Insufficient sample; interval withheld
+21,k_signed: High,reversion: High,-4.514286652056379,,,0.008641443545887029,,,Insufficient sample; interval withheld
+21,trend: Low,Unconditional,0.7350617421986803,-5.9831035616141826,6.907212841535503,1.1989523428222775,-1.838531452248953,4.284469509267324,Exploratory; not multiplicity-adjusted
+21,trend: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+21,trend: Low,reversion: High,-4.737262876061974,,,1.1762910504165163,,,Insufficient sample; interval withheld
+21,trend: Middle,Unconditional,-0.4483571622539655,-4.278664870180027,3.7792236680530653,-0.73131118006172,-2.6049449000425664,1.1415462224521247,Exploratory; not multiplicity-adjusted
+21,trend: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+21,trend: Middle,reversion: High,-5.92068178051462,,,-0.7539724724674812,,,Insufficient sample; interval withheld
+21,trend: High,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,trend: High,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,reversion: Low,Unconditional,-0.17464865802959473,-1.0925330926205756,0.6527147401959692,-0.0007232327363517754,-0.14127115644025484,0.1805163990233092,Exploratory; not multiplicity-adjusted
+21,reversion: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+21,reversion: Low,reversion: High,-5.646973276290249,,,-0.023384525142112977,,,Insufficient sample; interval withheld
+21,reversion: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,reversion: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+21,reversion: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,reversion: High,Unconditional,5.472324618260655,,,0.022661292405761202,,,Insufficient sample; interval withheld
+21,reversion: High,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Prime: Growth + Reversion,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,Label: Prime: Growth + Reversion,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Prime: Growth + Reversion,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Good: Reverting Uptrend,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,Label: Good: Reverting Uptrend,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Good: Reverting Uptrend,reversion: High,,,,,,,Insufficient sample; interval withheld
+21,"Label: Weak: Mild Reversion, Mild Uptrend",Unconditional,0.9580379662042757,,,0.03130273595164823,,,Insufficient sample; interval withheld
+21,"Label: Weak: Mild Reversion, Mild Uptrend",trend: High,,,,,,,Insufficient sample; interval withheld
+21,"Label: Weak: Mild Reversion, Mild Uptrend",reversion: High,-4.514286652056379,,,0.008641443545887029,,,Insufficient sample; interval withheld
+21,Label: No Edge: Flat,Unconditional,-2.491884784701912,,,2.4284725718969504,,,Insufficient sample; interval withheld
+21,Label: No Edge: Flat,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: No Edge: Flat,reversion: High,-7.964209402962567,,,2.4058112794911892,,,Insufficient sample; interval withheld
+21,Label: No Edge: Flat or Random,Unconditional,-0.13707185597545024,-1.0790213271145024,0.7292490101850487,-0.04011559713581647,-0.23416734600734496,0.18732968876599904,Exploratory; not multiplicity-adjusted
+21,Label: No Edge: Flat or Random,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: No Edge: Flat or Random,reversion: High,-5.609396474236105,,,-0.06277688954157767,,,Insufficient sample; interval withheld
+21,Label: Caution: Reverting Downtrend,Unconditional,28.043757878542547,,,-0.020545925323666836,,,Insufficient sample; interval withheld
+21,Label: Caution: Reverting Downtrend,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Caution: Reverting Downtrend,reversion: High,22.571433260281893,,,-0.04320721772942804,,,Insufficient sample; interval withheld
+21,"Label: Value Trap: Strong Reversion, Falling Mean",Unconditional,,,,,,,Insufficient sample; interval withheld
+21,"Label: Value Trap: Strong Reversion, Falling Mean",trend: High,,,,,,,Insufficient sample; interval withheld
+21,"Label: Value Trap: Strong Reversion, Falling Mean",reversion: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Avoid: Violent Reversion into Decline,Unconditional,,,,,,,Insufficient sample; interval withheld
+21,Label: Avoid: Violent Reversion into Decline,trend: High,,,,,,,Insufficient sample; interval withheld
+21,Label: Avoid: Violent Reversion into Decline,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,Unconditional,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Unconditional,reversion: High,14.711508317747926,,,-0.027917626399279527,,,Insufficient sample; interval withheld
+63,k_edge: Low,Unconditional,0.1471743655469595,-0.5770902360693577,0.9627635484196524,-0.11446007186175677,-0.42863625519879756,0.0950955243563923,Exploratory; not multiplicity-adjusted
+63,k_edge: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+63,k_edge: Low,reversion: High,14.858682683294886,,,-0.1423776982610363,,,Insufficient sample; interval withheld
+63,k_edge: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,k_edge: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+63,k_edge: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,k_edge: High,Unconditional,-5.445451525237651,,,4.235022658885029,,,Insufficient sample; interval withheld
+63,k_edge: High,trend: High,,,,,,,Insufficient sample; interval withheld
+63,k_edge: High,reversion: High,9.266056792510275,,,4.2071050324857495,,,Insufficient sample; interval withheld
+63,k_signed: Low,Unconditional,0.1471743655469595,-0.5770902360693577,0.9627635484196524,-0.11446007186175677,-0.42863625519879756,0.0950955243563923,Exploratory; not multiplicity-adjusted
+63,k_signed: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+63,k_signed: Low,reversion: High,14.858682683294886,,,-0.1423776982610363,,,Insufficient sample; interval withheld
+63,k_signed: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,k_signed: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+63,k_signed: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,k_signed: High,Unconditional,-5.445451525237651,,,4.235022658885029,,,Insufficient sample; interval withheld
+63,k_signed: High,trend: High,,,,,,,Insufficient sample; interval withheld
+63,k_signed: High,reversion: High,9.266056792510275,,,4.2071050324857495,,,Insufficient sample; interval withheld
+63,trend: Low,Unconditional,-0.282714254038698,,,1.6587673869072361,,,Insufficient sample; interval withheld
+63,trend: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+63,trend: Low,reversion: High,14.428794063709228,,,1.6308497605079566,,,Insufficient sample; interval withheld
+63,trend: Middle,Unconditional,0.17836478688278135,,,-1.046518480151775,,,Insufficient sample; interval withheld
+63,trend: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+63,trend: Middle,reversion: High,14.889873104630707,,,-1.0744361065510546,,,Insufficient sample; interval withheld
+63,trend: High,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,trend: High,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,reversion: Low,Unconditional,0.47972309731786567,-0.38621273797455985,1.4457744919733535,-0.0009103573825868239,-0.34523703452852583,0.2989416696669791,Exploratory; not multiplicity-adjusted
+63,reversion: Low,trend: High,,,,,,,Insufficient sample; interval withheld
+63,reversion: Low,reversion: High,15.191231415065792,,,-0.02882798378186635,,,Insufficient sample; interval withheld
+63,reversion: Middle,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,reversion: Middle,trend: High,,,,,,,Insufficient sample; interval withheld
+63,reversion: Middle,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,reversion: High,Unconditional,-14.711508317747926,,,0.027917626399279527,,,Insufficient sample; interval withheld
+63,reversion: High,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Prime: Growth + Reversion,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,Label: Prime: Growth + Reversion,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Prime: Growth + Reversion,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Good: Reverting Uptrend,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,Label: Good: Reverting Uptrend,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Good: Reverting Uptrend,reversion: High,,,,,,,Insufficient sample; interval withheld
+63,"Label: Weak: Mild Reversion, Mild Uptrend",Unconditional,-5.445451525237651,,,4.235022658885029,,,Insufficient sample; interval withheld
+63,"Label: Weak: Mild Reversion, Mild Uptrend",trend: High,,,,,,,Insufficient sample; interval withheld
+63,"Label: Weak: Mild Reversion, Mild Uptrend",reversion: High,9.266056792510275,,,4.2071050324857495,,,Insufficient sample; interval withheld
+63,Label: No Edge: Flat,Unconditional,7.178948631779548,,,6.056608018658444,,,Insufficient sample; interval withheld
+63,Label: No Edge: Flat,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: No Edge: Flat,reversion: High,21.890456949527476,,,6.028690392259165,,,Insufficient sample; interval withheld
+63,Label: No Edge: Flat or Random,Unconditional,0.3686862100063486,-0.6109398061852593,1.4623997025894784,-0.10131121444403846,-0.47382253048299655,0.25271538078866285,Exploratory; not multiplicity-adjusted
+63,Label: No Edge: Flat or Random,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: No Edge: Flat or Random,reversion: High,15.080194527754275,,,-0.12922884084331798,,,Insufficient sample; interval withheld
+63,Label: Caution: Reverting Downtrend,Unconditional,-61.041792280299305,,,-21.007607536029454,,,Insufficient sample; interval withheld
+63,Label: Caution: Reverting Downtrend,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Caution: Reverting Downtrend,reversion: High,-46.330283962551384,,,-21.035525162428733,,,Insufficient sample; interval withheld
+63,"Label: Value Trap: Strong Reversion, Falling Mean",Unconditional,,,,,,,Insufficient sample; interval withheld
+63,"Label: Value Trap: Strong Reversion, Falling Mean",trend: High,,,,,,,Insufficient sample; interval withheld
+63,"Label: Value Trap: Strong Reversion, Falling Mean",reversion: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Avoid: Violent Reversion into Decline,Unconditional,,,,,,,Insufficient sample; interval withheld
+63,Label: Avoid: Violent Reversion into Decline,trend: High,,,,,,,Insufficient sample; interval withheld
+63,Label: Avoid: Violent Reversion into Decline,reversion: High,,,,,,,Insufficient sample; interval withheld
