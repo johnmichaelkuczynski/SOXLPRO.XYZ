@@ -202,7 +202,7 @@ def _signal_card(percentile, signal, close_date):
     """
 
 
-def render_landing_signal(price_data, saved=None, quote=None):
+def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
     if saved is None:
         readings, closes = compute_timeframe_readings(price_data)
         result = composite_signal(readings)
@@ -212,7 +212,7 @@ def render_landing_signal(price_data, saved=None, quote=None):
         result = saved["composite"]
     if closes.empty or not np.isfinite(result["percentile"]):
         st.warning("The daily SOXL signal is unavailable until price history loads.")
-        return
+        return st.container()
 
     st.markdown("### SOXL Daily Signal")
     from short_term_signal_ui import render_short_term_signal, render_full_signal_report
@@ -238,6 +238,9 @@ def render_landing_signal(price_data, saved=None, quote=None):
             render_short_term_signal(closes)
         else:
             render_short_term_signal(closes, saved=saved)
+    chart_slot = st.container()
+    if after_chart is not None:
+        after_chart()
     from price_scenario_ui import render_price_scenario
     quote_price = (quote or {}).get("price")
     if quote_price and np.isfinite(float(quote_price)) and float(quote_price) > 0:
@@ -296,3 +299,4 @@ historical mean-reversion indicator, not a guarantee or personalized investment
 advice.
             """
         )
+    return chart_slot

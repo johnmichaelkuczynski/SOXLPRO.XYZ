@@ -224,10 +224,21 @@ def _background_update_diagnostics(saved):
 _background_update_diagnostics(saved_market)
 if saved_market.get("_read_warning"):
     st.warning(saved_market["_read_warning"] + " Observation times remain unchanged.")
-render_market_snapshot(data, quote=quote, saved=saved_market)
+def _render_summary_below_chart():
+    render_market_snapshot(data, quote=quote, saved=saved_market)
+    render_visitor_counter()
 
-render_visitor_counter()
-render_landing_signal(data, saved=saved_market["signal"], quote=quote)
+
+primary_chart_slot = render_landing_signal(
+    data, saved=saved_market["signal"], quote=quote,
+    after_chart=_render_summary_below_chart,
+)
+
+
+def render_primary_chart(**kwargs):
+    # Render the same component once, directly below the daily signal.
+    with primary_chart_slot:
+        return chart_component(**kwargs)
 
 def get_price_at_offset(df, days_ago):
     target_date = df.index[-1] - timedelta(days=days_ago)
@@ -614,7 +625,7 @@ with tab_chart:
             {"Close": custom_actual_list}, index=pd.to_datetime(custom_dates_list))
     render_mean_reversion(reversion_frames)
 
-    result = chart_component(
+    result = render_primary_chart(
         dates=dates_list,
         prices=prices_list,
         qqq_dates=qqq_dates_list,
