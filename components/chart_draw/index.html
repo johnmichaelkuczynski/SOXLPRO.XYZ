@@ -13,12 +13,13 @@
     width: 250px; height: 720px; padding: 0;
     background: rgba(248,250,252,0.97);
     border: 2px solid #475569; border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow: hidden;
-    resize: none; min-width: 140px; max-width: 520px; min-height: 140px;
-    cursor: move; touch-action: none;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow-x: hidden; overflow-y: auto;
+    resize: none; min-width: 240px; max-width: 520px; min-height: 140px;
+    cursor: move; touch-action: pan-y;
   }
   #rail-content {
-    display: flex; position: absolute; left: 0; top: 0; width: 250px;
+    display: flex; position: relative; width: 100%; flex: 0 0 100%;
+    height: max-content;
     gap: 7px; align-items: stretch; padding: 10px; flex-direction: column;
     transform-origin: top left;
   }
@@ -30,8 +31,9 @@
     pointer-events: none;
   }
   #rail-content > * { min-width: 0; width: 100%; }
+  #rail-content > .sr-only { width: 1px; }
   #rail-content.wide-layout {
-    display: grid; width: 650px; grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-flow: row; gap: 7px 10px; align-content: start;
   }
   #rail-content.wide-layout #rail-handle,
@@ -48,7 +50,7 @@
   #rail-content.wide-layout #keyboard-selection > button {
     grid-column: 1 / -1;
   }
-  .rail-resize-handle { position: absolute; z-index: 320; background: rgba(21,101,192,0.24); }
+  .rail-resize-handle { position: absolute; z-index: 320; background: rgba(21,101,192,0.24); touch-action: none; }
   .rail-resize-handle:hover { background: rgba(21,101,192,0.68); }
   .rail-resize-n, .rail-resize-s { height: 10px; cursor: ns-resize; }
   .rail-resize-e, .rail-resize-w { width: 10px; cursor: ew-resize; }
@@ -63,7 +65,7 @@
     margin: -10px -10px 1px; padding: 8px 9px; color: #fff; background: #334155;
     border-radius: 8px 8px 0 0; cursor: move; user-select: none; touch-action: none;
   }
-  #rail-handle strong { font-size: 11px; letter-spacing: 0.03em; white-space: nowrap; }
+  #rail-handle strong { font-size: 11px; letter-spacing: 0.03em; white-space: normal; min-width: 0; flex: 1; }
   .rail-move-btn {
     border: 1px solid #94a3b8; border-radius: 4px; background: #fff; color: #0f172a;
     cursor: pointer; padding: 3px 6px; font-weight: 900; line-height: 1;
@@ -485,31 +487,18 @@ function positionRightControlRail() {
 }
 
 function fitRailContent() {
+  // A short panel is a scrollable viewport, never a thumbnail of its controls.
   railContentEl.style.transform = 'none';
   if (!railManuallySized) {
     railContentEl.classList.remove('wide-layout');
     toolbarEl.style.width = Math.min(280, document.documentElement.clientWidth - 24) + 'px';
-    railContentEl.style.width = toolbarEl.clientWidth + 'px';
-    toolbarEl.style.height = (railContentEl.scrollHeight + 4) + 'px';
+    railContentEl.style.width = '100%';
+    toolbarEl.style.height = Math.min(720, railContentEl.scrollHeight + 4) + 'px';
     return;
   }
-  var useWideLayout = toolbarEl.clientWidth >= 320 &&
-    toolbarEl.clientWidth / Math.max(1, toolbarEl.clientHeight) >= 1.05;
+  var useWideLayout = toolbarEl.clientWidth >= 480;
   railContentEl.classList.toggle('wide-layout', useWideLayout);
-  var baseNaturalWidth = useWideLayout ? 650 : 250;
-  railContentEl.style.width = baseNaturalWidth + 'px';
-  var naturalHeight = Math.max(1, railContentEl.scrollHeight);
-  var scale = Math.min(1, toolbarEl.clientHeight / naturalHeight);
-  // Use all available horizontal space at the height-safe scale. This makes
-  // controls genuinely widen with the panel instead of leaving an empty strip.
-  var naturalWidth = Math.max(baseNaturalWidth, toolbarEl.clientWidth / Math.max(0.1, scale));
-  railContentEl.style.width = naturalWidth + 'px';
-  naturalHeight = Math.max(1, railContentEl.scrollHeight);
-  scale = Math.min(
-    toolbarEl.clientWidth / naturalWidth,
-    toolbarEl.clientHeight / naturalHeight
-  );
-  railContentEl.style.transform = 'scale(' + Math.max(0.1, scale) + ')';
+  railContentEl.style.width = '100%';
 }
 
 function positionRailResizeHandles() {
@@ -606,6 +595,12 @@ toolbarEl.addEventListener('click', function(event) {
 
 toolbarEl.addEventListener('pointerdown', function(event) {
   if (event.button !== 0) return;
+  // Touch swipes scroll content. Touch dragging is reserved for the header;
+  // mouse users retain the existing drag-from-panel behavior.
+  if (event.pointerType === 'touch' && !event.target.closest('#rail-handle')) return;
+  // Native scrollbar drags must scroll, not move the entire panel.
+  var panelRect = toolbarEl.getBoundingClientRect();
+  if (event.clientX >= panelRect.left + toolbarEl.clientLeft + toolbarEl.clientWidth) return;
   // A range gesture belongs to its control, not the movable panel.
   if (event.target.closest('.size-control')) {
     suppressPanelClick = false;
@@ -642,9 +637,11 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     if (moving) suppressPanelClick = true;
     document.removeEventListener('pointermove', moveRail);
     document.removeEventListener('pointerup', stopMoving);
+    document.removeEventListener('pointercancel', stopMoving);
   }
   document.addEventListener('pointermove', moveRail);
   document.addEventListener('pointerup', stopMoving);
+  document.addEventListener('pointercancel', stopMoving);
 });
 
 document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
@@ -667,9 +664,9 @@ document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
       var left = startRect.left;
       var top = startRect.top;
 
-      if (direction.indexOf('e') !== -1) width = Math.max(140, Math.min(520, startRect.width + dx));
+      if (direction.indexOf('e') !== -1) width = Math.max(240, Math.min(520, startRect.width + dx));
       if (direction.indexOf('w') !== -1) {
-        width = Math.max(140, Math.min(520, startRect.width - dx));
+        width = Math.max(240, Math.min(520, startRect.width - dx));
         left = startRect.right - width;
       }
       if (direction.indexOf('s') !== -1) height = Math.max(140, startRect.height + dy);

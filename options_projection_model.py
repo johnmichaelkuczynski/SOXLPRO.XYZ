@@ -28,7 +28,8 @@ def price(spot, strike, years, iv, rate, dividend, kind):
 
 
 def project(history, contract, premium, horizon_date, contracts=1, iv_factor=1.,
-            rate=.04, dividend=0., now=None, samples=4000):
+            rate=.04, dividend=0., now=None, samples=4000, return_paths=False,
+            drift_override=None):
     now = now or datetime.now(ZoneInfo("America/New_York"))
     if now.tzinfo is None:
         raise ValueError("Projection time must include a timezone.")
@@ -53,12 +54,18 @@ def project(history, contract, premium, horizon_date, contracts=1, iv_factor=1.,
         age = (pd.Timestamp(now) - pd.Timestamp(contract[field])).total_seconds()
         if age < -300 or age > 4 * 86400:
             raise ValueError("Quotes are too old for a projection. Refresh the chain.")
+    # Historical studies pass only point-in-time observations (including their
+    # availability cutoff); the interactive chart also supports undated history.
     close = pd.to_numeric(history["Close"], errors="coerce").dropna()
     close = close[close > 0]
     returns = np.diff(np.log(close.to_numpy()))
     if len(returns) < 252 or not np.all(np.isfinite(returns)):
         raise ValueError("At least one year of valid SOXL history is required.")
     drift, sigma = float(returns.mean() * 252), float(returns.std(ddof=1) * np.sqrt(252))
+    if drift_override is not None:
+        if not np.isfinite(drift_override):
+            raise ValueError("Invalid drift override.")
+        drift = float(drift_override)
     # Calendar-day resolution; weekends have model time, not executable quotes.
     dates = [now]
     for day in pd.date_range(now.date(), expiration, freq="D"):
@@ -79,7 +86,7 @@ def project(history, contract, premium, horizon_date, contracts=1, iv_factor=1.,
                              scenario_iv, rate, dividend, contract["type"])
     index = next(j for j, d in enumerate(dates) if d.date() == horizon_date)
     position_pl = (values[:, index] - premium) * 100 * contracts
-    return {
+    result = {
         "dates": dates, "quantiles": np.quantile(values, [.05,.25,.5,.75,.95], axis=0),
         "profit_probability": (values > premium).mean(axis=0),
         "multiplier": 100, "horizon_index": index,
@@ -89,3 +96,6 @@ def project(history, contract, premium, horizon_date, contracts=1, iv_factor=1.,
         "path_low05": float(np.quantile(values[:, :index+1].min(axis=1), .05)),
         "samples": samples,
     }
+    if return_paths:
+        result["paths"] = values
+    return result

@@ -251,6 +251,8 @@ def render_options_projection(history: pd.DataFrame):
         "Load a quoted contract, set your purchase premium, and explore its "
         "modeled value through expiration in a popup."
     )
+    from options_validation_ui import render_validation
+    render_validation()
     today = datetime.now(ZoneInfo("America/New_York")).date()
     default_expiration = today + timedelta(days=28)
     default_expiration += timedelta(days=(4-default_expiration.weekday()) % 7)
