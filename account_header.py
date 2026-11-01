@@ -147,7 +147,7 @@ def render_account_header():
     flush_analytics()
     # Public investor access: do not require identity, query billing, or launch
     # checkout from legacy query parameters. Existing purchase records remain.
-    logo = Path(__file__).resolve().parent / "attached_assets" / "zhi_logoc_1787826573212.png"
+    logo = Path(__file__).resolve().parent / "assets" / "zhi_logo.png"
     logo_markup = (
         f'<img src="data:image/png;base64,{base64.b64encode(logo.read_bytes()).decode("ascii")}" '
         'alt="ZHI Systems" style="display:block;width:38px;height:38px;border-radius:8px;">'
