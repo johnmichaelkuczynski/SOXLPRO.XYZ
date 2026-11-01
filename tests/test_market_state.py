@@ -17,6 +17,8 @@ import pandas as pd
 import market_state_store as store
 import market_state_worker as worker
 
+PROJECT_BUNDLED_SNAPSHOT = store._BUNDLED_SNAPSHOT
+
 
 def payload():
     return {
@@ -39,8 +41,13 @@ class StoreTests(unittest.TestCase):
         self.snapshot_dir = tempfile.TemporaryDirectory()
         self.snapshot_path = Path(self.snapshot_dir.name) / "last-market-state.json"
         self.snapshot_patch = patch.object(store, "_DISK_SNAPSHOT", self.snapshot_path)
+        self.bundle_patch = patch.object(
+            store, "_BUNDLED_SNAPSHOT", Path(self.snapshot_dir.name) / "missing-bundle.json"
+        )
         self.snapshot_patch.start()
+        self.bundle_patch.start()
         self.addCleanup(self.snapshot_patch.stop)
+        self.addCleanup(self.bundle_patch.stop)
         self.addCleanup(self.snapshot_dir.cleanup)
 
     def connection(self, state=None):
@@ -91,7 +98,8 @@ class StoreTests(unittest.TestCase):
             self.assertIn("showing saved results", retained["_read_warning"])
 
     def test_bundled_snapshot_is_valid_and_has_last_known_price(self):
-        bundled = store._read_disk_snapshot()
+        with patch.object(store, "_BUNDLED_SNAPSHOT", PROJECT_BUNDLED_SNAPSHOT):
+            bundled = store._read_disk_snapshot()
         self.assertIsNotNone(bundled)
         self.assertTrue(store._valid_state(bundled))
         self.assertGreater(bundled["snapshot"]["current_price"], 0)

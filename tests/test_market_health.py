@@ -61,6 +61,7 @@ class HealthTests(unittest.TestCase):
     def test_database_evidence_available_even_without_saved_state(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(store, "_DISK_SNAPSHOT", Path(directory) / "missing.json"), \
+                patch.object(store, "_BUNDLED_SNAPSHOT", Path(directory) / "missing-bundle.json"), \
                 patch.object(store, "_execute", side_effect=[None, (self.evidence()["worker"],)]):
             with patch.object(store, "_last_good", None):
                 self.assertIsNone(store.load_state())
