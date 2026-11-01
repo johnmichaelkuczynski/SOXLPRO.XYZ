@@ -11,7 +11,10 @@ import copy
 import json
 import logging
 import math
+import os
 import threading
+import tempfile
+from pathlib import Path
 from datetime import datetime, timezone
 
 from db import get_conn
@@ -25,6 +28,25 @@ _read_health = {"status": "not_checked"}
 _worker_health = None
 _worker_read_status = "not_checked"
 _health_slot = threading.Lock()
+_DISK_SNAPSHOT = Path(tempfile.gettempdir()) / "soxl-last-market-state.json"
+
+
+def _save_disk_snapshot(payload):
+    """Best-effort same-instance fallback; never include credentials or user data."""
+    try:
+        temporary = _DISK_SNAPSHOT.with_suffix(".tmp")
+        temporary.write_text(json.dumps(_clean_json(payload), allow_nan=False))
+        os.replace(temporary, _DISK_SNAPSHOT)
+    except (OSError, TypeError, ValueError):
+        LOG.warning("Local last-market snapshot could not be saved.")
+
+
+def _read_disk_snapshot():
+    try:
+        payload = json.loads(_DISK_SNAPSHOT.read_text())
+        return payload if _valid_state(payload) else None
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 def read_health(*, refresh=False):
@@ -66,6 +88,9 @@ def _record_read(status):
 
 
 def _retained_state(reason):
+    global _last_good
+    if _last_good is None:
+        _last_good = _read_disk_snapshot()
     if _last_good is None:
         return None
     result = copy.deepcopy(_last_good)
@@ -194,6 +219,9 @@ def save_state(payload):
         (serialized,),
         timeout_ms=3000,
     )
+    global _last_good
+    _last_good = copy.deepcopy(_clean_json(payload))
+    _save_disk_snapshot(_last_good)
 
 
 def load_state():
@@ -217,6 +245,7 @@ def load_state():
                 # Retain even a response that arrives after the request's budget.
                 # Assignment is atomic; returned objects are always deep copies.
                 _last_good = copy.deepcopy(row[0])
+                _save_disk_snapshot(_last_good)
                 result.append(row[0])
                 _record_read("ok")
             elif row and row[0] is not None:

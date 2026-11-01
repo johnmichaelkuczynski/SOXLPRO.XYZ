@@ -9,6 +9,7 @@ import sys
 import time
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -33,7 +34,14 @@ def payload():
 
 class StoreTests(unittest.TestCase):
     def setUp(self):
+        import tempfile
         store._last_good = None
+        self.snapshot_dir = tempfile.TemporaryDirectory()
+        self.snapshot_path = Path(self.snapshot_dir.name) / "last-market-state.json"
+        self.snapshot_patch = patch.object(store, "_DISK_SNAPSHOT", self.snapshot_path)
+        self.snapshot_patch.start()
+        self.addCleanup(self.snapshot_patch.stop)
+        self.addCleanup(self.snapshot_dir.cleanup)
 
     def connection(self, state=None):
         conn = MagicMock()
@@ -67,6 +75,31 @@ class StoreTests(unittest.TestCase):
         self.assertNotIn("NaN", params[0])
         self.assertIsNone(json.loads(params[0])["snapshot"]["returns"]["Year"])
         conn.close.assert_called_once()
+
+    def test_database_outage_uses_validated_last_snapshot_and_close(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            disk = Path(directory) / "last-market-state.json"
+            with patch.object(store, "_DISK_SNAPSHOT", disk):
+                store._last_good = None
+                store._save_disk_snapshot(payload())
+                with patch.object(store, "_execute", side_effect=store.StateStoreError("Unavailable")):
+                    retained = store.load_state()
+            self.assertEqual(retained["history"]["prices"][-1], 21.0)
+            self.assertIn("showing saved results", retained["_read_warning"])
+
+    def test_invalid_or_missing_disk_snapshot_never_fabricates_price(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            disk = Path(directory) / "last-market-state.json"
+            with patch.object(store, "_DISK_SNAPSHOT", disk):
+                store._last_good = None
+                disk.write_text('{"version":99}')
+                self.assertIsNone(store._retained_state("Database unavailable"))
 
     def test_bad_state_cannot_replace_last_good(self):
         for bad in (

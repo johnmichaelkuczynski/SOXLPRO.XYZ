@@ -1,5 +1,7 @@
 """Offline evidence checks for diagnostics and independent worker heartbeats."""
 import unittest
+import tempfile
+from pathlib import Path
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -57,7 +59,9 @@ class HealthTests(unittest.TestCase):
         self.assertIn("Retained observation", self.lines(saved))
 
     def test_database_evidence_available_even_without_saved_state(self):
-        with patch.object(store, "_execute", side_effect=[None, (self.evidence()["worker"],)]):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(store, "_DISK_SNAPSHOT", Path(directory) / "missing.json"), \
+                patch.object(store, "_execute", side_effect=[None, (self.evidence()["worker"],)]):
             with patch.object(store, "_last_good", None):
                 self.assertIsNone(store.load_state())
                 evidence = store.read_health(refresh=True)
