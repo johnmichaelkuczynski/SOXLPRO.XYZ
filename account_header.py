@@ -147,16 +147,22 @@ def render_account_header():
     flush_analytics()
     # Public investor access: do not require identity, query billing, or launch
     # checkout from legacy query parameters. Existing purchase records remain.
-    logo = Path("attached_assets/zhi_logoc_1787826573212.png")
-    logo_uri = "data:image/png;base64," + base64.b64encode(logo.read_bytes()).decode("ascii")
+    logo = Path(__file__).resolve().parent / "attached_assets" / "zhi_logoc_1787826573212.png"
+    logo_markup = (
+        f'<img src="data:image/png;base64,{base64.b64encode(logo.read_bytes()).decode("ascii")}" '
+        'alt="ZHI Systems" style="display:block;width:38px;height:38px;border-radius:8px;">'
+        if logo.is_file()
+        else '<span aria-label="ZHI Systems" style="display:flex;width:38px;height:38px;'
+             'align-items:center;justify-content:center;border-radius:8px;background:#fff;'
+             'color:#111827;font-size:22px;font-weight:700;">知</span>'
+    )
     with st.container(key="account_header"):
         title, contact, refresh = st.columns([5.75, 1.15, 0.85])
         with title:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:12px;min-height:44px;">'
                 f'<a href="https://zhisystems.ai/" target="_blank" rel="noopener noreferrer" '
-                f'title="Visit ZHI Systems"><img src="{logo_uri}" alt="ZHI Systems" '
-                f'style="display:block;width:38px;height:38px;border-radius:8px;"></a>'
+                f'title="Visit ZHI Systems">{logo_markup}</a>'
                 f'<h1 style="font-size:1.35rem;font-weight:700;color:#111827;margin:0;">'
                 f'SOXL Analysis</h1></div>',
                 unsafe_allow_html=True,
