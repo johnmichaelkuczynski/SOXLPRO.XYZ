@@ -90,13 +90,22 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(retained["history"]["prices"][-1], 21.0)
             self.assertIn("showing saved results", retained["_read_warning"])
 
+    def test_bundled_snapshot_is_valid_and_has_last_known_price(self):
+        bundled = store._read_disk_snapshot()
+        self.assertIsNotNone(bundled)
+        self.assertTrue(store._valid_state(bundled))
+        self.assertGreater(bundled["snapshot"]["current_price"], 0)
+        self.assertEqual(len(bundled["history"]["dates"]), len(bundled["history"]["prices"]))
+
     def test_invalid_or_missing_disk_snapshot_never_fabricates_price(self):
         import tempfile
         from pathlib import Path
 
         with tempfile.TemporaryDirectory() as directory:
             disk = Path(directory) / "last-market-state.json"
-            with patch.object(store, "_DISK_SNAPSHOT", disk):
+            bundled = Path(directory) / "missing-bundle.json"
+            with patch.object(store, "_DISK_SNAPSHOT", disk), \
+                    patch.object(store, "_BUNDLED_SNAPSHOT", bundled):
                 store._last_good = None
                 disk.write_text('{"version":99}')
                 self.assertIsNone(store._retained_state("Database unavailable"))

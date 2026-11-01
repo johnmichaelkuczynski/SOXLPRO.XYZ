@@ -29,6 +29,7 @@ _worker_health = None
 _worker_read_status = "not_checked"
 _health_slot = threading.Lock()
 _DISK_SNAPSHOT = Path(tempfile.gettempdir()) / "soxl-last-market-state.json"
+_BUNDLED_SNAPSHOT = Path(__file__).resolve().parent / "data" / "last_known_market_state.json"
 
 
 def _save_disk_snapshot(payload):
@@ -42,11 +43,14 @@ def _save_disk_snapshot(payload):
 
 
 def _read_disk_snapshot():
-    try:
-        payload = json.loads(_DISK_SNAPSHOT.read_text())
-        return payload if _valid_state(payload) else None
-    except (OSError, ValueError, TypeError):
-        return None
+    for path in (_DISK_SNAPSHOT, _BUNDLED_SNAPSHOT):
+        try:
+            payload = json.loads(path.read_text())
+            if _valid_state(payload):
+                return payload
+        except (OSError, ValueError, TypeError):
+            continue
+    return None
 
 
 def read_health(*, refresh=False):
