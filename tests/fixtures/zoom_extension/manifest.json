@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Chart rail regression zoom",
+  "version": "1.0",
+  "permissions": ["tabs"],
+  "background": {"service_worker": "worker.js"}
+}

@@ -427,7 +427,9 @@ function visibleRailBounds() {
   try {
     if (window.frameElement && window.parent) {
       var frameRect = window.frameElement.getBoundingClientRect();
-      bounds.top = Math.max(12, -frameRect.top + 12);
+      var parentHeader = window.parent.document.querySelector('[data-testid="stHeader"]');
+      var parentTop = parentHeader ? Math.max(0, parentHeader.getBoundingClientRect().bottom) : 0;
+      bounds.top = Math.max(12, parentTop - frameRect.top + 12);
       bounds.bottom = Math.min(document.documentElement.clientHeight - 12, window.parent.innerHeight - frameRect.top - 12);
     }
   } catch (error) {}
@@ -436,6 +438,7 @@ function visibleRailBounds() {
 }
 
 function positionRightControlRail() {
+  fitRailContent();
   var bounds = visibleRailBounds();
   var availableHeight = bounds.bottom - bounds.top;
   var railHeight = Math.min(toolbarEl.scrollHeight, availableHeight);
@@ -454,12 +457,13 @@ function positionRightControlRail() {
   var inclineBar = document.getElementById('inclination-bar');
   var safeTop = inclineBar.offsetTop + inclineBar.offsetHeight + 12;
   if (!railManuallySized && (railDock === 'right' || railDock === 'left')) {
-    top = safeTop + railTopOffset;
+    top = Math.max(bounds.top, safeTop + railTopOffset);
   }
   top = Math.max(safeTop, top);
   toolbarEl.style.top = top + 'px';
-  // A partly visible iframe is not a request to shrink all controls.
-  toolbarEl.style.maxHeight = 'none';
+  // Clip the scrollable viewport, never scale down the readable controls.
+  toolbarEl.style.maxHeight = (railDock === 'right' || railDock === 'left')
+    ? Math.max(140, bounds.bottom - top) + 'px' : 'none';
   if (railDock === 'left') {
     toolbarEl.style.left = '12px';
     toolbarEl.style.right = 'auto';
@@ -482,7 +486,6 @@ function positionRightControlRail() {
     tab.style.left = 'auto';
     tab.style.right = '8px';
   }
-  fitRailContent();
   positionRailResizeHandles();
 }
 
@@ -538,6 +541,21 @@ function dockControlRail(side, event) {
   positionRightControlRail();
 }
 
+function scrollRailParent(options) {
+  // In Streamlit the scroll owner is an ancestor of the iframe. Keep window
+  // scrolling as the fallback for ordinary standalone embed hosts.
+  var node = window.frameElement && window.frameElement.parentElement;
+  while (node) {
+    if (/(auto|scroll)/.test(window.parent.getComputedStyle(node).overflowY) &&
+        node.scrollHeight > node.clientHeight) {
+      node.scrollBy(options);
+      return;
+    }
+    node = node.parentElement;
+  }
+  window.parent.scrollBy(options);
+}
+
 function parkControlRail(event) {
   if (event) event.stopPropagation();
   if (railCollapsed) showControlRail();
@@ -550,7 +568,7 @@ function parkControlRail(event) {
   try {
     if (window.frameElement && window.parent) {
       var frameRect = window.frameElement.getBoundingClientRect();
-      window.parent.scrollBy({top: frameRect.top + railFreeTop - 80, behavior: 'smooth'});
+      scrollRailParent({top: frameRect.top + railFreeTop - 80, behavior: 'smooth'});
     }
   } catch (error) {}
 }
@@ -640,8 +658,8 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     try {
       if (window.parent && window.frameElement) {
         var pointerInParent = window.frameElement.getBoundingClientRect().top + moveEvent.clientY;
-        if (pointerInParent > window.parent.innerHeight - 45) window.parent.scrollBy(0, 24);
-        if (pointerInParent < 45) window.parent.scrollBy(0, -24);
+        if (pointerInParent > window.parent.innerHeight - 45) scrollRailParent({top: 24});
+        if (pointerInParent < 45) scrollRailParent({top: -24});
       }
     } catch (error) {}
   }
@@ -708,7 +726,8 @@ document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
 
 window.addEventListener('resize', positionRightControlRail);
 try {
-  window.parent.addEventListener('scroll', positionRightControlRail, {passive: true});
+  // Streamlit scrolls its main container, not window; scroll does not bubble.
+  window.parent.addEventListener('scroll', positionRightControlRail, {passive: true, capture: true});
   window.parent.addEventListener('resize', positionRightControlRail);
 } catch (error) {}
 setTimeout(positionRightControlRail, 0);

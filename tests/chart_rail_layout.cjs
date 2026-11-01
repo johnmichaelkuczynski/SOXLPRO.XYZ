@@ -2,6 +2,7 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
+const { runEmbeddedRailChecks } = require('./helpers/chart_rail_embedded.cjs');
 
 // Native Tab traversal (including date-input segments), not locator.focus(),
 // must scroll the panel itself and keep every focused control inside its viewport.
@@ -197,6 +198,7 @@ async function checkKeyboard(page) {
     await checkKeyboard(page);
     assert.deepEqual(errors, [], 'Component interactions must not raise browser errors');
     console.log('PASS: readable controls, scrolling, reset, keyboard traversal/editing, resize and collapse focus');
+    await runEmbeddedRailChecks();
   } finally {
     await browser.close();
   }
