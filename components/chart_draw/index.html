@@ -569,20 +569,32 @@ function resetControlRailSize(event) {
   announce('Chart controls restored to normal size on the right.');
 }
 
+var railFocusBeforeCollapse = null;
 function collapseControlRail(event) {
   if (event) event.stopPropagation();
+  railFocusBeforeCollapse = toolbarEl.contains(document.activeElement) ? document.activeElement : null;
   railCollapsed = true;
   toolbarEl.style.display = 'none';
   document.getElementById('rail-resize-handles').style.display = 'none';
   document.getElementById('rail-collapsed-tab').style.display = 'block';
   positionRightControlRail();
+  if (railFocusBeforeCollapse) document.getElementById('rail-collapsed-tab').focus();
 }
 
 function showControlRail() {
+  var restoreFocus = document.activeElement === document.getElementById('rail-collapsed-tab');
   railCollapsed = false;
   document.getElementById('rail-collapsed-tab').style.display = 'none';
   toolbarEl.style.display = 'flex';
   positionRightControlRail();
+  if (restoreFocus) {
+    var target = railFocusBeforeCollapse;
+    if (!target || !target.isConnected || !target.getClientRects().length || target.disabled) {
+      target = document.querySelector('#rail-handle button');
+    }
+    target.focus();
+  }
+  railFocusBeforeCollapse = null;
 }
 
 var suppressPanelClick = false;
