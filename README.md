@@ -108,7 +108,7 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 - `dislocation.py` -- SOXL-QQQ continuous deviation panel
 - `custom_strategy.py` -- User-composable indicator/operator strategy builder
 - `auth.py` -- Google sign-in gating via Streamlit native OIDC; writes the auth config from env at startup
-- `openai_client.py` -- OpenAI (gpt-5) client wired to Replit AI Integrations
+- `openai_client.py` -- OpenAI client using owner-supplied keys or Replit AI Integrations
 - `db.py` -- Neon Postgres persistence: schema init + save/fetch for diagnostic runs, synthetic-user sessions, QC results
 - `diagnostic.py` -- System Check diagnostic: environment, data, engines, AI pings, GPTZero, and Neon connectivity
 - `synthetic_user.py` -- Synthetic User diagnostic: OpenAI persona → real Strategy Builder run → persisted session
@@ -125,3 +125,18 @@ streamlit run app.py --server.port 5000
 ```
 
 Then open the preview at port 5000. The default tab loads the SOXL log-scale chart; the Backtest tab opens directly on the Allocation Engine (the default strategy).
+
+### AI provider credentials
+
+For a deployment using your own provider accounts, set these as private environment
+variables in the hosting provider's dashboard (for Render: the service's
+Environment settings), then redeploy:
+
+- `OPENAI_API_KEY` for OpenAI
+- `ANTHROPIC_API_KEY` for Anthropic
+
+The app prefers these owner-supplied keys when present. Optional
+`OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` can be set for compatible custom
+endpoints; leave them unset for the providers' standard APIs. If an owner key is
+not set, the existing Replit AI Integration credentials remain the fallback.
+Never place API keys in source code, screenshots, or chat messages.

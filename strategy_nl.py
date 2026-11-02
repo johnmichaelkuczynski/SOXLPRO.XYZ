@@ -4,10 +4,9 @@ Talks to the user about a trading idea, produces a formal strategy JSON that
 matches the Custom Strategy Builder schema, then lets the UI populate the
 entry / exit / controls panels with one click.
 """
-import os
 import json
 import re
-from anthropic import Anthropic
+from anthropic_client import get_anthropic_client
 
 from custom_strategy import (
     ALL_INDICATORS, INDICATORS_NEEDS_N, OPERATORS, DEFAULT_N, DEFAULT_N2,
@@ -21,11 +20,7 @@ _client = None
 def get_client():
     global _client
     if _client is None:
-        api_key = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-        base_url = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-        if not api_key or not base_url:
-            raise RuntimeError("Anthropic AI Integration is not configured.")
-        _client = Anthropic(api_key=api_key, base_url=base_url)
+        _client = get_anthropic_client()
     return _client
 
 

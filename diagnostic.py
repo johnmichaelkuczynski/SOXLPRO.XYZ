@@ -89,16 +89,15 @@ def _check_env(var: str, required: bool = True) -> dict:
 
 def _check_anthropic_ping() -> dict:
     try:
-        from strategy_builder import get_client
+        from anthropic_client import anthropic_available, get_anthropic_client
     except Exception as e:  # noqa: BLE001
         return {"status": "fail", "info": f"import error: {e}", "evidence": []}
 
-    api_key = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    if not anthropic_available():
         return {"status": "skip", "info": "no Anthropic API key in environment", "evidence": []}
 
     try:
-        client = get_client()
+        client = get_anthropic_client()
     except Exception as e:  # noqa: BLE001
         return {"status": "fail", "info": f"client init error: {e}", "evidence": []}
 
@@ -445,12 +444,20 @@ def run_diagnostic() -> dict:
 
     # System / environment
     checks.append(_run("Environment: SESSION_SECRET present", "system", lambda: _check_env("SESSION_SECRET")))
-    checks.append(_run("Environment: AI_INTEGRATIONS_ANTHROPIC_API_KEY present", "system",
-                       lambda: _check_env("AI_INTEGRATIONS_ANTHROPIC_API_KEY")))
-    checks.append(_run("Environment: AI_INTEGRATIONS_ANTHROPIC_BASE_URL present", "system",
-                       lambda: _check_env("AI_INTEGRATIONS_ANTHROPIC_BASE_URL", required=False)))
-    checks.append(_run("Environment: AI_INTEGRATIONS_OPENAI_API_KEY present", "system",
-                       lambda: _check_env("AI_INTEGRATIONS_OPENAI_API_KEY", required=False)))
+    from anthropic_client import anthropic_available
+    from openai_client import openai_available
+    checks.append(_run(
+        "Environment: Anthropic API configured", "system",
+        lambda: {"status": "pass" if anthropic_available() else "fail",
+                 "info": "credentials configured" if anthropic_available() else "credentials missing",
+                 "evidence": []},
+    ))
+    checks.append(_run(
+        "Environment: OpenAI API configured", "system",
+        lambda: {"status": "pass" if openai_available() else "fail",
+                 "info": "credentials configured" if openai_available() else "credentials missing",
+                 "evidence": []},
+    ))
     checks.append(_run("Environment: GPTZERO_API_KEY present", "system",
                        lambda: _check_env("GPTZERO_API_KEY", required=False)))
     checks.append(_run("Environment: DATABASE_URL present", "system",

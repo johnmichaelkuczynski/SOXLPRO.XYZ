@@ -1,9 +1,7 @@
-"""OpenAI client helper — uses Replit AI Integrations (no own API key required).
+"""OpenAI client helper.
 
-Integration: blueprint:python_openai_ai_integrations
-AI_INTEGRATIONS_OPENAI_BASE_URL and AI_INTEGRATIONS_OPENAI_API_KEY are set
-automatically by the Replit OpenAI integration. Charges are billed to Replit
-credits. Do not request or modify these env vars.
+Prefer the app owner's standard OpenAI key when configured. Replit AI
+Integrations remain available as a fallback for Replit-hosted deployments.
 """
 
 import os
@@ -16,22 +14,33 @@ DEFAULT_MODEL = "gpt-5"
 
 
 def get_openai_client() -> OpenAI:
-    """Return a fresh OpenAI client wired to Replit AI Integrations.
+    """Return a fresh client using the owner's key or Replit integration.
 
-    Never cache this client — the integration credentials can rotate.
+    Never cache this client — credentials can rotate between app restarts.
     """
+    own_key = os.environ.get("OPENAI_API_KEY")
+    if own_key:
+        options = {"api_key": own_key}
+        base_url = os.environ.get("OPENAI_BASE_URL")
+        if base_url:
+            options["base_url"] = base_url
+        return OpenAI(**options)
+
     base_url = os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
     api_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
     if not base_url or not api_key:
         raise RuntimeError(
-            "OpenAI AI Integration is not configured "
-            "(AI_INTEGRATIONS_OPENAI_BASE_URL / AI_INTEGRATIONS_OPENAI_API_KEY missing)."
+            "OpenAI is not configured. Set OPENAI_API_KEY, or configure the "
+            "Replit OpenAI integration."
         )
     return OpenAI(api_key=api_key, base_url=base_url)
 
 
 def openai_available() -> bool:
     return bool(
-        os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-        and os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+        os.environ.get("OPENAI_API_KEY")
+        or (
+            os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+            and os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+        )
     )

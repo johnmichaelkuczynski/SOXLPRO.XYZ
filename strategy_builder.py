@@ -1,12 +1,8 @@
-import os
 import json
 import html as html_module
 import numpy as np
 from datetime import datetime
-from anthropic import Anthropic
-
-AI_INTEGRATIONS_ANTHROPIC_API_KEY = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
+from anthropic_client import get_anthropic_client
 
 client = None
 
@@ -14,11 +10,7 @@ client = None
 def get_client():
     global client
     if client is None:
-        api_key = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-        base_url = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-        if not api_key or not base_url:
-            raise RuntimeError("Anthropic AI Integration is not configured. Please set up the integration.")
-        client = Anthropic(api_key=api_key, base_url=base_url)
+        client = get_anthropic_client()
     return client
 
 
