@@ -51,21 +51,21 @@ if "strategy_html" not in st.session_state:
 if "analyze_result" not in st.session_state:
     st.session_state.analyze_result = None
 if "show_qqq" not in st.session_state:
-    st.session_state.show_qqq = False
+    st.session_state.show_qqq = True
 if "show_tqqq" not in st.session_state:
-    st.session_state.show_tqqq = False
+    st.session_state.show_tqqq = True
 if "show_tlt" not in st.session_state:
-    st.session_state.show_tlt = False
+    st.session_state.show_tlt = True
 if "show_xlu" not in st.session_state:
-    st.session_state.show_xlu = False
+    st.session_state.show_xlu = True
 if "show_vix" not in st.session_state:
-    st.session_state.show_vix = False
+    st.session_state.show_vix = True
 if "show_sox" not in st.session_state:
-    st.session_state.show_sox = False
+    st.session_state.show_sox = True
 if "show_gush" not in st.session_state:
-    st.session_state.show_gush = False
+    st.session_state.show_gush = True
 if "show_btc" not in st.session_state:
-    st.session_state.show_btc = False
+    st.session_state.show_btc = True
 if "custom_benchmark" not in st.session_state:
     st.session_state.custom_benchmark = None
 if "bench_prob_result" not in st.session_state:
