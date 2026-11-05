@@ -95,6 +95,20 @@
     border-radius: 6px; color: #0f172a; background: #fff;
   }
   .rail-label { font-size: 12px; font-weight: 800; color: #334155; }
+  #benchmark-controls {
+    padding: 7px; border: 1px solid #cbd5e1; border-radius: 6px;
+    background: #fff;
+  }
+  #benchmark-toggle-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 7px; margin-top: 5px;
+  }
+  .benchmark-toggle {
+    display: flex; align-items: center; gap: 5px; min-width: 0;
+    font-size: 12px; font-weight: 700; color: #334155; cursor: pointer;
+  }
+  .benchmark-toggle input { width: 15px; height: 15px; margin: 0; cursor: pointer; }
+  .benchmark-toggle span { overflow: hidden; text-overflow: ellipsis; }
   .tbtn:hover { background: #f0f0f0; }
   .tbtn.active { background: #4A90D9; color: #fff; border-color: #4A90D9; }
   .tbtn:disabled { opacity: 0.45; cursor: not-allowed; background: #f5f5f5; }
@@ -254,6 +268,10 @@
     <button class="rail-move-btn" onclick="collapseControlRail(event)" title="Collapse controls">&#8722;</button>
   </div>
   <strong style="text-align:center;color:#0f172a;">CHART CONTROLS</strong>
+  <div id="benchmark-controls" aria-label="Choose benchmark chart lines">
+    <span class="rail-label">SHOW BENCHMARK LINES</span>
+    <div id="benchmark-toggle-grid"></div>
+  </div>
   <button class="tbtn" id="undoBtn" onclick="undoLastAction()" aria-label="Undo last line change">&#8630; Undo Last Line Change</button>
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
   <span class="rail-label" style="text-align:center;">AUTOMATIC CHANNEL LINES</span>
@@ -632,7 +650,7 @@ toolbarEl.addEventListener('pointerdown', function(event) {
   var panelRect = toolbarEl.getBoundingClientRect();
   if (event.clientX >= panelRect.left + toolbarEl.clientLeft + toolbarEl.clientWidth) return;
   // A range gesture belongs to its control, not the movable panel.
-  if (event.target.closest('.size-control')) {
+  if (event.target.closest('.size-control, #benchmark-toggle-grid')) {
     suppressPanelClick = false;
     return;
   }
@@ -745,7 +763,7 @@ function sendToStreamlit(type, data) {
   window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*");
 }
 function setComponentValue(value) {
-  sendToStreamlit("streamlit:setComponentValue", {value: value});
+  sendToStreamlit("streamlit:setComponentValue", {value: value, dataType: "json"});
 }
 function setFrameHeight(h) {
   sendToStreamlit("streamlit:setFrameHeight", {height: h});
@@ -829,6 +847,46 @@ function renderBenchmarkPrices() {
     cards.appendChild(card);
   });
   document.getElementById('benchmark-readouts').hidden = !cards.childElementCount;
+}
+
+var benchmarkToggleSpecs = [
+  ['QQQ', '#FF6F00'], ['TQQQ', '#AB47BC'],
+  ['TLT', '#26A69A'], ['XLU', '#EF5350'],
+  ['VIX', '#FFB300'], ['SOX', '#43A047'],
+  ['GUSH', '#E91E63'], ['BTC', '#F7931A']
+];
+function renderBenchmarkToggles() {
+  var grid = document.getElementById('benchmark-toggle-grid');
+  if (!grid || !chartData) return;
+  grid.replaceChildren();
+  var selected = chartData.selected_benchmarks || [];
+  benchmarkToggleSpecs.forEach(function(spec) {
+    var name = spec[0];
+    var label = document.createElement('label');
+    label.className = 'benchmark-toggle';
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = selected.indexOf(name) !== -1;
+    checkbox.setAttribute('aria-label', 'Show ' + name + ' on chart');
+    checkbox.addEventListener('change', function() {
+      var next = Array.from(grid.querySelectorAll('input:checked')).map(function(input) {
+        return input.getAttribute('data-symbol');
+      });
+      setComponentValue({
+        action: 'set_benchmarks',
+        selection_id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2),
+        selected_benchmarks: next
+      });
+      trackEvent('chart_benchmarks_changed', {selected_benchmarks: next});
+    });
+    checkbox.setAttribute('data-symbol', name);
+    var swatch = document.createElement('span');
+    swatch.textContent = name;
+    swatch.style.borderBottom = '2px solid ' + spec[1];
+    label.appendChild(checkbox);
+    label.appendChild(swatch);
+    grid.appendChild(label);
+  });
 }
 function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
@@ -988,6 +1046,7 @@ window.addEventListener("message", function(event) {
       document.getElementById('heightValue').textContent = currentChartHeight + ' px';
     }
      renderBenchmarkPrices();
+     renderBenchmarkToggles();
      configureKeyboardDateInputs();
     if (!rendered) {
       lines = (args.lines || []).slice();

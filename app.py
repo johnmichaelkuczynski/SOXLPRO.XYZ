@@ -676,6 +676,18 @@ with tab_chart:
         action = result.get("action")
         if action == "set_all":
             st.session_state.lines = result.get("lines", [])
+        elif (action == "set_benchmarks"
+              and result.get("selection_id") != st.session_state.get("_last_benchmark_selection")):
+            st.session_state["_last_benchmark_selection"] = result.get("selection_id")
+            selected_benchmarks = set(result.get("selected_benchmarks", []))
+            selection_changed = False
+            for symbol in ("qqq", "tqqq", "tlt", "xlu", "vix", "sox", "gush", "btc"):
+                visible = symbol.upper() in selected_benchmarks
+                if st.session_state["show_" + symbol] != visible:
+                    st.session_state["show_" + symbol] = visible
+                    selection_changed = True
+            if selection_changed:
+                st.rerun()
         elif action == "analyze":
             st.session_state.lines = result.get("lines", [])
             analyze_start = result.get("analyze_start")
