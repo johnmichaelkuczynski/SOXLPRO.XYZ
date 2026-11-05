@@ -73,16 +73,16 @@ class LandingSignalTests(unittest.TestCase):
         self.assertEqual(condition_from_percentile(80), "Neutral")
         self.assertEqual(condition_from_percentile(80.01), "Overbought")
 
-    def test_signal_boundaries_match_requested_ranges(self):
+    def test_signal_boundaries_match_configured_ranges(self):
         expected = {
             0: "STRONG BUY",
-            4.99: "STRONG BUY",
-            5: "STRONG BUY",
-            5.01: "BUY",
-            14.99: "BUY",
-            15: "BUY",
-            15.01: "DO NOTHING",
-            35: "DO NOTHING",
+            14.99: "STRONG BUY",
+            15: "STRONG BUY",
+            15.01: "BUY",
+            54.99: "BUY",
+            55: "BUY",
+            55.01: "DO NOTHING",
+            60: "DO NOTHING",
             64.99: "DO NOTHING",
             65: "SELL",
             84.99: "SELL",
@@ -94,9 +94,20 @@ class LandingSignalTests(unittest.TestCase):
                 self.assertEqual(signal_from_percentile(percentile), signal)
 
     def test_config_exports_new_and_old_thresholds(self):
-        self.assertEqual(DEFAULT_THRESHOLDS, (5.0, 15.0, 65.0, 85.0))
+        self.assertEqual(DEFAULT_THRESHOLDS, (15.0, 55.0, 65.0, 85.0))
         self.assertEqual(DEFAULT_THRESHOLDS, tuple(RATING_THRESHOLDS.values()))
         self.assertEqual(OLD_THRESHOLDS, (15.0, 35.0, 65.0, 85.0))
+
+    def test_buy_bands_are_scaled_as_requested(self):
+        bands = rating_bands()
+        buy = next(band for band in bands if band["label"] == "BUY")
+        possible_buy = next(band for band in bands if band["label"] == "POSSIBLE BUY")
+        self.assertEqual(buy["width"], 15.0)
+        self.assertEqual(possible_buy["width"], 40.0)
+        self.assertEqual(signal_from_percentile(15), "STRONG BUY")
+        self.assertEqual(signal_from_percentile(15.01), "BUY")
+        self.assertEqual(signal_from_percentile(55), "BUY")
+        self.assertEqual(signal_from_percentile(55.01), "DO NOTHING")
 
     def test_custom_thresholds_keep_buy_upper_bounds_inclusive(self):
         thresholds = (3.0, 12.0, 70.0, 90.0)
@@ -121,17 +132,17 @@ class LandingSignalTests(unittest.TestCase):
 
     def test_bar_and_prose_are_generated_from_config(self):
         bands = rating_bands()
-        self.assertEqual([band["width"] for band in bands], [5, 10, 50, 20, 15])
+        self.assertEqual([band["width"] for band in bands], [15, 40, 10, 20, 15])
         self.assertEqual(sum(band["width"] for band in bands), 100)
         card = _signal_card(5, "STRONG BUY", "2026-10-20")
         self.assertIn("Long-term signal (6–12 months)", card)
-        self.assertIn("grid-template-columns:5% 10% 50% 20% 15%", card)
+        self.assertIn("grid-template-columns:15% 40% 10% 20% 15%", card)
         for band in bands:
             self.assertIn(f'<span>{band["label"]}</span>', card)
         prose = rating_threshold_description()
-        self.assertIn("BUY: 0% through 5% (inclusive)", prose)
-        self.assertIn("POSSIBLE BUY: above 5% through 15% (inclusive)", prose)
-        self.assertIn("DO NOTHING: above 15% to below 65%", prose)
+        self.assertIn("BUY: 0% through 15% (inclusive)", prose)
+        self.assertIn("POSSIBLE BUY: above 15% through 55% (inclusive)", prose)
+        self.assertIn("DO NOTHING: above 55% to below 65%", prose)
         self.assertIn("POSSIBLE SELL: 65% to below 85%", prose)
         self.assertIn("SELL: 85% through 100% (inclusive)", prose)
 
@@ -196,7 +207,7 @@ class LandingSignalTests(unittest.TestCase):
         self.assertAlmostEqual(result["percentile"], 200 / 3)
         self.assertEqual(result["signal"], "SELL")
 
-    def test_tightening_thresholds_does_not_change_composite_percentile(self):
+    def test_widening_thresholds_does_not_change_composite_percentile(self):
         rows = pd.DataFrame([
             {"Timeframe": "1 Week", "Percentile": 5.0},
             {"Timeframe": "10 Years", "Percentile": 20.0},
@@ -206,7 +217,7 @@ class LandingSignalTests(unittest.TestCase):
         old_bounds = composite_signal(rows, thresholds=OLD_THRESHOLDS)
         self.assertEqual(new["percentile"], old_bounds["percentile"])
         self.assertEqual(new["percentile"], 15.0)
-        self.assertEqual(new["signal"], "BUY")
+        self.assertEqual(new["signal"], "STRONG BUY")
 
     def test_incomplete_current_session_is_excluded(self):
         today = pd.Timestamp("2026-09-02")

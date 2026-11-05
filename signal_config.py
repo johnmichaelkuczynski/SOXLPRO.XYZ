@@ -1,8 +1,8 @@
 """Shared long-term rating boundaries and their presentation."""
 
 RATING_THRESHOLDS = {
-    "buy_max": 5.0,
-    "possible_buy_max": 15.0,
+    "buy_max": 15.0,
+    "possible_buy_max": 55.0,
     "possible_sell_min": 65.0,
     "sell_min": 85.0,
 }
