@@ -1,10 +1,10 @@
 ---
 name: Streamlit component action echoes
-description: Why chart selection actions need a guarded second render and event deduplication.
+description: Apply chart state in component callbacks to avoid stale argument echoes and redundant reruns.
 ---
 
-When a custom component action changes state used to build the component's arguments earlier in the script, apply the change and request a guarded full rerun. Deduplicate action events before doing so.
+When a custom component action changes state used earlier in the script, prefer its `on_change` callback so state is applied before the script builds its arguments. Deduplicate action events. Only use a guarded second rerun when a callback cannot handle the action.
 
-**Why:** The first rerun can deliver the new action while still rendering arguments from the previous state. Component values also remain available on later reruns; replaying an old action can overwrite a newer choice made through another control. A checkbox can appear unchecked while its plotted line remains visible unless the complete round trip is verified.
+**Why:** Handling the action after rendering delivers old arguments during its first round trip. Adding another full rerun then rebuilds the page unnecessarily and can detach an iframe during interaction. Component values also remain available on later reruns; replaying an old action can overwrite a newer choice made through another control.
 
 **How to apply:** Verify both disappearance and restoration of the real plotted trace through the running Streamlit host, not only that the iframe posts a message. Use the JSON data-type envelope for custom component values.

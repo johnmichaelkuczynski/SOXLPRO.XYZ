@@ -365,6 +365,11 @@
   <button class="tbtn" onclick="resetView()">Reset View</button>
   <small style="width:100%">Changes the live chart’s visual slope only. Prices, dates, trendlines and projection popups remain unchanged.</small>
 </div>
+<div id="chart-render-error" role="alert" hidden
+  style="padding:12px;background:#fff1f2;border:1px solid #e11d48;color:#881337;border-radius:6px">
+  <span id="chart-render-error-message"></span>
+  <button class="tbtn" onclick="renderChart({resetViewport:true})">Retry chart</button>
+</div>
 <div id="chart-scroll">
   <div id="chart-container">
     <div id="chart"></div>
@@ -419,6 +424,8 @@ var marketFeedError = null;
 var pendingMarketUpdate = false;
 var chartGestureActive = false;
 var rendered = false;
+var chartRenderTask = null;
+var pendingChartRender = null;
 var knownShapeCount = 0;
 var scaleMode = 'log';
 var currentChartHeight = 900;
@@ -451,7 +458,12 @@ function visibleRailBounds() {
       bounds.bottom = Math.min(document.documentElement.clientHeight - 12, window.parent.innerHeight - frameRect.top - 12);
     }
   } catch (error) {}
-  if (bounds.bottom <= bounds.top) bounds.bottom = bounds.top + 180;
+  // Keep a docked panel inside the actual plot, even after the parent page
+  // scrolls beyond this iframe. Otherwise it creates empty overflow below it.
+  var plotBottom = chartScroll.offsetTop + Math.max(chartScroll.offsetHeight, currentChartHeight);
+  bounds.top = Math.min(bounds.top, Math.max(12, plotBottom - 140));
+  bounds.bottom = Math.min(bounds.bottom, plotBottom);
+  if (bounds.bottom <= bounds.top) bounds.bottom = Math.min(plotBottom, bounds.top + 180);
   return bounds;
 }
 
@@ -765,8 +777,15 @@ function sendToStreamlit(type, data) {
 function setComponentValue(value) {
   sendToStreamlit("streamlit:setComponentValue", {value: value, dataType: "json"});
 }
-function setFrameHeight(h) {
-  sendToStreamlit("streamlit:setFrameHeight", {height: h});
+function setFrameHeight() {
+  // scrollHeight includes the iframe's current viewport and floating controls.
+  // Feeding it back with added padding grows the iframe on every redraw.
+  var summary = document.getElementById('chart-market-summary');
+  var bottom = summary.offsetTop + summary.offsetHeight;
+  if (!railCollapsed && (railDock === 'free' || railDock === 'bottom')) {
+    bottom = Math.max(bottom, toolbarEl.offsetTop + toolbarEl.offsetHeight);
+  }
+  sendToStreamlit("streamlit:setFrameHeight", {height: Math.ceil(bottom + 20)});
 }
 
 function trackEvent(name, data) {
@@ -975,7 +994,7 @@ function soxlMarketTrace() {
 }
 
 function refreshMarketTrace() {
-  if (!chartData || !chartDiv.data || !chartDiv.data.length || chartGestureActive) {
+  if (!chartData || !chartDiv.data || !chartDiv.data.length || chartGestureActive || chartRenderTask) {
     pendingMarketUpdate = true;
     return;
   }
@@ -2244,6 +2263,12 @@ function captureChartViewport() {
 function renderChart(options) {
   if (!chartData) return;
   options = options || {};
+  // Streamlit and market-feed updates can arrive while Plotly is rebuilding.
+  // Finish that rebuild before applying the newest arguments.
+  if (chartRenderTask) {
+    pendingChartRender = Object.assign({}, pendingChartRender || {}, options);
+    return chartRenderTask;
+  }
   var lockedViewport = options.resetViewport ? null : captureChartViewport();
   var traces = [];
 
@@ -2492,7 +2517,10 @@ function renderChart(options) {
     modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape', 'autoScale2d', 'resetScale2d']
   };
 
-  Plotly.react(chartDiv, traces, layout, config).then(function() {
+  chartRenderTask = Promise.resolve().then(function() {
+    return Plotly.react(chartDiv, traces, layout, config);
+  }).then(function() {
+    document.getElementById('chart-render-error').hidden = true;
     installAxisArea(chartDiv);
     if (lockedViewport) {
       chartScroll.scrollLeft = lockedViewport.scrollLeft;
@@ -2502,8 +2530,24 @@ function renderChart(options) {
       chartDiv.on('plotly_relayout', handlePlotlyRelayout);
       plotlyEventsBound = true;
     }
+  }).catch(function(error) {
+    console.error('SOXL chart render failed', error);
+    document.getElementById('chart-render-error-message').textContent =
+      'The chart could not render: ' + (error.message || String(error)) + '. ';
+    document.getElementById('chart-render-error').hidden = false;
+    setFrameHeight(document.body.scrollHeight + 20);
+  }).finally(function() {
+    chartRenderTask = null;
+    if (pendingChartRender) {
+      var next = pendingChartRender;
+      pendingChartRender = null;
+      renderChart(next);
+    } else if (pendingMarketUpdate) {
+      refreshMarketTrace();
+    }
   });
   knownShapeCount = 0;
+  return chartRenderTask;
 }
 
 function renderLineList() {

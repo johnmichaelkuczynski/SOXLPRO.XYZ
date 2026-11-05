@@ -74,6 +74,11 @@ if "bench_prob_result" not in st.session_state:
 chart_component = components.declare_component("chart_draw", path="components/chart_draw")
 
 
+def _sync_chart_benchmarks():
+    from chart_selection import apply_benchmark_selection
+    apply_benchmark_selection(st.session_state, st.session_state.get("soxl_chart"))
+
+
 @st.cache_data(ttl=300)
 def fetch_soxl_data():
     from market_state_store import load_state
@@ -665,6 +670,7 @@ with tab_chart:
         market_feed=fetch_chart_market_feed(),
         key="soxl_chart",
         default=None,
+        on_change=_sync_chart_benchmarks,
     )
 
     update_chart_market_feed()
@@ -676,18 +682,6 @@ with tab_chart:
         action = result.get("action")
         if action == "set_all":
             st.session_state.lines = result.get("lines", [])
-        elif (action == "set_benchmarks"
-              and result.get("selection_id") != st.session_state.get("_last_benchmark_selection")):
-            st.session_state["_last_benchmark_selection"] = result.get("selection_id")
-            selected_benchmarks = set(result.get("selected_benchmarks", []))
-            selection_changed = False
-            for symbol in ("qqq", "tqqq", "tlt", "xlu", "vix", "sox", "gush", "btc"):
-                visible = symbol.upper() in selected_benchmarks
-                if st.session_state["show_" + symbol] != visible:
-                    st.session_state["show_" + symbol] = visible
-                    selection_changed = True
-            if selection_changed:
-                st.rerun()
         elif action == "analyze":
             st.session_state.lines = result.get("lines", [])
             analyze_start = result.get("analyze_start")

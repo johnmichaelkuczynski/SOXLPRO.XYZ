@@ -72,7 +72,51 @@ const path = require('node:path');
     await page.waitForFunction(() => window.__componentValues.some(value =>
       value.value.action === 'set_benchmarks' &&
       value.value.selected_benchmarks.includes('TQQQ')));
+    const recovery = await page.evaluate(async () => {
+      while (chartRenderTask) await chartRenderTask;
+      const originalReact = Plotly.react;
+      let active = 0;
+      let maximumActive = 0;
+      Plotly.react = async function(...args) {
+        maximumActive = Math.max(maximumActive, ++active);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        try { return await originalReact.apply(this, args); }
+        finally { active--; }
+      };
+      for (let i = 0; i < 8; i++) renderChart();
+      while (chartRenderTask) await chartRenderTask;
+      Plotly.react = () => Promise.reject(new Error('Simulated render failure'));
+      await renderChart();
+      const errorVisible = !document.getElementById('chart-render-error').hidden;
+      Plotly.react = originalReact;
+      await renderChart({resetViewport:true});
+      return {
+        maximumActive, errorVisible,
+        recovered: document.getElementById('chart-render-error').hidden &&
+          chartDiv.querySelectorAll('.main-svg').length > 0
+      };
+    });
+    assert.equal(recovery.maximumActive, 1);
+    assert.equal(recovery.errorVisible, true);
+    assert.equal(recovery.recovered, true);
+    await page.evaluate(() => {
+      window.__frameHeights = [];
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'streamlit:setFrameHeight')
+          window.__frameHeights.push(event.data.height);
+      });
+    });
+    await page.setViewportSize({width:1200, height:5000});
+    await page.evaluate(() => {
+      for (let i = 0; i < 12; i++) setFrameHeight(document.body.scrollHeight + 20);
+    });
+    await page.waitForFunction(() => window.__frameHeights.length >= 12);
+    const heights = await page.evaluate(() => window.__frameHeights.slice(-12));
+    assert.equal(new Set(heights).size, 1, 'Repeated sizing must not grow the iframe');
+    assert.ok(heights[0] < 3000, 'Frame size must follow content, not the oversized viewport');
     console.log('PASS: benchmark panel controls report selections and stay synced after app rerenders.');
+    console.log('PASS: redraws are serialized; rendering errors are visible and retry restores the chart.');
+    console.log('PASS: iframe height stays bounded after repeated sizing in an oversized viewport.');
   } finally {
     await browser.close();
   }
