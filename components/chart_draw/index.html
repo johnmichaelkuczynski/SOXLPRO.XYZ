@@ -5,6 +5,7 @@
 <title>Interactive SOXL historical price chart</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="area_measure.js"></script>
+<script src="benchmark_visibility.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; position: relative; }
@@ -419,6 +420,7 @@ var cursorTools = document.getElementById('cursor-tools');
 var currentMode = 'pan';
 var lines = [];
 var chartData = null;
+var benchmarkVisibility = null;
 var marketFeed = null;
 var marketFeedError = null;
 var pendingMarketUpdate = false;
@@ -888,15 +890,12 @@ function renderBenchmarkToggles() {
     checkbox.checked = selected.indexOf(name) !== -1;
     checkbox.setAttribute('aria-label', 'Show ' + name + ' on chart');
     checkbox.addEventListener('change', function() {
-      var next = Array.from(grid.querySelectorAll('input:checked')).map(function(input) {
-        return input.getAttribute('data-symbol');
+      SOXLBenchmarkVisibility.write(Object.assign({}, benchmarkVisibility, {
+        [name]: checkbox.checked
+      }));
+      trackEvent('chart_benchmarks_changed', {
+        selected_benchmarks: chartData.selected_benchmarks
       });
-      setComponentValue({
-        action: 'set_benchmarks',
-        selection_id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2),
-        selected_benchmarks: next
-      });
-      trackEvent('chart_benchmarks_changed', {selected_benchmarks: next});
     });
     checkbox.setAttribute('data-symbol', name);
     var swatch = document.createElement('span');
@@ -907,6 +906,32 @@ function renderBenchmarkToggles() {
     grid.appendChild(label);
   });
 }
+function applyBenchmarkVisibility() {
+  if (!chartData || !benchmarkVisibility) return;
+  chartData.selected_benchmarks = SOXLBenchmarkVisibility.names.filter(function(name) {
+    return benchmarkVisibility[name];
+  });
+  document.querySelectorAll('#benchmark-toggle-grid input').forEach(function(input) {
+    input.checked = benchmarkVisibility[input.getAttribute('data-symbol')];
+  });
+  if (chartRenderTask) {
+    chartRenderTask.then(applyBenchmarkVisibility);
+    return;
+  }
+  if (!chartDiv.data || !chartDiv._fullLayout) return;
+  var indices = [], visible = [];
+  chartDiv.data.forEach(function(trace, index) {
+    if (Object.prototype.hasOwnProperty.call(benchmarkVisibility, trace.name)) {
+      indices.push(index);
+      visible.push(benchmarkVisibility[trace.name] ? true : 'legendonly');
+    }
+  });
+  if (indices.length) return Plotly.restyle(chartDiv, {visible:visible}, indices);
+}
+SOXLBenchmarkVisibility.subscribe(function(state) {
+  benchmarkVisibility = state;
+  applyBenchmarkVisibility();
+});
 function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
   benchmarkQuotes = payload.benchmark_quotes || {};
@@ -1022,6 +1047,8 @@ window.addEventListener("message", function(event) {
   }
   if (event.data.type === "streamlit:render") {
     var args = event.data.args;
+    if (!benchmarkVisibility)
+      benchmarkVisibility = SOXLBenchmarkVisibility.read(args.selected_benchmarks);
     acceptMarketFeed(args.market_feed);
     chartData = {
       dates: args.dates,
@@ -1051,7 +1078,9 @@ window.addEventListener("message", function(event) {
       btc_prices: args.btc_prices || [],
       btc_actual: args.btc_actual || [],
       custom_label: args.custom_label || '',
-      selected_benchmarks: args.selected_benchmarks || [],
+      selected_benchmarks: SOXLBenchmarkVisibility.names.filter(function(name) {
+        return benchmarkVisibility[name];
+      }),
       custom_dates: args.custom_dates || [],
       custom_prices: args.custom_prices || [],
       custom_actual: args.custom_actual || [],
@@ -2471,6 +2500,12 @@ function renderChart(options) {
     });
   }
 
+  traces.forEach(function(trace) {
+    if (benchmarkVisibility &&
+        Object.prototype.hasOwnProperty.call(benchmarkVisibility, trace.name))
+      trace.visible = benchmarkVisibility[trace.name] ? true : 'legendonly';
+  });
+
   var layout = {
     yaxis: {
       type: scaleMode, tickprefix: '$', title: '',
@@ -2528,6 +2563,18 @@ function renderChart(options) {
     }
     if (!plotlyEventsBound && typeof chartDiv.on === 'function') {
       chartDiv.on('plotly_relayout', handlePlotlyRelayout);
+      chartDiv.on('plotly_legendclick', function(event) {
+        var name = chartDiv.data[event.curveNumber].name;
+        if (benchmarkVisibility &&
+            Object.prototype.hasOwnProperty.call(benchmarkVisibility, name)) {
+          SOXLBenchmarkVisibility.write(Object.assign({}, benchmarkVisibility, {
+            [name]: !benchmarkVisibility[name]
+          }));
+          return false;
+        }
+        if (name === 'SOXL') return false;
+      });
+      chartDiv.on('plotly_legenddoubleclick', function() { return false; });
       plotlyEventsBound = true;
     }
   }).catch(function(error) {
@@ -2577,6 +2624,7 @@ function renderLineList() {
 }
 </script>
 <script src="rotation_view.js"></script>
+<script src="diagnostics.js"></script>
 <script>
 var sliderInclinationBase = null;
 function resetInclinationSlider() {

@@ -50,7 +50,7 @@ console.log(JSON.stringify({trace:soxlMarketTrace(),daily:chartData}));
             "chartDiv.addEventListener('pointerdown'", 1)[0]
         program = """
 var calls=[];
-var chartData={}, chartDiv={data:[{}]}, chartGestureActive=false, pendingMarketUpdate=false;
+var chartData={}, chartDiv={data:[{}]}, chartGestureActive=false, pendingMarketUpdate=false, chartRenderTask=null;
 var Plotly={restyle:function(...args){calls.push(args);}};
 function soxlMarketTrace(){return {x:['date'],y:[42],customdata:[['Pre-market','date']]};}
 function refreshMarketTrace()""" + source + """

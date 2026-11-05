@@ -14,6 +14,8 @@ const path = require('node:path');
     const page = await browser.newPage({viewport: {width: 1200, height: 1000}});
     await page.goto(pathToFileURL(path.resolve('components/chart_draw/index.html')).href);
     await page.waitForFunction(() => typeof Plotly !== 'undefined');
+    assert.equal(await page.evaluate(() =>
+      Object.values(SOXLBenchmarkVisibility.read()).every(visible => visible === false)), true);
     await page.evaluate(() => {
       window.__componentValues = [];
       window.addEventListener('message', event => {
@@ -46,32 +48,35 @@ const path = require('node:path');
     assert.equal(await page.locator('#benchmark-toggle-grid input').count(), 8);
     assert.equal(await qqq.isChecked(), true);
     assert.equal(await tqqq.isChecked(), true);
+    await page.evaluate(() => {
+      window.__originalPlotSvg = chartDiv.querySelector('.main-svg');
+      window.__originalXRange = JSON.stringify(chartDiv.layout.xaxis.range);
+      window.__originalYRange = JSON.stringify(chartDiv.layout.yaxis.range);
+    });
 
     await tqqq.uncheck();
-    await page.waitForFunction(() => window.__componentValues.some(value =>
-      value.value.action === 'set_benchmarks' &&
-      !value.value.selected_benchmarks.includes('TQQQ') &&
-      value.value.selected_benchmarks.includes('QQQ')));
-    assert.equal(await page.evaluate(() => window.__componentValues
-      .find(value => value.value.action === 'set_benchmarks')?.dataType), 'json');
+    await page.waitForFunction(() =>
+      chartDiv.data.find(trace => trace.name === 'TQQQ').visible === 'legendonly');
+    assert.equal(await page.evaluate(() => window.__componentValues.length), 0);
+    assert.equal(await page.evaluate(() =>
+      chartDiv.querySelector('.main-svg') === window.__originalPlotSvg &&
+      JSON.stringify(chartDiv.layout.xaxis.range) === window.__originalXRange &&
+      JSON.stringify(chartDiv.layout.yaxis.range) === window.__originalYRange), true);
 
     await page.evaluate(() => {
-      window.__benchmarkArgs.tqqq_dates = [];
-      window.__benchmarkArgs.tqqq_prices = [];
-      window.__benchmarkArgs.tqqq_actual = [];
-      window.__benchmarkArgs.selected_benchmarks = ['QQQ'];
+      // A later, unrelated server update must not undo browser visibility.
       window.postMessage({type: 'streamlit:render', args: window.__benchmarkArgs}, '*');
     });
     await page.waitForFunction(() => document.getElementById('chart')._fullLayout);
     assert.equal(await qqq.isChecked(), true);
     assert.equal(await tqqq.isChecked(), false);
     assert.equal(await page.evaluate(() =>
-      chartDiv.data.some(trace => trace.name === 'TQQQ')), false);
+      chartDiv.data.find(trace => trace.name === 'TQQQ').visible), 'legendonly');
 
     await tqqq.check();
-    await page.waitForFunction(() => window.__componentValues.some(value =>
-      value.value.action === 'set_benchmarks' &&
-      value.value.selected_benchmarks.includes('TQQQ')));
+    await page.waitForFunction(() =>
+      chartDiv.data.find(trace => trace.name === 'TQQQ').visible === true);
+    assert.equal(await page.evaluate(() => window.__componentValues.length), 0);
     const recovery = await page.evaluate(async () => {
       while (chartRenderTask) await chartRenderTask;
       const originalReact = Plotly.react;
@@ -114,7 +119,7 @@ const path = require('node:path');
     const heights = await page.evaluate(() => window.__frameHeights.slice(-12));
     assert.equal(new Set(heights).size, 1, 'Repeated sizing must not grow the iframe');
     assert.ok(heights[0] < 3000, 'Frame size must follow content, not the oversized viewport');
-    console.log('PASS: benchmark panel controls report selections and stay synced after app rerenders.');
+    console.log('PASS: benchmark toggles update the existing SVG and preserve axes without sending server widget events.');
     console.log('PASS: redraws are serialized; rendering errors are visible and retry restores the chart.');
     console.log('PASS: iframe height stays bounded after repeated sizing in an oversized viewport.');
   } finally {

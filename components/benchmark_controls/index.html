@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#31333f}
+#controls{display:grid;grid-template-columns:2fr repeat(8,1fr);gap:8px;align-items:center}
+strong{font-size:14px}
+button{font:inherit;font-size:14px;padding:9px 6px;border:1px solid #cbd5e1;
+  border-radius:8px;background:#fff;color:#31333f;cursor:pointer;white-space:nowrap}
+button[aria-pressed=true]{background:#4a90d9;border-color:#4a90d9;color:#fff}
+button:focus-visible{outline:2px solid #1565c0;outline-offset:2px}
+@media(max-width:800px){#controls{grid-template-columns:repeat(4,1fr)}
+  strong{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div id="controls" aria-label="Benchmark chart selectors"><strong>SOXL Historical Price</strong></div>
+<script>
+function post(type, data) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage:true, type:type}, data), '*');
+}
+function size() {
+  post('streamlit:setFrameHeight', {height:document.getElementById('controls').offsetHeight+8});
+}
+let initialized = false;
+function initialize() {
+  const visibility = SOXLBenchmarkVisibility;
+  let state = visibility.read();
+  const controls = document.getElementById('controls');
+  visibility.names.forEach(name => {
+    const button = document.createElement('button');
+    button.dataset.symbol = name;
+    button.onclick = () => visibility.write({...state, [name]:!state[name]});
+    controls.appendChild(button);
+  });
+  function update(next) {
+    state = next;
+    controls.querySelectorAll('button').forEach(button => {
+      const selected = state[button.dataset.symbol];
+      button.textContent = (selected ? 'Hide ' : '') + button.dataset.symbol;
+      button.setAttribute('aria-pressed', String(selected));
+    });
+  }
+  update(state);
+  visibility.subscribe(update);
+  new ResizeObserver(size).observe(controls);
+  size();
+}
+window.addEventListener('message', event => {
+  if (event.source !== window.parent || event.data?.type !== 'streamlit:render' || initialized) return;
+  initialized = true;
+  const script = document.createElement('script');
+  script.src = event.data.args.visibility_script_url;
+  script.onload = initialize;
+  script.onerror = () => {
+    document.getElementById('controls').textContent =
+      'Benchmark buttons could not load. The chart-panel checkboxes remain available.';
+    size();
+  };
+  document.head.appendChild(script);
+});
+post('streamlit:componentReady', {apiVersion:1});
+</script>
+</body>
+</html>

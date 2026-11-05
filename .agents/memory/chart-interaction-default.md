@@ -13,6 +13,15 @@ mode creates accidental lines that they must erase.
 creating a line. Drawing begins only after the user presses Draw Line, and Stop
 Drawing returns the chart to pan mode.
 
+**Default series:** “By default only SOXL should be on there.” Start benchmark
+lines unchecked and hidden; keep the selectors available so users can add them.
+
+**Why:** The user explicitly requested a SOXL-only default instead of an all-on
+comparison chart.
+
+**How to apply:** A fresh browser session must show only the SOXL line. Do not
+remove benchmark data or controls to achieve that default.
+
 **Viewport rule:** Enabling drawing and completing any new line must preserve
 the user's exact pan, zoom, chart dimensions, scroll position, scale, and panel
 position. Erase, extend, undo, and double-click erase must preserve them too.

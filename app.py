@@ -1,4 +1,5 @@
 import base64
+import hashlib
 from pathlib import Path
 
 import streamlit as st
@@ -37,6 +38,8 @@ st.set_page_config(page_title=TITLE, page_icon="📈", layout="wide")
 
 current_user = get_current_user()
 render_account_header()
+from app_diagnostics import render_full_diagnostics
+render_full_diagnostics()
 
 if "lines" not in st.session_state:
     st.session_state.lines = []
@@ -51,32 +54,37 @@ if "strategy_html" not in st.session_state:
 if "analyze_result" not in st.session_state:
     st.session_state.analyze_result = None
 if "show_qqq" not in st.session_state:
-    st.session_state.show_qqq = True
+    st.session_state.show_qqq = False
 if "show_tqqq" not in st.session_state:
-    st.session_state.show_tqqq = True
+    st.session_state.show_tqqq = False
 if "show_tlt" not in st.session_state:
-    st.session_state.show_tlt = True
+    st.session_state.show_tlt = False
 if "show_xlu" not in st.session_state:
-    st.session_state.show_xlu = True
+    st.session_state.show_xlu = False
 if "show_vix" not in st.session_state:
-    st.session_state.show_vix = True
+    st.session_state.show_vix = False
 if "show_sox" not in st.session_state:
-    st.session_state.show_sox = True
+    st.session_state.show_sox = False
 if "show_gush" not in st.session_state:
-    st.session_state.show_gush = True
+    st.session_state.show_gush = False
 if "show_btc" not in st.session_state:
-    st.session_state.show_btc = True
+    st.session_state.show_btc = False
 if "custom_benchmark" not in st.session_state:
     st.session_state.custom_benchmark = None
 if "bench_prob_result" not in st.session_state:
     st.session_state.bench_prob_result = None
 
-chart_component = components.declare_component("chart_draw", path="components/chart_draw")
-
-
-def _sync_chart_benchmarks():
-    from chart_selection import apply_benchmark_selection
-    apply_benchmark_selection(st.session_state, st.session_state.get("soxl_chart"))
+_chart_directory = Path(__file__).parent / "components/chart_draw"
+_chart_bundle = b"".join(
+    asset.read_bytes() for asset in sorted(_chart_directory.iterdir())
+    if asset.suffix in {".html", ".js"}
+)
+_chart_version = hashlib.sha256(_chart_bundle).hexdigest()[:12]
+# A stable key alone can reuse an already-loaded iframe after its files change.
+# Version the component URL so existing preview tabs receive the new bundle.
+chart_component = components.declare_component(
+    f"chart_draw_{_chart_version}", path=str(_chart_directory)
+)
 
 
 @st.cache_data(ttl=300)
@@ -394,65 +402,8 @@ with tab_options:
         render_options_projection(data)
 
 with tab_chart:
-    overlay_cols = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 1])
-    with overlay_cols[0]:
-        st.markdown("**SOXL Historical Price**")
-    with overlay_cols[1]:
-        if st.button(
-            "Hide QQQ" if st.session_state.show_qqq else "QQQ",
-            type="primary" if st.session_state.show_qqq else "secondary",
-        ):
-            st.session_state.show_qqq = not st.session_state.show_qqq
-            st.rerun()
-    with overlay_cols[2]:
-        if st.button(
-            "Hide TQQQ" if st.session_state.show_tqqq else "TQQQ",
-            type="primary" if st.session_state.show_tqqq else "secondary",
-        ):
-            st.session_state.show_tqqq = not st.session_state.show_tqqq
-            st.rerun()
-    with overlay_cols[3]:
-        if st.button(
-            "Hide TLT" if st.session_state.show_tlt else "TLT",
-            type="primary" if st.session_state.show_tlt else "secondary",
-        ):
-            st.session_state.show_tlt = not st.session_state.show_tlt
-            st.rerun()
-    with overlay_cols[4]:
-        if st.button(
-            "Hide XLU" if st.session_state.show_xlu else "XLU",
-            type="primary" if st.session_state.show_xlu else "secondary",
-        ):
-            st.session_state.show_xlu = not st.session_state.show_xlu
-            st.rerun()
-    with overlay_cols[5]:
-        if st.button(
-            "Hide VIX" if st.session_state.show_vix else "VIX",
-            type="primary" if st.session_state.show_vix else "secondary",
-        ):
-            st.session_state.show_vix = not st.session_state.show_vix
-            st.rerun()
-    with overlay_cols[6]:
-        if st.button(
-            "Hide SOX" if st.session_state.show_sox else "SOX",
-            type="primary" if st.session_state.show_sox else "secondary",
-        ):
-            st.session_state.show_sox = not st.session_state.show_sox
-            st.rerun()
-    with overlay_cols[7]:
-        if st.button(
-            "Hide GUSH" if st.session_state.show_gush else "GUSH",
-            type="primary" if st.session_state.show_gush else "secondary",
-        ):
-            st.session_state.show_gush = not st.session_state.show_gush
-            st.rerun()
-    with overlay_cols[8]:
-        if st.button(
-            "Hide BTC" if st.session_state.show_btc else "BTC",
-            type="primary" if st.session_state.show_btc else "secondary",
-        ):
-            st.session_state.show_btc = not st.session_state.show_btc
-            st.rerun()
+    from benchmark_controls import render_benchmark_controls
+    render_benchmark_controls(chart_component.name)
 
     with st.form("custom_benchmark_form"):
         custom_input_col, custom_submit_col = st.columns([5, 1])
@@ -510,93 +461,24 @@ with tab_chart:
     future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
     dates_list, prices_list = clean_chart_points(data.index, data["Close"])
 
-    qqq_dates_list = []
-    qqq_prices_list = []
-    qqq_actual_list = []
-    if st.session_state.show_qqq:
+    # Keep all saved series in the browser so visibility never requires a rerun.
+    def _prepare_chart_overlay(symbol, loader):
         try:
-            qqq_data = fetch_qqq_data()
-            if not qqq_data.empty:
-                qqq_dates_list, qqq_prices_list, qqq_actual_list = normalize_overlay(data, qqq_data)
+            frame = loader()
+            if not frame.empty:
+                return normalize_overlay(data, frame)
         except Exception:
-            pass
+            st.caption(f"{symbol} chart history is temporarily unavailable.")
+        return [], [], []
 
-    tqqq_dates_list = []
-    tqqq_prices_list = []
-    tqqq_actual_list = []
-    if st.session_state.show_tqqq:
-        try:
-            tqqq_data = fetch_tqqq_data()
-            if not tqqq_data.empty:
-                tqqq_dates_list, tqqq_prices_list, tqqq_actual_list = normalize_overlay(data, tqqq_data)
-        except Exception:
-            pass
-
-    tlt_dates_list = []
-    tlt_prices_list = []
-    tlt_actual_list = []
-    if st.session_state.show_tlt:
-        try:
-            tlt_data = fetch_tlt_data()
-            if not tlt_data.empty:
-                tlt_dates_list, tlt_prices_list, tlt_actual_list = normalize_overlay(data, tlt_data)
-        except Exception:
-            pass
-
-    xlu_dates_list = []
-    xlu_prices_list = []
-    xlu_actual_list = []
-    if st.session_state.show_xlu:
-        try:
-            xlu_data = fetch_xlu_data()
-            if not xlu_data.empty:
-                xlu_dates_list, xlu_prices_list, xlu_actual_list = normalize_overlay(data, xlu_data)
-        except Exception:
-            pass
-
-    vix_dates_list = []
-    vix_prices_list = []
-    vix_actual_list = []
-    if st.session_state.show_vix:
-        try:
-            vix_data = fetch_vix_data()
-            if not vix_data.empty:
-                vix_dates_list, vix_prices_list, vix_actual_list = normalize_overlay(data, vix_data)
-        except Exception:
-            pass
-
-    sox_dates_list = []
-    sox_prices_list = []
-    sox_actual_list = []
-    if st.session_state.show_sox:
-        try:
-            sox_data = fetch_sox_data()
-            if not sox_data.empty:
-                sox_dates_list, sox_prices_list, sox_actual_list = normalize_overlay(data, sox_data)
-        except Exception:
-            pass
-
-    gush_dates_list = []
-    gush_prices_list = []
-    gush_actual_list = []
-    if st.session_state.show_gush:
-        try:
-            gush_data = fetch_gush_data()
-            if not gush_data.empty:
-                gush_dates_list, gush_prices_list, gush_actual_list = normalize_overlay(data, gush_data)
-        except Exception:
-            pass
-
-    btc_dates_list = []
-    btc_prices_list = []
-    btc_actual_list = []
-    if st.session_state.show_btc:
-        try:
-            btc_data = fetch_btc_data()
-            if not btc_data.empty:
-                btc_dates_list, btc_prices_list, btc_actual_list = normalize_overlay(data, btc_data)
-        except Exception:
-            pass
+    qqq_dates_list, qqq_prices_list, qqq_actual_list = _prepare_chart_overlay("QQQ", fetch_qqq_data)
+    tqqq_dates_list, tqqq_prices_list, tqqq_actual_list = _prepare_chart_overlay("TQQQ", fetch_tqqq_data)
+    tlt_dates_list, tlt_prices_list, tlt_actual_list = _prepare_chart_overlay("TLT", fetch_tlt_data)
+    xlu_dates_list, xlu_prices_list, xlu_actual_list = _prepare_chart_overlay("XLU", fetch_xlu_data)
+    vix_dates_list, vix_prices_list, vix_actual_list = _prepare_chart_overlay("VIX", fetch_vix_data)
+    sox_dates_list, sox_prices_list, sox_actual_list = _prepare_chart_overlay("SOX", fetch_sox_data)
+    gush_dates_list, gush_prices_list, gush_actual_list = _prepare_chart_overlay("GUSH", fetch_gush_data)
+    btc_dates_list, btc_prices_list, btc_actual_list = _prepare_chart_overlay("BTC", fetch_btc_data)
 
     custom_dates_list = []
     custom_prices_list = []
@@ -670,7 +552,6 @@ with tab_chart:
         market_feed=fetch_chart_market_feed(),
         key="soxl_chart",
         default=None,
-        on_change=_sync_chart_benchmarks,
     )
 
     update_chart_market_feed()

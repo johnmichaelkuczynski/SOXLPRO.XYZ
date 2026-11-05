@@ -173,8 +173,11 @@ class Socket(tornado.websocket.WebSocketHandler):
 async def run(port):
     global ready, state
     from stripe_webhook import StripeWebhook
+    from full_diagnostics import DiagnosticsRun, DiagnosticsStatus
     application = tornado.web.Application([
         (r"/api/stripe/webhook", StripeWebhook),
+        (r"/api/diagnostics/run", DiagnosticsRun, {"port": port}),
+        (r"/api/diagnostics/([a-f0-9]{32})", DiagnosticsStatus),
         (r"/(_stcore/stream)", Socket), (r"/(.*)", Gateway)
     ], websocket_max_message_size=200 * 1024 * 1024)
     application.listen(port, address="0.0.0.0")

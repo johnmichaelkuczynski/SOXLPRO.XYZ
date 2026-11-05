@@ -1,0 +1,86 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+body{margin:0;font:14px system-ui;color:#243447}button{padding:9px 17px;background:#1268bb;color:white;border:0;border-radius:6px;font:600 14px system-ui;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}.note{font-size:12px;color:#526273;margin:7px 0}
+#report{margin:12px 0;border:1px solid #cad4e0;border-radius:7px;padding:12px;background:#fff}h3{font-size:16px;margin:0 0 9px}
+.check{border-top:1px solid #e5eaf0;padding:8px 0}.badge{font-weight:700}.pass{color:#08794b}.fail{color:#ba2031}.warning,.not_tested{color:#8a6205}.detail{margin-top:3px;font-size:12px;overflow-wrap:anywhere}
+#checks{max-height:510px;overflow:auto}a{color:#1268bb}
+</style></head><body>
+<button id="run" type="button">Run full diagnostics</button>
+<div class="note">One click checks the chart, saved data, live services and feature engines. Includes small AI test requests. Does not reset your chart, refresh market data, restart servers, place trades or send payments.</div>
+<section id="report" hidden aria-live="polite"><h3 id="summary"></h3><div id="progress"></div><div id="checks"></div><p><a id="download" hidden download="soxl-diagnostics.json">Download this diagnostic report</a></p></section>
+<script>
+const button=document.getElementById('run'), report=document.getElementById('report');
+let serverRows=[],browserRows=[],job=null,downloadUrl=null;
+function send(type,extra={}){parent.postMessage({isStreamlitMessage:true,type,...extra},'*')}
+function size(){
+  const last=report.hidden?document.querySelector('.note'):report;
+  send('streamlit:setFrameHeight',{height:Math.ceil(last.offsetTop+last.offsetHeight+8)});
+}
+function row(name,status,detail){return {name,group:'Browser',status,detail}}
+function paint(running){
+  const checks=[...browserRows,...serverRows], failures=checks.filter(x=>x.status==='fail').length;
+  const incomplete=checks.filter(x=>x.status==='not_tested'||x.status==='warning').length;
+  document.getElementById('summary').textContent=running?'Diagnostics running…':
+    failures?`Diagnostics complete — ${failures} failed checks`:
+    incomplete?'Checks completed — unverified items remain':'All listed checks passed';
+  document.getElementById('progress').textContent=`${checks.filter(x=>x.status==='pass').length} passed · ${failures} failed · ${incomplete} warnings / not tested`;
+  const box=document.getElementById('checks');box.replaceChildren();
+  for(const check of checks){
+    const div=document.createElement('div');div.className='check';
+    const label=document.createElement('div');label.className='badge '+check.status;
+    label.textContent=`${check.status.replace('_',' ').toUpperCase()} · ${check.group} · ${check.name}`;
+    const detail=document.createElement('div');detail.className='detail';detail.textContent=check.detail;
+    div.append(label,detail);box.append(div);
+  }
+  size();
+  if(!running){
+    if(downloadUrl)URL.revokeObjectURL(downloadUrl);
+    downloadUrl=URL.createObjectURL(new Blob([JSON.stringify({checked_at:new Date().toISOString(),server_run:job,checks},null,2)],{type:'application/json'}));
+    const link=document.getElementById('download');link.href=downloadUrl;link.hidden=false;size();
+  }
+}
+async function browserChecks(){
+  let doc;
+  try{doc=parent.document}catch(_){return [row('Host access','fail','The diagnostics panel cannot inspect this page.')]}
+  const rows=[];
+  const tabs=[...doc.querySelectorAll('[role="tab"]')].map(x=>x.textContent);
+  for(const name of ['Chart & Probabilities','Vol Surface','Call Risk/Reward','Dislocation','Strategy Builder','Backtest','Area Research','Diagnostic','Options Projection']){
+    rows.push(row(name+' navigation',tabs.some(x=>x.includes(name))?'pass':'fail','Checked the actual page navigation; panel behavior is covered separately by engine tests.'));
+  }
+  const chart=[...doc.querySelectorAll('iframe')].find(frame=>{
+    try{return typeof frame.contentWindow.runSOXLChartDiagnostics==='function'}catch(_){return false}
+  });
+  if(!chart)return [...rows,row('Interactive chart','fail','No running chart with diagnostic support was found. If saved data is missing, the chart cannot be verified.')];
+  try{rows.push(...await chart.contentWindow.runSOXLChartDiagnostics())}
+  catch(error){rows.push(row('Chart exercise','fail',error.name+': diagnostic exercise did not complete.'))}
+  return rows;
+}
+async function poll(id){
+  for(let attempt=0;attempt<220;attempt++){
+    const response=await fetch('/api/diagnostics/'+id,{cache:'no-store'});
+    if(!response.ok)throw Error('Status HTTP '+response.status);
+    const value=await response.json();serverRows=value.checks;paint(true);
+    if(!value.running)return;
+    await new Promise(resolve=>setTimeout(resolve,1000));
+  }
+  throw Error('Diagnostic job exceeded the display time limit.');
+}
+button.onclick=async()=>{
+  button.disabled=true;report.hidden=false;serverRows=[];browserRows=[];job=null;
+  document.getElementById('download').hidden=true;paint(true);
+  const browser=browserChecks().then(rows=>{browserRows=rows;paint(true)}).catch(error=>{
+    browserRows=[row('Browser checks','fail',error.name)];paint(true);
+  });
+  try{
+    const response=await fetch('/api/diagnostics/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if(!response.ok)throw Error('Start HTTP '+response.status);
+    job=(await response.json()).id;
+    await Promise.all([poll(job),browser]);
+  }catch(error){
+    serverRows.push(row('Diagnostic service','fail',error.message));await browser;
+  }finally{button.disabled=false;paint(false)}
+};
+new ResizeObserver(size).observe(document.body);
+send('streamlit:componentReady',{apiVersion:1});size();
+</script></body></html>

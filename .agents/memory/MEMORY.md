@@ -22,4 +22,5 @@
 - [Landing chart priority](landing-chart-priority.md) — daily signal first, actual interactive SOXL chart immediately below; analytics follow.
 - [Price scenario validation](price-scenario-validation.md) — observed entry closes cannot validate same-date counterfactual prices; retrospective holdouts are not prospective trials.
 - [K research integrity](k-research-integrity.md) — reused SOXL history is not a fresh holdout; retain failed and empty tied-rank comparisons rather than tuning them.
-- [Streamlit component actions](streamlit-component-action-echoes.md) — apply state in callbacks before rendering; deduplicate sticky component actions.
+- [Streamlit component actions](streamlit-component-action-echoes.md) — visual toggles stay browser-local; server actions use callbacks; verify updates reach already-open tabs.
+- [One-button diagnostics](diagnostics-contract.md) — one action, explicit evidence and coverage limits; isolated exercises must never alter the user's chart.
