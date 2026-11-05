@@ -13,10 +13,15 @@ Purely visual benchmark hide/show controls must not send a Streamlit widget even
 
 **Why:** Even a correctly handled callback still reruns the server script. The user explicitly reported seconds of blanking and loss of continuity when hiding benchmarks, so eventual reappearance is not sufficient verification.
 
-**How to apply:** Verify that both the button row and panel checkboxes retain the same iframe and plotted SVG, preserve axis ranges, and leave SOXL visible on every sampled animation frame. Benchmark display preferences belong to the browser session, not to server-side data loading.
+**How to apply:** Verify that both the button row and panel checkboxes retain the same iframe and plotted SVG, preserve axis ranges, and leave SOXL visible on every sampled animation frame. Benchmark selections belong to the current open page, not persistent storage or server-side data loading; a page reload restores SOXL only.
 
 Component updates must also reach already-open previews, not just new browser sessions.
 
 **Why:** An existing iframe can retain previously loaded JavaScript even after server-side files change. A passing fresh-browser test does not establish that an open tab received the fix.
 
 **How to apply:** Give changed component bundles content-versioned identities and exercise an open tab across the update without manually reloading it. Normal display toggles must still reuse that updated iframe.
+
+Version every consuming component against its shared-script dependencies too.
+
+**Why:** Reloading the chart alone can leave a sibling control row running the
+previous visibility library, causing inconsistent defaults and messages.

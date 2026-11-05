@@ -923,7 +923,7 @@ function applyBenchmarkVisibility() {
   chartDiv.data.forEach(function(trace, index) {
     if (Object.prototype.hasOwnProperty.call(benchmarkVisibility, trace.name)) {
       indices.push(index);
-      visible.push(benchmarkVisibility[trace.name] ? true : 'legendonly');
+      visible.push(Boolean(benchmarkVisibility[trace.name]));
     }
   });
   if (indices.length) return Plotly.restyle(chartDiv, {visible:visible}, indices);
@@ -2503,7 +2503,7 @@ function renderChart(options) {
   traces.forEach(function(trace) {
     if (benchmarkVisibility &&
         Object.prototype.hasOwnProperty.call(benchmarkVisibility, trace.name))
-      trace.visible = benchmarkVisibility[trace.name] ? true : 'legendonly';
+      trace.visible = Boolean(benchmarkVisibility[trace.name]);
   });
 
   var layout = {

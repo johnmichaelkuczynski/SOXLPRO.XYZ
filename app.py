@@ -540,9 +540,7 @@ with tab_chart:
         btc_prices=btc_prices_list,
         btc_actual=btc_actual_list,
         custom_label=custom_benchmark_label,
-        selected_benchmarks=[name.upper() for name in
-                             ("qqq", "tqqq", "tlt", "xlu", "vix", "sox", "gush", "btc")
-                             if st.session_state.get("show_" + name)],
+        selected_benchmarks=[],
         custom_dates=custom_dates_list,
         custom_prices=custom_prices_list,
         custom_actual=custom_actual_list,

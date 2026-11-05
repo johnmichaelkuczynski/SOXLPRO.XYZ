@@ -1,18 +1,20 @@
 // Browser-only display preferences. Never sends a Streamlit widget update.
 (function () {
   const names = ['QQQ', 'TQQQ', 'TLT', 'XLU', 'VIX', 'SOX', 'GUSH', 'BTC'];
-  // Reset the former all-on default once; subsequent user choices stay local.
-  const key = 'soxl-chart-benchmark-visibility-soxl-only';
+  // Keep selections only in this open page, never across page reloads.
+  const key = '__soxlPageBenchmarkVisibility';
   const diagnosticSandbox = new URLSearchParams(location.search).has('diagnostics_sandbox');
   const listeners = [];
+  let memory = null;
   function valid(state) {
     return state && names.every(name => typeof state[name] === 'boolean');
   }
   function read(initialSelected) {
     try {
-      const saved = diagnosticSandbox ? null : JSON.parse(sessionStorage.getItem(key));
-      if (valid(saved)) return saved;
-    } catch (_) { /* Storage can be disabled; in-memory controls still work. */ }
+      const saved = diagnosticSandbox ? null : window.parent[key];
+      if (valid(saved)) return {...saved};
+    } catch (_) { /* A restricted host still supports local controls. */ }
+    if (valid(memory)) return {...memory};
     return Object.fromEntries(names.map(name =>
       [name, Array.isArray(initialSelected) && initialSelected.includes(name)]));
   }
@@ -20,8 +22,9 @@
     listeners.forEach(listener => listener({...state}));
   }
   function save(state) {
+    memory = {...state};
     if (diagnosticSandbox) return;
-    try { sessionStorage.setItem(key, JSON.stringify(state)); } catch (_) {}
+    try { window.parent[key] = {...state}; } catch (_) {}
   }
   function write(state) {
     if (!valid(state)) return;

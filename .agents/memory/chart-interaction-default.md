@@ -19,8 +19,14 @@ lines unchecked and hidden; keep the selectors available so users can add them.
 **Why:** The user explicitly requested a SOXL-only default instead of an all-on
 comparison chart.
 
-**How to apply:** A fresh browser session must show only the SOXL line. Do not
-remove benchmark data or controls to achieve that default.
+**How to apply:** Every fresh page load, including reloads in an existing browser
+session, must show only SOXL, with all benchmark selectors unchecked. Previously
+saved selections must not override this default. Keep selections only within the
+open page, and omit hidden benchmarks from the legend. Do not remove benchmark
+data or controls to achieve that default.
+
+**Why:** The user repeated the SOXL-only instruction after saved browser
+selections could restore an all-on chart.
 
 **Viewport rule:** Enabling drawing and completing any new line must preserve
 the user's exact pan, zoom, chart dimensions, scroll position, scale, and panel

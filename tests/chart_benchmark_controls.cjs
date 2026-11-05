@@ -56,7 +56,7 @@ const path = require('node:path');
 
     await tqqq.uncheck();
     await page.waitForFunction(() =>
-      chartDiv.data.find(trace => trace.name === 'TQQQ').visible === 'legendonly');
+      chartDiv.data.find(trace => trace.name === 'TQQQ').visible === false);
     assert.equal(await page.evaluate(() => window.__componentValues.length), 0);
     assert.equal(await page.evaluate(() =>
       chartDiv.querySelector('.main-svg') === window.__originalPlotSvg &&
@@ -71,7 +71,7 @@ const path = require('node:path');
     assert.equal(await qqq.isChecked(), true);
     assert.equal(await tqqq.isChecked(), false);
     assert.equal(await page.evaluate(() =>
-      chartDiv.data.find(trace => trace.name === 'TQQQ').visible), 'legendonly');
+      chartDiv.data.find(trace => trace.name === 'TQQQ').visible), false);
 
     await tqqq.check();
     await page.waitForFunction(() =>

@@ -5,7 +5,10 @@ import hashlib
 import streamlit.components.v1 as components
 
 _directory = Path(__file__).parent / "components/benchmark_controls"
-_version = hashlib.sha256((_directory / "index.html").read_bytes()).hexdigest()[:12]
+_version = hashlib.sha256(
+    (_directory / "index.html").read_bytes()
+    + (_directory.parent / "chart_draw/benchmark_visibility.js").read_bytes()
+).hexdigest()[:12]
 _controls = components.declare_component(f"benchmark_controls_{_version}", path=str(_directory))
 
 

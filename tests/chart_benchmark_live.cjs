@@ -12,6 +12,10 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let page;
   try {
     page = await browser.newPage({viewport: {width:1440, height:1100}});
+    await page.addInitScript(() => {
+      sessionStorage.setItem('soxl-chart-benchmark-visibility-soxl-only',
+        JSON.stringify(Object.fromEntries(['QQQ','TQQQ','TLT','XLU','VIX','SOX','GUSH','BTC'].map(name=>[name,true]))));
+    });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto('https://' + process.env.REPLIT_DEV_DOMAIN + '/',
@@ -134,6 +138,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     console.log('PASS: all benchmarks restore; original buttons and panel checkboxes stay synchronized; no page errors.');
     console.log('PASS: same chart iframe and SVG throughout; zero blank animation frames. Slowest panel toggle: ' +
       Math.round(Math.max(...continuity.durations)) + ' ms.');
+    await page.reload({waitUntil:'domcontentloaded'});
+    const freshFrame = await waitSelection([]);
+    assert.equal(await freshFrame.locator('#benchmark-toggle-grid input:checked').count(), 0);
+    assert.deepEqual(await freshFrame.locator('.legendtext').allTextContents(), ['SOXL']);
+    assert.deepEqual(errors, []);
+    console.log('PASS: reloading after enabling every benchmark restores SOXL only, ignores legacy saved selections, and removes inactive names from the legend.');
   } catch (error) {
     for (const frame of page.frames()) {
       try {
