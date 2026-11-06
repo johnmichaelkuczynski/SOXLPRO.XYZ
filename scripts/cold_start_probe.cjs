@@ -7,7 +7,7 @@ const {performance} = require('node:perf_hooks');
 (async () => {
   const port = Number(process.env.PROBE_PORT || 5001);
   const browser = await chromium.launch({
-    executablePath: '/repl/tools/bin/chromium', headless: true, args: ['--no-sandbox']
+    executablePath: process.env.CHROMIUM_PATH, headless: true, args: ['--no-sandbox']
   });
   const page = await browser.newPage();
   const began = performance.now();

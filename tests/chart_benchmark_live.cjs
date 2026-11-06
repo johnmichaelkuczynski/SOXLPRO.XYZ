@@ -6,7 +6,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+    executablePath: process.env.CHROMIUM_PATH,
     headless: true, args: ['--no-sandbox']
   });
   let page;
@@ -18,7 +18,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto('https://' + process.env.REPLIT_DEV_DOMAIN + '/',
+    await page.goto(process.env.SOXL_TEST_BASE_URL || 'http://127.0.0.1:5000/',
       {waitUntil:'domcontentloaded', timeout:60000});
     async function findFrame() {
       for (const frame of page.frames()) {

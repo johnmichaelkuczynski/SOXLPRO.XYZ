@@ -10,16 +10,12 @@ class GoogleAuthTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
-    def test_auto_login_only_in_development_preview(self):
-        self.assertTrue(is_development_preview({"REPLIT_DEV_DOMAIN": "preview.example.com"}))
+    def test_auto_login_only_in_development_mode(self):
+        self.assertTrue(is_development_preview({"APP_ENV": "development"}))
         self.assertFalse(is_development_preview({}))
-        for flag in ("1", "true", "unexpected"):
-            self.assertFalse(is_development_preview({
-                "REPLIT_DEPLOYMENT": flag, "REPLIT_CONTAINER": "repl",
-                "REPLIT_DEV_DOMAIN": "preview.example.com",
-            }))
+        self.assertFalse(is_development_preview({"APP_ENV": "production"}))
 
-    @patch.dict("os.environ", {"REPLIT_DEV_DOMAIN": "preview.example.com"})
+    @patch.dict("os.environ", {"APP_ENV": "development"})
     @patch("auth.configure_google_auth")
     @patch("auth.st")
     def test_preview_stays_signed_in_without_google(self, st, configure):
@@ -34,7 +30,7 @@ class GoogleAuthTests(unittest.TestCase):
         st.logout.assert_not_called()
         self.assertEqual(st.button.call_args.args[0], "Sign out")
 
-    @patch.dict("os.environ", {"REPLIT_DEV_DOMAIN": "preview.example.com"})
+    @patch.dict("os.environ", {"APP_ENV": "development"})
     @patch("auth.st")
     def test_preview_explicit_logout_and_signin(self, st):
         st.session_state = {}
@@ -48,7 +44,7 @@ class GoogleAuthTests(unittest.TestCase):
         st.login.assert_not_called()
         st.logout.assert_not_called()
 
-    @patch.dict("os.environ", {"REPLIT_DEPLOYMENT": "1", "REPLIT_DEV_DOMAIN": "preview.example.com"})
+    @patch.dict("os.environ", {"APP_ENV": "production", "PUBLIC_APP_URL": "https://app.example.com"})
     @patch("auth.configure_google_auth")
     @patch("auth.st")
     def test_published_app_never_auto_logs_in(self, st, configure):
@@ -59,24 +55,22 @@ class GoogleAuthTests(unittest.TestCase):
         st.login.assert_called_once_with("google")
         st.caption.assert_not_called()
 
-    def test_production_uses_public_origin_even_with_workspace_markers(self):
+    def test_production_uses_standard_public_origin(self):
         self.assertEqual(redirect_uri({
-            "REPLIT_DEPLOYMENT": "1", "REPLIT_CONTAINER": "repl",
-            "REPLIT_DEV_DOMAIN": "workspace.example.com",
             "PUBLIC_APP_URL": "https://app.example.com/",
         }), "https://app.example.com/oauth2callback")
 
-    def test_preview_returns_to_preview_without_mock_identity(self):
+    def test_development_redirect_uses_public_origin(self):
         self.assertEqual(redirect_uri({
-            "REPLIT_DEV_DOMAIN": "workspace.example.com",
+            "APP_ENV": "development",
             "PUBLIC_APP_URL": "https://app.example.com",
-        }), "https://workspace.example.com/oauth2callback")
+        }), "https://app.example.com/oauth2callback")
 
     def test_missing_configuration_fails_explicitly(self):
         with self.assertRaises(ValueError):
             auth_settings({})
         with self.assertRaises(ValueError):
-            redirect_uri({"REPLIT_DEPLOYMENT": "1"})
+            redirect_uri({"APP_ENV": "production"})
 
     def test_unsafe_origins_rejected(self):
         for origin in ("http://app.example.com", "https://u:p@app.example.com",

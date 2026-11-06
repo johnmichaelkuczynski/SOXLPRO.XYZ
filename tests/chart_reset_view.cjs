@@ -6,7 +6,7 @@ const path = require('node:path');
 
 (async () => {
   const browser = await chromium.launch({
-    headless: true, executablePath: process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+    headless: true, executablePath: process.env.CHROMIUM_PATH,
     args: ['--no-sandbox']
   });
   try {

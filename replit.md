@@ -10,14 +10,14 @@ A single-page Streamlit web application for analyzing SOXL (Direxion Daily Semic
 - **Period Analysis / Backtest**: Select a period on the chart to analyze. "SOXL Patterns" mode uses SOXL's own rolling returns; "Benchmark-Based" mode builds the relationship between a benchmark's 30-day moves and SOXL's subsequent returns during the selected period, then compares predictions to actual post-period outcomes. Supports QQQ, TLT, XLU, VIX as benchmarks. Shows sample size (analogues) per horizon.
 - **Benchmark Overlays**: QQQ (orange), TQQQ (purple), TLT (teal), XLU (red), VIX (gold dotted) — all on the same log-scale y-axis.
 - **Short Interest**: FINRA daily short volume chart (last 12 months) with parallel HTTP fetching.
-- **Strategy Builder**: AI-powered conversational strategy builder using Anthropic Claude (via Replit AI Integrations). User describes their portfolio, cash, risk tolerance; the AI generates a personalized SOXL entry strategy with tranched buy ladder, operating rules, and statistical basis — rendered as a styled strategy document.
+- **Strategy Builder**: AI-powered conversational strategy builder using Anthropic Claude with `ANTHROPIC_API_KEY`. User describes their portfolio, cash, risk tolerance; the AI generates a personalized SOXL entry strategy with tranched buy ladder, operating rules, and statistical basis — rendered as a styled strategy document.
 - **Backtest Module — Allocation Engine (DEFAULT)**: 20% call-sleeve / 80% cash strategy. Long SOXL calls (default 45-DTE ATM, rolled at 10 DTE) sized continuously by deviation = SOXL_norm − QQQ_norm via tanh sizing. Hard floor 2% / hard ceiling 98% inside the sleeve. QQQ bear-regime filter scales sleeve fill (floor still wins). Asymmetric resize: sells down freely (locks in profits / reduces exposure), refills only at roll events — honors both "continuous rebalancing" and "limited downside = premium". Calls priced via Black-Scholes (math.erf, no scipy) with trailing realized vol. Always returns a result for any window (even 2 data points). Risk panel: Total Return, CAGR, Vol, Max DD, Sharpe, Sortino, Calmar, Capital at Risk, Return per At-Risk Capital, with capital-efficiency callout vs SOXL B&H. Implementation in `backtest_engine.py` (`simulate_call_sleeve_engine`, `compute_risk_metrics`, `_bs_call_price`) and `backtest_ui.py` (`_allocation_engine_tab`).
 
 ## Tech Stack
 - Python 3.11 / Streamlit
 - yfinance for market data
 - Plotly for interactive charting (via custom HTML component)
-- Anthropic Claude (Replit AI Integrations — no API key needed, uses Replit credits)
+- Anthropic Claude (`ANTHROPIC_API_KEY`)
 - dateutil for date math
 
 ## Structure
@@ -31,7 +31,7 @@ A single-page Streamlit web application for analyzing SOXL (Direxion Daily Semic
 - Drawing uses transparent overlay div to capture mouse events without Plotly interference
 - Strategy builder sends full conversation history + computed probability tables to Claude
 - Strategy JSON is parsed from Claude's response and rendered as styled HTML tables
-- Replit AI Integrations env vars: `AI_INTEGRATIONS_ANTHROPIC_BASE_URL`, `AI_INTEGRATIONS_ANTHROPIC_API_KEY`
+- Optional AI keys use standard environment variables; see `ENV_VARS.md`.
 
 ## Running
 ```bash
@@ -44,13 +44,13 @@ It serves SOXL metadata and descriptive initial HTML at `/`, plain-text
 `/robots.txt`, and XML `/sitemap.xml` before any browser session. The same
 educational description appears in the app's bottom About section.
 Use the wrapper in development and publishing; running Streamlit directly skips
-these handlers. Dependencies must be synced from `uv.lock`.
+these handlers. Install dependencies with `python -m pip install -r requirements.txt`.
 
 The canonical URL in `seo.py` was verified from deployment metadata as
 `https://soxlpro.xyz/` on 2026-09-10. Re-verify deployment metadata before changing
 domains; never derive canonical URLs from incoming headers or preview URLs.
 Development responses use noindex and disallow crawling. Production permits
-crawling only when `REPLIT_DEPLOYMENT=1`.
+crawling only when `APP_ENV=production`.
 
 Check compatibility after Streamlit upgrades with
 `python -m unittest discover -s tests -p 'test_seo*.py'`.

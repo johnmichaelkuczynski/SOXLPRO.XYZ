@@ -1,17 +1,11 @@
-"""Anthropic client helper supporting owner-supplied and Replit credentials."""
+"""Anthropic client helper using standard deployment environment variables."""
 import os
 
 from anthropic import Anthropic
 
 
 def anthropic_available() -> bool:
-    return bool(
-        os.environ.get("ANTHROPIC_API_KEY")
-        or (
-            os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-            and os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-        )
-    )
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def get_anthropic_client() -> Anthropic:
@@ -24,11 +18,6 @@ def get_anthropic_client() -> Anthropic:
             options["base_url"] = base_url
         return Anthropic(**options)
 
-    api_key = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-    base_url = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-    if api_key and base_url:
-        return Anthropic(api_key=api_key, base_url=base_url)
     raise RuntimeError(
-        "Anthropic is not configured. Set ANTHROPIC_API_KEY, or configure "
-        "the Replit Anthropic integration."
+        "Anthropic is not configured. Set ANTHROPIC_API_KEY."
     )

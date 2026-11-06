@@ -117,7 +117,7 @@ async function checkKeyboard(page) {
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+      executablePath: process.env.CHROMIUM_PATH,
     headless: true, args: ['--no-sandbox'],
   });
   try {

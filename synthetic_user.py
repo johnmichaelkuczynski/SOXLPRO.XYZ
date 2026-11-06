@@ -1,6 +1,6 @@
 """Synthetic-user diagnostic.
 
-Uses OpenAI (Replit AI Integration) to invent a realistic SOXL investor persona
+Uses OpenAI (configured with OPENAI_API_KEY) to invent a realistic SOXL investor persona
 and a question, then drives the REAL strategy-builder pipeline (Anthropic) with
 that persona to confirm the app produces a coherent, parseable strategy
 end-to-end. Sessions are persisted to Neon.

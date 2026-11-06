@@ -24,3 +24,4 @@
 - [K research integrity](k-research-integrity.md) — reused SOXL history is not a fresh holdout; retain failed and empty tied-rank comparisons rather than tuning them.
 - [Streamlit component actions](streamlit-component-action-echoes.md) — visual toggles stay browser-local; server actions use callbacks; verify updates reach already-open tabs.
 - [One-button diagnostics](diagnostics-contract.md) — one action, explicit evidence and coverage limits; isolated exercises must never alter the user's chart.
+- [ARM64 Python wheels](arm64-python-wheels.md) — cross-platform pip builds need several compatible manylinux tags, not only the newest tag.

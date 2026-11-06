@@ -99,7 +99,7 @@ async function signalState() {
     if (JSON.parse(line).scenarioFinished) completed++;
   });
   browser = await chromium.launch({
-    headless: true, executablePath: process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+    headless: true, executablePath: process.env.CHROMIUM_PATH,
     args: ['--no-sandbox'],
   });
   page = await browser.newPage({viewport: {width: 1440, height: 1100}});

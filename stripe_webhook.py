@@ -255,9 +255,16 @@ def process_one(client):
 
 
 def main():
+    api_key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+    if not api_key:
+        print("Stripe event worker disabled: STRIPE_SECRET_KEY is not configured.", flush=True)
+        return
+    if not os.environ.get("DATABASE_URL"):
+        print("Stripe event worker disabled: DATABASE_URL is not configured.", flush=True)
+        return
     client = stripe.StripeClient(
-        os.environ.get("STRIPE_SECRET_KEY", ""),
-        max_network_retries=2, http_client=stripe.RequestsClient(timeout=10),
+        api_key, max_network_retries=2,
+        http_client=stripe.RequestsClient(timeout=10),
     )
     print("Stripe webhook event worker started", flush=True)
     while True:

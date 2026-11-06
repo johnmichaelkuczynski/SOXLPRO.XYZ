@@ -47,10 +47,12 @@ R1 reads environment variables. The defaults work out of the box on Replit:
 | `VOL_SURFACE_TIMEOUT_MS` | `180000` | Function 5 timeout |
 | `AI_STRATEGY_TIMEOUT_MS` | `120000` | Functions 7, 16, 19 timeout |
 | `ANTHROPIC_MODEL` | `claude-opus-4-7` | Model for R1 brain + judge. Override if your account doesn't have access. |
-| `ANTHROPIC_API_KEY` | falls back to `AI_INTEGRATIONS_ANTHROPIC_API_KEY` | API key |
-| `ANTHROPIC_BASE_URL` | falls back to `AI_INTEGRATIONS_ANTHROPIC_BASE_URL` | Base URL (Replit Integrations endpoint by default) |
+| `ANTHROPIC_API_KEY` | none | API key |
+| `ANTHROPIC_BASE_URL` | Anthropic's default API endpoint | Optional compatible API base URL |
 
-**Note on credits:** by default R1's brain + judge run through the same Replit AI Integrations endpoint the SOXL app uses, so R1 consumes Replit credits. To bill against a personal Anthropic account, set both `ANTHROPIC_API_KEY` and unset `ANTHROPIC_BASE_URL` (or set it to `https://api.anthropic.com`).
+**Provider configuration:** R1 uses the standard `ANTHROPIC_API_KEY` environment
+variable. Leave `ANTHROPIC_BASE_URL` unset to use Anthropic's default API, or set
+it to a compatible custom endpoint.
 
 ---
 

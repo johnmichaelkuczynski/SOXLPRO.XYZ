@@ -38,7 +38,7 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 
 - **SOXL-QQQ Dislocation** -- Continuous deviation panel: SOXL_norm − QQQ_norm with rolling baseline, used as the core sizing signal for the allocation engine.
 
-- **Strategy Builder (AI)** -- Conversational interface powered by Anthropic Claude via Replit AI Integrations. User describes their portfolio, available cash, and risk tolerance; Claude generates a personalized SOXL entry strategy with a tranched buy ladder, operating rules, and the statistical basis — rendered as a styled HTML strategy document.
+- **Strategy Builder (AI)** -- Conversational interface powered by Anthropic Claude using the deployment's `ANTHROPIC_API_KEY`. User describes their portfolio, available cash, and risk tolerance; Claude generates a personalized SOXL entry strategy with a tranched buy ladder, operating rules, and the statistical basis — rendered as a styled HTML strategy document.
 
 - **Backtest — Allocation Engine (DEFAULT)** -- 20% call-sleeve / 80% cash strategy. Long SOXL calls (default 45-DTE ATM, rolled at 10 DTE) sized continuously by deviation = SOXL_norm − QQQ_norm via a tanh sizing function. Hard floor 2% / hard ceiling 98% inside the sleeve. QQQ bear-regime filter scales sleeve fill (floor still wins). Asymmetric resize: sells down freely (locks in profits / reduces exposure), refills only at roll events — honors both "continuous rebalancing" and "limited downside = premium". Calls priced via Black-Scholes (math.erf, no scipy) with trailing realized vol. Always returns a result for any window (even 2 data points).
 
@@ -48,7 +48,7 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 
 - **Always-On Data Layer** -- Equity history up to ~20 years via EODHD, options snapshots and history via Polygon, all responses cached 24h. No external rate-limit surprises during a research session.
 
-- **Google Sign-In Gate** -- The entire app is gated behind Google authentication via Streamlit's native OIDC. Nothing renders — no chart, no engine, no AI — until the user signs in. A header badge shows the signed-in identity with a one-click sign-out.
+- **Optional Google Sign-In** -- Google OIDC is available for account and billing flows when configured. Public app features remain accessible without signing in.
 
 - **Three-Part Diagnostic Suite** -- Lives in the 🩺 Diagnostic tab. Every run is written to Neon Postgres for a durable audit trail:
   - **System Check** -- One-click probe of environment variables, project files, the DSL registries, live yfinance + FINRA data, the Black-Scholes pricer / call-sleeve simulator / risk metrics / probability engine, round-trip pings to **both** Anthropic and OpenAI, GPTZero reachability, and Neon connectivity. Each check carries timing and expandable evidence.
@@ -77,7 +77,7 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 
 - **AI strategy builder grounded in real data** -- Claude doesn't generate strategy in a vacuum. The conversation includes the full computed probability tables and recent deviation context, so the generated entry ladder is anchored to actual historical frequencies, not LLM intuition.
 
-- **No external billing surprises** -- Anthropic Claude runs via Replit AI Integrations (no API key, uses Replit credits). EODHD + Polygon for data, both cached locally.
+- **Provider credentials are explicit** -- AI, market-data, and payment features use standard environment variables configured by the deployment owner.
 
 ---
 
@@ -87,10 +87,10 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 - **Plotly** for interactive charting (via a custom HTML/JS component for drag-to-draw trend lines)
 - **EODHD** (equity history up to 20y) + **Polygon** (options history, capped at 2y)
 - **yfinance** for supplementary intraday/snapshot quotes
-- **Anthropic Claude** via Replit AI Integrations — no key needed, uses Replit credits
-- **OpenAI (gpt-5)** via Replit AI Integrations — powers the synthetic-user persona and the quality-control grader
+- **Anthropic Claude** via `ANTHROPIC_API_KEY`
+- **OpenAI (gpt-5)** via `OPENAI_API_KEY` for diagnostics and quality-control tools
 - **GPTZero** authenticity API for AI-generated-text detection in quality control
-- **Google OIDC** via Streamlit native authentication — gates the whole app
+- **Optional Google OIDC** via Streamlit native authentication
 - **Neon Postgres** (via `DATABASE_URL`, `psycopg2`) — durable persistence for diagnostic runs, synthetic-user sessions, and QC results
 - **dateutil** for trading-day math
 - **Black-Scholes pricing** implemented natively with `math.erf` — zero scipy dependency
@@ -107,8 +107,8 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 - `vol_surface.py` -- Options-chain BUY/SELL discrepancy analytics
 - `dislocation.py` -- SOXL-QQQ continuous deviation panel
 - `custom_strategy.py` -- User-composable indicator/operator strategy builder
-- `auth.py` -- Google sign-in gating via Streamlit native OIDC; writes the auth config from env at startup
-- `openai_client.py` -- OpenAI client using owner-supplied keys or Replit AI Integrations
+- `auth.py` -- Optional Google sign-in via Streamlit native OIDC; writes auth config only when needed
+- `openai_client.py` -- OpenAI client using standard environment variables
 - `db.py` -- Neon Postgres persistence: schema init + save/fetch for diagnostic runs, synthetic-user sessions, QC results
 - `diagnostic.py` -- System Check diagnostic: environment, data, engines, AI pings, GPTZero, and Neon connectivity
 - `synthetic_user.py` -- Synthetic User diagnostic: OpenAI persona → real Strategy Builder run → persisted session
@@ -120,23 +120,36 @@ Unlike generic charting dashboards that stop at price plots, this platform is bu
 
 ## ▶️ Running
 
+Install the Python dependencies, then start the public gateway:
+
 ```bash
-streamlit run app.py --server.port 5000
+python -m pip install -r requirements.txt
+python seo_server.py
 ```
 
-Then open the preview at port 5000. The default tab loads the SOXL log-scale chart; the Backtest tab opens directly on the Allocation Engine (the default strategy).
+The gateway binds to `0.0.0.0` and uses `PORT` when set, otherwise port `5000`.
+`APP_ENV=production` enables production search-engine responses. The default
+tab loads the SOXL log-scale chart; the Backtest tab opens directly on the
+Allocation Engine (the default strategy).
+
+### Docker deployment
+
+```bash
+docker build --platform linux/arm64 -t soxl-analysis .
+docker run --rm -p 5000:5000 --env-file .env soxl-analysis
+```
+
+See [ENV_VARS.md](ENV_VARS.md) for all runtime configuration.
 
 ### AI provider credentials
 
-For a deployment using your own provider accounts, set these as private environment
-variables in the hosting provider's dashboard (for Render: the service's
-Environment settings), then redeploy:
+Set these as private environment variables in the hosting provider's dashboard,
+then redeploy:
 
 - `OPENAI_API_KEY` for OpenAI
 - `ANTHROPIC_API_KEY` for Anthropic
 
-The app prefers these owner-supplied keys when present. Optional
-`OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` can be set for compatible custom
-endpoints; leave them unset for the providers' standard APIs. If an owner key is
-not set, the existing Replit AI Integration credentials remain the fallback.
-Never place API keys in source code, screenshots, or chat messages.
+Optional `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` can be set for compatible
+custom endpoints; leave them unset for the providers' standard APIs. Missing
+provider credentials disable those features without preventing server startup.
+Never place API keys in source code or commit them to the repository.

@@ -43,7 +43,7 @@ async function runEmbeddedRailChecks() {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     context = await chromium.launchPersistentContext(profile, {
-      executablePath: process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+      executablePath: process.env.CHROMIUM_PATH,
       headless: true, viewport: { width: 1200, height: 900 },
       args: ['--no-sandbox', `--disable-extensions-except=${extension}`,
         `--load-extension=${extension}`],

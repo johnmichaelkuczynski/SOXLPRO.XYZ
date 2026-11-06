@@ -258,11 +258,8 @@ soxl-analysis-platform/
 │                                            # Used by the top-level tab_strategy AND backtest sub-tab[5].
 │                                            # ─────────────────────────────────────────────────────────────
 │                                            # CLIENT:
-│                                            #   get_client() - returns Anthropic client wired through Replit AI
-│                                            #     Integrations env vars:
-│                                            #       AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-│                                            #       AI_INTEGRATIONS_ANTHROPIC_API_KEY
-│                                            #     No user-supplied API key required; uses Replit credits.
+│                                            #   get_client() - lazily creates Anthropic client from
+│                                            #     ANTHROPIC_API_KEY and optional ANTHROPIC_BASE_URL.
 │                                            #
 │                                            # HELPERS:
 │                                            #   esc(text)                                             - HTML escape
@@ -294,7 +291,7 @@ soxl-analysis-platform/
 │                                            # Bridges plain-English descriptions ↔ structured custom_strategy JSON.
 │                                            # ─────────────────────────────────────────────────────────────
 │                                            # CLIENT:
-│                                            #   get_client() - same Anthropic-via-Replit setup as strategy_builder
+│                                            #   get_client() - same standard Anthropic setup as strategy_builder
 │                                            #
 │                                            # PROMPT BUILDERS:
 │                                            #   _indicator_catalog_text() - prose listing of every valid indicator
@@ -379,7 +376,7 @@ soxl-analysis-platform/
 ├── auth.py                                  # GOOGLE SIGN-IN GATE (Streamlit native OIDC)
 │                                            # Gates the ENTIRE app. No Streamlit UI renders until login.
 │                                            # ─────────────────────────────────────────────────────────────
-│                                            # _primary_domain()  - first of REPLIT_DOMAINS, else REPLIT_DEV_DOMAIN
+│                                            # PUBLIC_APP_URL provides the canonical OAuth callback origin.
 │                                            # _redirect_uri()    - https://{domain}/oauth2callback (must match the
 │                                            #                      Google Cloud OAuth client's authorized redirect)
 │                                            # write_auth_secrets() - writes [auth] + [auth.google] into
@@ -393,12 +390,11 @@ soxl-analysis-platform/
 │                                            # render_user_badge() - header popover: identity + sign-out (st.logout)
 │                                            # ENV: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 │
-├── openai_client.py                         # OPENAI CLIENT (Replit AI Integrations)
-│                                            # blueprint:python_openai_ai_integrations — no user key needed.
+├── openai_client.py                         # OPENAI CLIENT (standard environment configuration)
+│                                            # Uses OPENAI_API_KEY and optional OPENAI_BASE_URL.
 │                                            # DEFAULT_MODEL = "gpt-5"  (do not change without explicit request)
-│                                            # get_openai_client() - fresh OpenAI() wired to
-│                                            #   AI_INTEGRATIONS_OPENAI_BASE_URL / AI_INTEGRATIONS_OPENAI_API_KEY
-│                                            #   (never cached — integration creds can rotate)
+│                                            # get_openai_client() - fresh OpenAI() using standard credentials
+│                                            #   (never cached — credentials can rotate)
 │                                            # openai_available() - bool guard used by diagnostics
 │                                            # NOTE: gpt-5 takes no temperature; use max_completion_tokens (8192).
 │
@@ -577,10 +573,6 @@ soxl-analysis-platform/
 │                                            # - Posts the resulting trend-line coordinates back to Streamlit via
 │                                            #   Streamlit.setComponentValue() so app.py can re-render with the line state.
 │
-├── main.py                                  # NOOP ENTRY (6 lines)
-│                                            # def main(): print("Hello from repl-nix-workspace!")
-│                                            # Not used in production — the real entry is `streamlit run app.py`.
-│
 ├── attached_assets/                         # USER-UPLOADED ARTIFACTS (screenshots, reference images, txt blueprints)
 │                                            # - Not served by the web server.
 │                                            # - Includes design references (image_*.png) and the model blueprint
@@ -588,18 +580,18 @@ soxl-analysis-platform/
 │
 ├── .streamlit/
 │   └── config.toml                          # Streamlit runtime config
-│                                            #   [server]   headless=true, port=5000, address=0.0.0.0,
+│                                            #   [server]   headless=true, internal port=8501, address=127.0.0.1,
 │                                            #              CORS+XSRF+WebsocketCompression disabled
 │                                            #   [browser]  gatherUsageStats=false
 │                                            #   [theme]    base=light, primaryColor=#4A90D9,
 │                                            #              backgroundColor=#F0F4FA, secondaryBackgroundColor=#FFFFFF,
 │                                            #              textColor=#1a1a2e
 │
-├── .replit                                  # Replit run config (workflow: "Start application" →
-│                                            # `streamlit run app.py --server.port 5000`)
-├── pyproject.toml                           # Project metadata + Python deps (streamlit, plotly, pandas, numpy,
-│                                            # yfinance, requests, anthropic, python-docx, reportlab, python-dateutil)
-├── uv.lock                                  # uv lockfile (resolved versions for reproducible installs)
+├── .replit                                  # Replit workflow config; runs `python seo_server.py`.
+│                                            # The public gateway listens on PORT (default 5000) and proxies Streamlit on 8501.
+├── requirements.txt                         # Python runtime and diagnostic-test dependencies
+├── Dockerfile                               # Multi-stage production container
+├── ENV_VARS.md                              # Runtime configuration reference
 ├── replit.md                                # Project overview + user preferences (read by Agent on every session)
 ├── README.md                                # User-facing README (Overview / Who It's For / Core Capabilities /
 │                                            # What Makes It Different / Tech Stack / Project Structure / Running)
@@ -650,14 +642,8 @@ ARCHITECTURAL CONVENTIONS (READ BEFORE EDITING)
      "limited downside = premium" actually hold in simulation.
 
 6. SECRETS / INTEGRATIONS
-   - Anthropic Claude runs via Replit AI Integrations:
-       AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-       AI_INTEGRATIONS_ANTHROPIC_API_KEY
-     (auto-provisioned, no user API key needed; uses Replit credits).
-   - OpenAI (gpt-5) runs via Replit AI Integrations:
-       AI_INTEGRATIONS_OPENAI_BASE_URL
-       AI_INTEGRATIONS_OPENAI_API_KEY
-     (blueprint:python_openai_ai_integrations; no user key; uses Replit credits).
+   - Anthropic Claude uses ANTHROPIC_API_KEY and optional ANTHROPIC_BASE_URL.
+   - OpenAI (gpt-5) uses OPENAI_API_KEY and optional OPENAI_BASE_URL.
    - Market data:
        EODHD_API_KEY       (equity history)
        POLYGON_API_KEY     (options snapshot + history)
@@ -685,7 +671,7 @@ ARCHITECTURAL CONVENTIONS (READ BEFORE EDITING)
 
 9. WORKFLOW
    - Single Replit workflow named "Start application":
-       streamlit run app.py --server.port 5000
+       python seo_server.py
    - Port 5000 is the only port exposed. Frontend + backend share it.
    - Use restart_workflow after editing app.py / backtest_ui.py / any file
      imported at startup. Streamlit auto-reloads source on save but the

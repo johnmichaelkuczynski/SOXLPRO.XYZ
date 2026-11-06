@@ -111,7 +111,7 @@ async function seed(page) {
   backend = start('backend', backendPort);
   await ready();
   browser = await chromium.launch({headless: true,
-    executablePath: process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+    executablePath: process.env.CHROMIUM_PATH,
     args: ['--no-sandbox']});
   const context = await browser.newContext({viewport: {width: 1440, height: 1100}});
   decoder = spawn('python', ['tests/session_messages.py']);

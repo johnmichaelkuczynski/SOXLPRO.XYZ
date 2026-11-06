@@ -5,7 +5,7 @@ const path = require('node:path');
 
 (async () => {
   const browser = await chromium.launch({headless:true,
-    executablePath:process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium',
+    executablePath:process.env.CHROMIUM_PATH,
     args:['--no-sandbox']});
   try {
     const page = await browser.newPage({viewport:{width:1200,height:1100}});

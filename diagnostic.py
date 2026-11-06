@@ -515,7 +515,7 @@ GROUP_BLURBS = {
     "system": "Verifies environment variables, project files, and the strategy DSL registries.",
     "data": "Live calls to yfinance, FINRA, and the Neon Postgres database to confirm data sources are reachable.",
     "engine": "Smoke-tests the Black-Scholes pricer, call-sleeve simulator, risk-metrics, and probability table.",
-    "ai": "Round-trip pings to Anthropic and OpenAI via Replit AI Integrations, plus the GPTZero authenticity API.",
+    "ai": "Round-trip pings to Anthropic and OpenAI using configured API keys, plus the GPTZero authenticity API.",
     "files": "Confirms expected source and documentation files exist on disk.",
 }
 

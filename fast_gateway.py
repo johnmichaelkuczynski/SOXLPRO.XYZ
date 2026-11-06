@@ -182,7 +182,11 @@ async def run(port):
     ], websocket_max_message_size=200 * 1024 * 1024)
     application.listen(port, address="0.0.0.0")
     print(f"SOXL public listener ready on {port}", flush=True)
-    scripts = ["streamlit_backend.py", "stripe_webhook.py"]
+    scripts = ["streamlit_backend.py"]
+    # The event worker is optional. Do not start it with an empty Stripe API
+    # key; payment configuration can be added without affecting app startup.
+    if os.environ.get("STRIPE_SECRET_KEY") and os.environ.get("DATABASE_URL"):
+        scripts.append("stripe_webhook.py")
     if os.environ.get("SOXL_DISABLE_WORKER") != "1":
         scripts += ["market_state_worker.py", "benchmark_quotes.py"]
     processes = [subprocess.Popen([sys.executable, script]) for script in scripts]

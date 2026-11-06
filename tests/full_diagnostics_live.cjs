@@ -1,14 +1,14 @@
 const {chromium}=require('playwright'), assert=require('node:assert/strict'), fs=require('node:fs');
 (async()=>{
   const browser=await chromium.launch({headless:true,args:['--no-sandbox'],
-    executablePath:process.env.CHROMIUM_PATH||'/repl/tools/bin/chromium'});
+    executablePath:process.env.CHROMIUM_PATH});
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1100}});
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     let posts=0;page.on('request',request=>{
       if(request.method()==='POST'&&request.url().endsWith('/api/diagnostics/run'))posts++;
     });
-    await page.goto('https://'+process.env.REPLIT_DEV_DOMAIN+'/',{waitUntil:'domcontentloaded',timeout:60000});
+    await page.goto(process.env.SOXL_TEST_BASE_URL||'http://127.0.0.1:5000/',{waitUntil:'domcontentloaded',timeout:60000});
     let controls,chart;
     for(let i=0;i<180;i++){
       controls=page.frames().find(frame=>frame.url().includes('/component/app_diagnostics.'));

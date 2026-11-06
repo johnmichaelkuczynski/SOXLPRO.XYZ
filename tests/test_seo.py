@@ -14,7 +14,21 @@ from tornado.httputil import HTTPHeaders
 from tornado.testing import AsyncHTTPTestCase
 
 from seo import ABOUT_HTML, CANONICAL_URL, TITLE, render_index, robots_txt, sitemap_xml
-from seo_server import PublicDocumentHandler, SearchableServer, install_public_routes
+from seo_server import (
+    PublicDocumentHandler, SearchableServer, configured_port, install_public_routes,
+)
+
+
+class DeploymentPortTests(unittest.TestCase):
+    def test_default_and_configured_port(self):
+        self.assertEqual(configured_port({}), 5000)
+        self.assertEqual(configured_port({"PORT": ""}), 5000)
+        self.assertEqual(configured_port({"PORT": "8123"}), 8123)
+
+    def test_invalid_port_fails_with_clear_message(self):
+        for value in ("not-a-port", "0", "65536"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "PORT"):
+                configured_port({"PORT": value})
 
 
 class _DocumentParser(HTMLParser):
@@ -264,7 +278,7 @@ class SearchableServerContractTests(unittest.TestCase):
     def test_create_app_puts_three_public_routes_before_stream_oauth_and_components(self):
         # Server construction and _create_app only create in-memory handlers; no
         # app secrets, browser session, or external service is needed here.
-        with patch.dict(os.environ, {"REPLIT_DEPLOYMENT": "1"}):
+        with patch.dict(os.environ, {"APP_ENV": "production"}):
             application = SearchableServer(
                 str(Path(__file__).resolve().parents[1] / "app.py"), False
             )._create_app()

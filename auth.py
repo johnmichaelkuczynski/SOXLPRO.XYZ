@@ -12,9 +12,7 @@ GOOGLE_METADATA = "https://accounts.google.com/.well-known/openid-configuration"
 
 def is_development_preview(environ=None):
     env = os.environ if environ is None else environ
-    # Published instances can retain workspace markers. Fail closed for any
-    # unexpected deployment flag; never trust URL parameters or client headers.
-    return env.get("REPLIT_DEPLOYMENT", "") in ("", "0") and bool(env.get("REPLIT_DEV_DOMAIN"))
+    return env.get("APP_ENV", "").strip().lower() in {"dev", "development"}
 
 
 def get_current_user():
@@ -50,12 +48,7 @@ def is_owner(user=None):
 
 def redirect_uri(environ=None):
     env = os.environ if environ is None else environ
-    if env.get("REPLIT_DEPLOYMENT") == "1":
-        origin = env.get("PUBLIC_APP_URL", "")
-    elif env.get("REPLIT_DEV_DOMAIN"):
-        origin = "https://" + env["REPLIT_DEV_DOMAIN"]
-    else:
-        origin = env.get("PUBLIC_APP_URL", "")
+    origin = env.get("PUBLIC_APP_URL", "")
     parsed = urlsplit(origin)
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username
             or parsed.password or parsed.query or parsed.fragment

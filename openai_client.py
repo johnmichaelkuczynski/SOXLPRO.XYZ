@@ -1,8 +1,4 @@
-"""OpenAI client helper.
-
-Prefer the app owner's standard OpenAI key when configured. Replit AI
-Integrations remain available as a fallback for Replit-hosted deployments.
-"""
+"""OpenAI client helper using standard deployment environment variables."""
 
 import os
 
@@ -14,7 +10,7 @@ DEFAULT_MODEL = "gpt-5"
 
 
 def get_openai_client() -> OpenAI:
-    """Return a fresh client using the owner's key or Replit integration.
+    """Return a fresh client using the configured OpenAI API key.
 
     Never cache this client — credentials can rotate between app restarts.
     """
@@ -26,21 +22,8 @@ def get_openai_client() -> OpenAI:
             options["base_url"] = base_url
         return OpenAI(**options)
 
-    base_url = os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-    api_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
-    if not base_url or not api_key:
-        raise RuntimeError(
-            "OpenAI is not configured. Set OPENAI_API_KEY, or configure the "
-            "Replit OpenAI integration."
-        )
-    return OpenAI(api_key=api_key, base_url=base_url)
+    raise RuntimeError("OpenAI is not configured. Set OPENAI_API_KEY.")
 
 
 def openai_available() -> bool:
-    return bool(
-        os.environ.get("OPENAI_API_KEY")
-        or (
-            os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
-            and os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
-        )
-    )
+    return bool(os.environ.get("OPENAI_API_KEY"))

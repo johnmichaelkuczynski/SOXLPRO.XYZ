@@ -62,7 +62,7 @@ class SearchableServer(Server):
             raise RuntimeError("SOXL public routes require an empty server.baseUrlPath.")
         return install_public_routes(
             super()._create_app(),
-            production=os.environ.get("REPLIT_DEPLOYMENT") == "1",
+            production=os.environ.get("APP_ENV", "").strip().lower() == "production",
         )
 
 
