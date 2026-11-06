@@ -1,6 +1,6 @@
 """Neon Postgres persistence layer for the SOXL app.
 
-Uses the external Neon database via the DATABASE_URL secret. Stores diagnostic
+Uses NEON_DATABASE_URL when set, otherwise DATABASE_URL. Stores diagnostic
 runs, synthetic-user sessions, and quality-control results so the three
 diagnostic functions have a durable audit trail.
 """
@@ -14,8 +14,9 @@ from typing import Any, Optional
 
 import psycopg2
 import psycopg2.extras
+from database_config import database_url
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DATABASE_URL = database_url()
 
 
 def db_available() -> bool:
@@ -25,7 +26,7 @@ def db_available() -> bool:
 def get_conn():
     """Open a fresh connection to Neon. Caller is responsible for closing."""
     if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not set — Neon database unavailable.")
+        raise RuntimeError("NEON_DATABASE_URL or DATABASE_URL is required.")
     dsn = DATABASE_URL
     if "sslmode=" not in dsn:
         dsn += ("&" if "?" in dsn else "?") + "sslmode=require"

@@ -5,6 +5,7 @@ import uuid
 
 import psycopg2
 import streamlit as st
+from database_config import database_url
 
 
 def normalize_visitor_id(value):
@@ -37,10 +38,10 @@ def anonymous_visitor_id(headers, secret=None):
 
 
 def _connect():
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
+    dsn = database_url()
+    if not dsn:
         raise RuntimeError("Database connection is unavailable")
-    return psycopg2.connect(database_url, connect_timeout=4)
+    return psycopg2.connect(dsn, connect_timeout=4)
 
 
 def get_visit_counts():

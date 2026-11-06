@@ -17,7 +17,8 @@ feature is unavailable until its variables are supplied.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | Recommended | PostgreSQL connection URL used for market snapshots, diagnostics, anonymous visitor counts, and Stripe event persistence. |
+| `NEON_DATABASE_URL` | Recommended when using your own Neon database | Full PostgreSQL connection string. Takes priority over `DATABASE_URL` for all app database connections. |
+| `DATABASE_URL` | Recommended if `NEON_DATABASE_URL` is unset | Standard PostgreSQL connection URL used for market snapshots, diagnostics, anonymous visitor counts, and Stripe event persistence. On Coolify, set either variable to your own database connection string. |
 | `SESSION_SECRET` | Recommended | Signs Google-auth cookies and anonymous visitor identifiers. Use a long random value. |
 
 ## Market data

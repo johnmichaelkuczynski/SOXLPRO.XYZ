@@ -11,6 +11,7 @@ import time
 import tornado.httpclient
 import tornado.web
 import tornado.websocket
+from database_config import database_url
 
 BACKEND = "http://127.0.0.1:8501"
 state = None
@@ -185,7 +186,7 @@ async def run(port):
     scripts = ["streamlit_backend.py"]
     # The event worker is optional. Do not start it with an empty Stripe API
     # key; payment configuration can be added without affecting app startup.
-    if os.environ.get("STRIPE_SECRET_KEY") and os.environ.get("DATABASE_URL"):
+    if os.environ.get("STRIPE_SECRET_KEY") and database_url():
         scripts.append("stripe_webhook.py")
     if os.environ.get("SOXL_DISABLE_WORKER") != "1":
         scripts += ["market_state_worker.py", "benchmark_quotes.py"]

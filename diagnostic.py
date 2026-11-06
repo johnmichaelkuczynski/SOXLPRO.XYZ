@@ -175,7 +175,7 @@ def _check_database_ping() -> dict:
         return {"status": "fail", "info": f"import error: {e}", "evidence": []}
 
     if not db.db_available():
-        return {"status": "skip", "info": "DATABASE_URL not set", "evidence": []}
+        return {"status": "skip", "info": "NEON_DATABASE_URL or DATABASE_URL not set", "evidence": []}
     try:
         db.init_db()
         info = db.ping()
@@ -460,8 +460,10 @@ def run_diagnostic() -> dict:
     ))
     checks.append(_run("Environment: GPTZERO_API_KEY present", "system",
                        lambda: _check_env("GPTZERO_API_KEY", required=False)))
-    checks.append(_run("Environment: DATABASE_URL present", "system",
-                       lambda: _check_env("DATABASE_URL", required=False)))
+    checks.append(_run("Environment: database configured", "system",
+                       lambda: _check_env(
+                           "NEON_DATABASE_URL" if os.environ.get("NEON_DATABASE_URL")
+                           else "DATABASE_URL", required=False)))
     checks.append(_run("Environment: GOOGLE_CLIENT_ID present", "system",
                        lambda: _check_env("GOOGLE_CLIENT_ID", required=False)))
     checks.append(_run("Files: project structure intact", "system", _check_files))

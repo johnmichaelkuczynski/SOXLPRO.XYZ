@@ -140,6 +140,11 @@ docker run --rm -p 5000:5000 --env-file .env soxl-analysis
 ```
 
 See [ENV_VARS.md](ENV_VARS.md) for all runtime configuration.
+For your own Neon database, set `NEON_DATABASE_URL` to the full PostgreSQL
+connection string in Coolify. It overrides `DATABASE_URL` consistently across
+market workers, visitor counts, diagnostics, and billing. `DATABASE_URL` alone
+remains supported. Secrets entered in the development workspace are not
+automatically transferred to Coolify.
 
 ### AI provider credentials
 

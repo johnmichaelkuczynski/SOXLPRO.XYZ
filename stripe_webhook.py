@@ -259,8 +259,8 @@ def main():
     if not api_key:
         print("Stripe event worker disabled: STRIPE_SECRET_KEY is not configured.", flush=True)
         return
-    if not os.environ.get("DATABASE_URL"):
-        print("Stripe event worker disabled: DATABASE_URL is not configured.", flush=True)
+    if not db.db_available():
+        print("Stripe event worker disabled: database is not configured.", flush=True)
         return
     client = stripe.StripeClient(
         api_key, max_network_retries=2,
