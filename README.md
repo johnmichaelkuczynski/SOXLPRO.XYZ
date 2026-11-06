@@ -146,6 +146,12 @@ market workers, visitor counts, diagnostics, and billing. `DATABASE_URL` alone
 remains supported. Secrets entered in the development workspace are not
 automatically transferred to Coolify.
 
+For a new, empty external database, run `python setup_database.py` once from the
+application container (or as Coolify's pre-deployment command) with its database
+environment configured. It creates the app's tables without deleting or
+replacing existing records. The market worker then fills market data in the
+background; no market downloads run in the setup command.
+
 ### AI provider credentials
 
 Set these as private environment variables in the hosting provider's dashboard,

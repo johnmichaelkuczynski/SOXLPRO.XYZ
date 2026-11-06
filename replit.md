@@ -34,6 +34,12 @@ A single-page Streamlit web application for analyzing SOXL (Direxion Daily Semic
 - Optional AI keys use standard environment variables; see `ENV_VARS.md`.
 
 ## Running
+The owner is deploying on Coolify with their own external Neon PostgreSQL
+database. Do not depend on a Replit-managed database for that deployment.
+Use `DATABASE_URL` in Coolify; `NEON_DATABASE_URL` is an optional override for
+the development workspace. Initialize an empty external database explicitly
+with `python setup_database.py` before deploying against it.
+
 ```bash
 python seo_server.py
 ```
