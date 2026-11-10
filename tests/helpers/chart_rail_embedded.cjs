@@ -162,12 +162,16 @@ async function runEmbeddedRailChecks() {
       }, { port, zoom });
       await page.waitForTimeout(200);
       const parentHeight = await page.evaluate(() => innerHeight);
-      for (const dock of ['left', 'right']) {
+      for (const dock of ['left', 'right', 'free']) {
         await frame.evaluate(side => {
           railManuallySized = true;
           toolbarEl.style.height = '180px';
           toolbarEl.style.width = '280px';
           dockControlRail(side);
+          if (side === 'free') {
+            railFreeTop = 10000;
+            positionRightControlRail();
+          }
         }, dock);
         // Only the first 240 CSS px or last 240 CSS px of the iframe visible.
         for (const edge of ['entering', 'leaving']) {

@@ -17,6 +17,7 @@
     box-shadow: 0 8px 24px rgba(15,23,42,0.28); overflow-x: hidden; overflow-y: auto;
     resize: none; min-width: 240px; max-width: 520px; min-height: 140px;
     cursor: move; touch-action: pan-y;
+    overscroll-behavior-y: contain;
   }
   #rail-content {
     display: flex; position: relative; width: 100%; flex: 0 0 100%;
@@ -61,7 +62,7 @@
   .rail-resize-ne, .rail-resize-sw { cursor: nesw-resize; }
   .rail-resize-nw, .rail-resize-se { cursor: nwse-resize; }
   #rail-handle {
-    display: flex; position: relative; z-index: 20;
+    display: flex; position: sticky; top: 0; z-index: 20;
     align-items: center; justify-content: space-between; gap: 4px; flex-shrink: 0;
     margin: -10px -10px 1px; padding: 8px 9px; color: #fff; background: #334155;
     border-radius: 8px 8px 0 0; cursor: move; user-select: none; touch-action: none;
@@ -472,29 +473,36 @@ function visibleRailBounds() {
 function positionRightControlRail() {
   fitRailContent();
   var bounds = visibleRailBounds();
+  var inclineBar = document.getElementById('inclination-bar');
+  var safeTop = inclineBar.offsetTop + inclineBar.offsetHeight + 12;
+  bounds.top = Math.max(bounds.top, safeTop);
   var availableHeight = bounds.bottom - bounds.top;
-  var railHeight = Math.min(toolbarEl.scrollHeight, availableHeight);
+  var railHeight = Math.min(parseFloat(toolbarEl.style.height) || 720, Math.max(140, availableHeight));
   var top;
-  if (railDock === 'free' || railDock === 'bottom') {
+  if (railDock === 'bottom') {
     var parkingArea = document.getElementById('chart-market-summary');
     var documentBottom = Math.max(parkingArea.offsetTop + parkingArea.offsetHeight,
       (railFreeTop || 8) + toolbarEl.offsetHeight + 8);
     railFreeTop = Math.max(8, Math.min(railFreeTop || 8, documentBottom - toolbarEl.offsetHeight - 8));
     top = railFreeTop;
     availableHeight = Math.max(220, documentBottom - top - 8);
+  } else if (railDock === 'free') {
+    // Free movement must still fit the visible part of the parent page.
+    // Previously free panels had no height limit and their date fields fell
+    // below the screen, even though the chart itself was still visible.
+    top = Math.max(bounds.top, Math.min(railFreeTop == null ? bounds.top : railFreeTop,
+      bounds.bottom - railHeight));
   } else {
     top = Math.max(bounds.top, Math.min(bounds.top + railTopOffset, bounds.bottom - railHeight));
   }
   // The incline bar is above the chart and must never cover the panel header.
-  var inclineBar = document.getElementById('inclination-bar');
-  var safeTop = inclineBar.offsetTop + inclineBar.offsetHeight + 12;
   if (!railManuallySized && (railDock === 'right' || railDock === 'left')) {
-    top = Math.max(bounds.top, safeTop + railTopOffset);
+    top = Math.max(bounds.top, Math.min(safeTop + railTopOffset, bounds.bottom - railHeight));
   }
   top = Math.max(safeTop, top);
   toolbarEl.style.top = top + 'px';
   // Clip the scrollable viewport, never scale down the readable controls.
-  toolbarEl.style.maxHeight = (railDock === 'right' || railDock === 'left')
+  toolbarEl.style.maxHeight = railDock !== 'bottom'
     ? Math.max(140, bounds.bottom - top) + 'px' : 'none';
   if (railDock === 'left') {
     toolbarEl.style.left = '12px';
@@ -664,7 +672,7 @@ toolbarEl.addEventListener('pointerdown', function(event) {
   var panelRect = toolbarEl.getBoundingClientRect();
   if (event.clientX >= panelRect.left + toolbarEl.clientLeft + toolbarEl.clientWidth) return;
   // A range gesture belongs to its control, not the movable panel.
-  if (event.target.closest('.size-control, #benchmark-toggle-grid')) {
+  if (event.target.closest('input, select, textarea, button, .size-control, #benchmark-toggle-grid')) {
     suppressPanelClick = false;
     return;
   }
@@ -678,6 +686,7 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     var dy = moveEvent.clientY - startY;
     if (!moving && Math.hypot(dx, dy) < 6) return;
     if (!moving) {
+      railManuallySized = true;
       toolbarEl.style.width = startRect.width + 'px';
       toolbarEl.style.height = startRect.height + 'px';
     }

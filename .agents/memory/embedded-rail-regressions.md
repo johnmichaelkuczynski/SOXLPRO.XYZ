@@ -21,3 +21,12 @@ Size embedded frames from intrinsic document-flow content, not their current vie
 **Why:** Feeding the current `scrollHeight` plus padding back into iframe sizing can increase the frame with every update. A floating panel that follows parent scrolling beyond the plot then makes empty space look like a missing graph.
 
 **How to apply:** Check repeated resizing in an oversized iframe and scroll between the plot and lower-page controls. The reported height must remain stable; the docked panel must not extend the document to follow an offscreen chart.
+
+Free-floating panels must also fit the visible parent viewport, with readable,
+internally scrollable controls and a reachable drag header.
+
+**Why:** The user could not reach date inputs when a freely moved panel extended
+below the screen; enlarging the page must not be necessary to use it.
+
+**How to apply:** Apply viewport height limits to free positioning as well as
+docked positioning; preserve intentional below-chart parking separately.
