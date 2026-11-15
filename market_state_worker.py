@@ -200,7 +200,9 @@ def recompute(previous=None, *, refresh_history=True):
         elif not state["history"]:
             return None
 
-    update(state, "quote", refresh_quote, lambda value: bool(value and value.get("price")))
+    if not update(state, "quote", refresh_quote, lambda value: bool(value and value.get("price"))):
+        # A failed Schwab request must never retain a former provider's quote.
+        state["quote"] = None
     if state["quote"]:
         # Quote age is observation age, not worker age. Retained quotes cannot
         # become "live" just because another component was refreshed.

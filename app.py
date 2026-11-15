@@ -223,7 +223,8 @@ except Exception as e:
     st.stop()
 
 try:
-    quote = saved_market.get("quote")
+    from live_market_quote import fetch_live_quote
+    quote = fetch_live_quote()
 except Exception:
     quote = None
 
@@ -363,7 +364,7 @@ with price_cols[0]:
         f"""<div style="padding:6px 2px;">
             <div style="color:#6b7280;font-size:0.8rem;margin-bottom:4px;white-space:nowrap;">SOXL ({latest_date})</div>
             <div style="font-size:1.6rem;font-weight:600;color:#111827;line-height:1;white-space:nowrap;
-                        font-variant-numeric:tabular-nums;">${current_price:,.2f}</div>
+                        font-variant-numeric:tabular-nums;">{f"${quote['price']:,.2f}" if quote else "Schwab unavailable"}</div>
         </div>""",
         unsafe_allow_html=True,
     )

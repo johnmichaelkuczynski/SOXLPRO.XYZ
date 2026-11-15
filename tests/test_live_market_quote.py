@@ -1,72 +1,48 @@
-import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from live_market_quote import select_quote, fetch_live_quote
+import pytest
+
+from live_market_quote import fetch_live_quote
+from schwab_market_data import parse_quote, fetch_quote, SchwabError
 
 
-class LiveQuoteTests(unittest.TestCase):
-    now = datetime(2026, 10, 10, 3, tzinfo=timezone.utc)
-    yahoo = dict(regularMarketPrice=140, regularMarketTime=1791576001,
-                 regularMarketPreviousClose=142, marketState="CLOSED",
-                 postMarketPrice=139.43, postMarketTime=1791590391)
-
-    def test_closed_market_uses_newer_after_hours(self):
-        quote = select_quote(self.yahoo, {}, self.now)
-        self.assertEqual(quote["price"], 139.43)
-        self.assertEqual(quote["state"], "POST")
-        self.assertEqual(quote["prev_close"], 140)
-        self.assertTrue(quote["stale"])
-
-    def test_actual_overnight_trade_selected(self):
-        rh = dict(last_non_reg_trade_price="141.25",
-                  venue_last_non_reg_trade_time="2026-10-10T02:59:00Z")
-        quote = select_quote(self.yahoo, rh, self.now)
-        self.assertEqual(quote["state"], "OVERNIGHT")
-        self.assertEqual(quote["source"], "Robinhood")
-        self.assertEqual(quote["prev_close"], 140)
-        self.assertFalse(quote["stale"])
-
-    def test_updated_at_is_not_a_trade_timestamp(self):
-        rh = dict(last_non_reg_trade_price="145", updated_at="2026-10-10T03:00:00Z")
-        self.assertEqual(select_quote(self.yahoo, rh, self.now)["source"], "Yahoo Finance")
-
-    def test_invalid_or_future_quotes_ignored(self):
-        for price, timestamp in [("NaN", "2026-10-10T02:59:00Z"),
-                                 (-3, "2026-10-10T02:59:00Z"),
-                                 (145, "2026-10-11T03:00:00Z"),
-                                 (145, None), (145, "bad"),
-                                 (145, "2026-10-10T02:59:00")]:
-            with self.subTest(price=price, timestamp=timestamp):
-                self.assertIsNone(select_quote({}, dict(
-                    last_non_reg_trade_price=price,
-                    venue_last_non_reg_trade_time=timestamp), self.now))
-
-    def test_older_robinhood_quote_does_not_override_newer_yahoo(self):
-        rh = dict(last_non_reg_trade_price="139.50",
-                  venue_last_non_reg_trade_time="2026-10-09T23:59:28.255906418Z")
-        self.assertEqual(select_quote(self.yahoo, rh, self.now)["price"], 139.43)
-
-    def test_premarket_classification(self):
-        now = datetime(2026, 10, 12, 12, tzinfo=timezone.utc)
-        rh = dict(last_non_reg_trade_price="141", venue_last_non_reg_trade_time=now.isoformat())
-        self.assertEqual(select_quote(self.yahoo, rh, now)["state"], "PRE")
-
-    def test_robinhood_previous_close_is_numeric_or_unavailable(self):
-        for previous, expected in [("142.52", 142.52), ("bad", None), ("NaN", None)]:
-            rh = dict(last_trade_price="140", venue_last_trade_time=self.now.isoformat(),
-                      previous_close=previous)
-            quote = select_quote({}, rh, self.now)
-            self.assertEqual(quote["prev_close"], expected)
-
-    def test_provider_failure_preserves_other_quote_and_reports_warning(self):
-        with patch("live_market_quote.yf.Ticker") as ticker, patch(
-                "live_market_quote.requests.get", side_effect=RuntimeError("offline")):
-            ticker.return_value.info = self.yahoo
-            quote = fetch_live_quote.__wrapped__()
-        self.assertEqual(quote["source"], "Yahoo Finance")
-        self.assertIn("Robinhood", quote["feed_warning"])
+def payload():
+    return {"SOXL": {
+        "quote": {"lastPrice": 50, "tradeTime": 1794596400000},
+        "extended": {"lastPrice": 52, "tradeTime": 1794603600000},
+    }}
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize("hour,section,price", [(15, "quote", 50), (22, "extended", 52), (2, "extended", 52)])
+def test_session_selects_exact_fields(hour, section, price):
+    now = datetime(2026, 11, 16, hour, tzinfo=timezone.utc)
+    data = payload()
+    quote = parse_quote(data, "SOXL", strict_session=True, now=now)
+    assert quote["price"] == price
+    assert quote["source"] == "Schwab"
+    assert quote["observed_at"] == datetime.fromtimestamp(
+        data["SOXL"][section]["tradeTime"] / 1000, timezone.utc).isoformat()
+
+
+def test_extended_missing_is_error_not_regular_fallback():
+    data = payload()
+    del data["SOXL"]["extended"]
+    with pytest.raises(SchwabError):
+        parse_quote(data, "SOXL", strict_session=True,
+                    now=datetime(2026, 11, 16, 22, tzinfo=timezone.utc))
+
+
+def test_exact_request_parameters():
+    with patch("schwab_market_data._get", return_value=payload()) as get, \
+            patch("schwab_market_data.parse_quote", return_value={"source": "Schwab"}) as parse:
+        fetch_quote()
+    get.assert_called_once_with("/quotes", {"symbols": "SOXL", "fields": "quote,extended"})
+    assert parse.call_args.kwargs["strict_session"] is True
+
+
+def test_failure_never_calls_another_provider():
+    with patch("schwab_market_data.fetch_quote", side_effect=SchwabError("Unavailable")) as quote:
+        with pytest.raises(SchwabError):
+            fetch_live_quote.__wrapped__()
+    quote.assert_called_once_with("SOXL")

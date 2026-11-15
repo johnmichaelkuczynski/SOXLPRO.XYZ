@@ -16,3 +16,16 @@ The user confirmed the developer app's registered callback is
 Account authorization must be completed by the owner on that domain, after
 the integration is deployed there. Saved client keys alone are not proof of
 working market-data access.
+
+SOXL's current price must use Schwab only, via
+`GET /marketdata/v1/quotes?symbols=SOXL&fields=quote,extended`.
+During extended hours use `extended.lastPrice` with `extended.tradeTime`;
+otherwise use `quote.lastPrice` with `quote.tradeTime`. Label it “Schwab” with
+Schwab's own observation timestamp. On request failure show an error, never
+another provider or a historical-price substitute.
+
+**Why:** The user explicitly rejected Yahoo Finance and all fallback sources for
+SOXL's current price.
+
+**How to apply:** Preserve historical analysis and benchmark functionality, but
+never reuse an old saved quote to conceal a failed current Schwab request.

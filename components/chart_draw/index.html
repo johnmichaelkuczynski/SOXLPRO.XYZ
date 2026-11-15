@@ -945,7 +945,7 @@ function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
   benchmarkQuotes = payload.benchmark_quotes || {};
   renderBenchmarkPrices();
-  latestMarketQuote = payload.quote && Number.isFinite(payload.quote.price) &&
+  latestMarketQuote = payload.quote && payload.quote.source === 'Schwab' && Number.isFinite(payload.quote.price) &&
     payload.quote.price > 0 && Number.isFinite(Date.parse(payload.quote.observed_at))
     ? payload.quote : null;
   marketFeedError = payload.error || null;
@@ -969,34 +969,22 @@ function updateMarketFeedStatus() {
       ' · ' + q.source + ' · ' + q.observed_label +
       (Date.now() - Date.parse(q.observed_at) > 900000 ? ' · Last available quote (not live)' : ' · May be delayed') +
       (marketFeedError ? ' · ' + marketFeedError : '');
-    status.title = 'Latest trade quote (unadjusted), refreshed every minute. Chart bars remain adjusted Yahoo data. ' +
-      'Robinhood overnight quotes are best-effort, not guaranteed continuous coverage. ' +
+    status.title = 'Schwab trade quote and Schwab trade timestamp, refreshed every minute. Historical chart bars are separate from the current quote. ' +
       (q.feed_warning || '') + ' Checked: ' + q.checked_at;
     return;
   }
   if (marketFeedError) { status.textContent = marketFeedError; return; }
-  if (!marketFeed || !marketFeed.points.length) {
-    status.textContent = 'Intraday prices unavailable — historical daily chart shown.';
-    return;
-  }
-  var latest = marketFeed.points[marketFeed.points.length - 1];
-  var stale = Date.now() - Date.parse(latest.time) > 15 * 60000;
-  status.textContent = 'SOXL $' + latest.price.toFixed(2) + ' · ' + latest.session +
-    ' · ' + latest.date + ' ET' + (stale ? ' · Last available bar' : '') +
-    ' · 5-minute data; may be delayed';
-  status.title = 'Refreshes every minute. Yahoo Finance pre-market, regular-session and after-hours data. ' +
-    'No 8 p.m.–4 a.m. coverage. Last checked: ' + marketFeed.checked;
+  status.textContent = 'Schwab price unavailable. No fallback quote is used.';
+  status.title = 'Historical chart data is not a current quote.';
 }
 
 function updateMarketSummary() {
   var state = document.getElementById('market-summary-state');
-  var points = marketFeed ? marketFeed.points : [];
   [['Regular session','regular'],['After-hours','post'],['Pre-market','pre']].forEach(function(pair) {
-    var observations = points.filter(function(point) { return point.session === pair[0]; });
-    var last = observations[observations.length - 1];
+    var last = latestMarketQuote && latestMarketQuote.session === pair[0] ? latestMarketQuote : null;
     document.getElementById('market-' + pair[1] + '-price').textContent = last ? '$' + last.price.toFixed(4) : 'Unavailable';
     document.getElementById('market-' + pair[1] + '-time').textContent = last
-      ? 'Latest bar: ' + last.date + ' ET' : 'No prices supplied for this session.';
+      ? 'Schwab · ' + last.observed_label : 'No Schwab trade supplied for this session.';
   });
   state.textContent = marketFeedError || (marketFeed
     ? 'Feed checked: ' + new Date(marketFeed.checked).toLocaleString('en-US', {timeZone:'America/New_York'}) +

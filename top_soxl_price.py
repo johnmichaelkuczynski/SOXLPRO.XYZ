@@ -7,11 +7,13 @@ import streamlit as st
 
 
 def price_display(saved):
-    """Choose the newest timestamped quote, falling back to the last daily close."""
+    """Format only the current Schwab request result; never use stored fallbacks."""
     saved = saved or {}
     candidates = []
-    for quote in (saved.get("quote"), (saved.get("market_feed") or {}).get("quote")):
+    for quote in (saved.get("quote"),):
         if not isinstance(quote, dict):
+            continue
+        if quote.get("source") != "Schwab":
             continue
         try:
             price = float(quote["price"])
@@ -23,41 +25,31 @@ def price_display(saved):
             candidates.append((observed, price, quote))
         except (KeyError, TypeError, ValueError, OverflowError):
             continue
-    history = saved.get("history") or {}
-    try:
-        close = float(history["prices"][-1])
-        date = str(history["dates"][-1])[:10]
-        close_date = datetime.fromisoformat(date).date()
-        if not isfinite(close) or close <= 0:
-            raise ValueError("Invalid close")
-    except (KeyError, IndexError, TypeError, ValueError):
-        close, date, close_date = None, None, None
     if candidates:
         observed, price, quote = max(candidates, key=lambda item: item[0])
-        if close_date is None or observed.date() >= close_date:
-            context = " · ".join(str(part) for part in (
-                quote.get("session"), quote.get("source"),
-                quote.get("observed_label") or observed.isoformat(),
-                "Last available quote (not live)"
-                if (datetime.now(timezone.utc) - observed).total_seconds() > 900
-                else "May be delayed",
-            ) if part)
-            return price, context
-    if close is not None:
-        return close, f"Last available daily close · {date} · Not a live quote"
-    return None, "Price temporarily unavailable; waiting for a market update."
+        context = " · ".join(str(part) for part in (
+            "Schwab", quote.get("session"),
+            quote.get("observed_label") or observed.isoformat(),
+            "Last available trade (not live)"
+            if (datetime.now(timezone.utc) - observed).total_seconds() > 900
+            else ("Delayed" if quote.get("delayed") else None),
+        ) if part)
+        return price, context
+    return None, "Schwab price unavailable."
 
 
 @st.fragment(run_every="30s")
 def render_top_soxl_price():
-    from market_state_store import load_state
-    saved = load_state() or st.session_state.get("_market_state")
-    price, context = price_display(saved)
-    if price is not None:
-        st.session_state["_top_soxl_price"] = (price, context)
-    elif st.session_state.get("_top_soxl_price"):
-        price, context = st.session_state["_top_soxl_price"]
-        context = "Saved price · " + context
+    from live_market_quote import fetch_live_quote
+    from schwab_market_data import SchwabError
+    try:
+        price, context = price_display({"quote": fetch_live_quote()})
+    except SchwabError as exc:
+        price, context = None, "Schwab price unavailable. " + str(exc)
+    except OSError:
+        price, context = None, "Schwab price unavailable. Token storage cannot be read."
+    if price is None:
+        st.error(context)
     display = f"${price:,.2f}" if price is not None else "—"
     st.markdown(
         '<section aria-label="Latest SOXL price" style="margin:0 0 16px;">'

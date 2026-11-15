@@ -129,13 +129,14 @@ def _price_card(label, value, css_class):
 
 @st.fragment(run_every="60s")
 def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=None):
-    if saved is not None:
-        from market_state_store import load_state
-        saved = load_state() or saved
-    if refresh_quotes:
+    from schwab_market_data import SchwabError
+    try:
         from live_market_quote import fetch_live_quote
         quote = fetch_live_quote()
-    snapshot = saved["snapshot"] if saved else compute_market_snapshot(price_data, quote=quote)
+    except (SchwabError, OSError):
+        st.error("Schwab price unavailable. Market snapshot cannot show a current price.")
+        return
+    snapshot = compute_market_snapshot(price_data, quote=quote)
     if snapshot is None:
         st.warning("Current SOXL market statistics are unavailable.")
         return

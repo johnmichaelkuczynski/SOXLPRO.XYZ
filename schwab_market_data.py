@@ -205,14 +205,21 @@ def _timestamp(milliseconds):
         return None
 
 
-def parse_quote(payload, symbol):
+def parse_quote(payload, symbol, *, strict_session=False, now=None):
     item = payload.get(symbol) or {}
+    now = now or datetime.now(timezone.utc)
     candidates = []
-    for section, price_field, time_field, regular in (
+    fields = (
         ("regular", "regularMarketLastPrice", "regularMarketTradeTime", True),
         ("quote", "lastPrice", "tradeTime", False),
         ("extended", "lastPrice", "tradeTime", False),
-    ):
+    )
+    if strict_session:
+        local = now.astimezone(ZoneInfo("America/New_York"))
+        minutes = local.hour * 60 + local.minute
+        section = "quote" if local.weekday() < 5 and 570 <= minutes < 960 else "extended"
+        fields = ((section, "lastPrice", "tradeTime", section == "quote"),)
+    for section, price_field, time_field, regular in fields:
         values = item.get(section) or {}
         try:
             price = float(values.get(price_field))
@@ -231,11 +238,10 @@ def parse_quote(payload, symbol):
     if not candidates:
         raise SchwabError("Schwab returned no timestamped trade price for this symbol.")
     result = max(candidates, key=lambda value: value["observed_at"])
-    now = datetime.now(timezone.utc)
     dt = datetime.fromisoformat(result["observed_at"])
     delayed = item.get("realtime") is False
     result.update(
-        source="Schwab (delayed)" if delayed else "Schwab",
+        source="Schwab",
         currency="USD", delayed=delayed,
         extended=result["state"] != "REGULAR",
         session={"REGULAR": "Regular session", "PRE": "Pre-market",
@@ -253,7 +259,10 @@ def fetch_quote(symbol="SOXL"):
     if symbol == "BTC":
         raise SchwabError("Use the existing crypto feed for BTC.")
     try:
-        return parse_quote(_get("/quotes", {"symbols": mapped}), mapped)
+        params = {"symbols": mapped}
+        if symbol == "SOXL":
+            params["fields"] = "quote,extended"
+        return parse_quote(_get("/quotes", params), mapped, strict_session=symbol == "SOXL")
     except (KeyError, TypeError, AttributeError, OSError):
         raise SchwabError("Schwab returned an invalid quote or its token storage is unavailable.") from None
 

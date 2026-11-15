@@ -88,7 +88,7 @@ class ProviderTests(unittest.TestCase):
         quote = provider.parse_quote(data, "SOXL")
         self.assertEqual(quote["price"], 50.25)
         self.assertTrue(quote["delayed"])
-        self.assertIn("delayed", quote["source"])
+        self.assertEqual(quote["source"], "Schwab")
         self.assertEqual(quote["observed_at"], provider._timestamp(now - 120000))
         del data["SOXL"]["quote"]["tradeTime"]
         with self.assertRaises(provider.SchwabError):
@@ -114,29 +114,22 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(rows[0]["source"], "Schwab")
         self.assertTrue(rows[0]["delayed"])
 
-    def test_quote_integration_prefers_schwab_and_falls_back_explicitly(self):
+    def test_quote_integration_uses_schwab_only(self):
         from live_market_quote import fetch_live_quote
         quote = dict(price=50, stale=False, source="Schwab")
-        with patch.object(provider, "fetch_quote", return_value=quote), patch(
-                "live_market_quote.yf.Ticker") as yahoo:
+        with patch.object(provider, "fetch_quote", return_value=quote):
             self.assertEqual(fetch_live_quote.__wrapped__(), quote)
-            yahoo.assert_not_called()
 
     def test_options_integration_uses_schwab_first(self):
         from options_projection_data import load_chain
         with patch.object(provider, "load_option_chain", return_value=[{"source": "Schwab"}]):
             self.assertEqual(load_chain.__wrapped__(date(2027, 1, 15), "call")[0]["source"], "Schwab")
 
-    def test_quote_fallback_reports_missing_authorization(self):
+    def test_quote_failure_propagates_without_fallback(self):
         from live_market_quote import fetch_live_quote
-        yahoo = Mock()
-        yahoo.info = dict(regularMarketPrice=51, regularMarketTime=time.time())
-        with patch.object(provider, "fetch_quote", side_effect=provider.SchwabError("Schwab needs authorization")), \
-                patch("live_market_quote.yf.Ticker", return_value=yahoo), \
-                patch("live_market_quote.requests.get", side_effect=RuntimeError):
-            quote = fetch_live_quote.__wrapped__()
-        self.assertEqual(quote["source"], "Yahoo Finance")
-        self.assertIn("Schwab needs authorization", quote["feed_warning"])
+        with patch.object(provider, "fetch_quote", side_effect=provider.SchwabError("Schwab needs authorization")):
+            with self.assertRaises(provider.SchwabError):
+                fetch_live_quote.__wrapped__()
 
     def test_benchmark_uses_schwab_and_preserves_actual_price(self):
         from benchmark_quotes import fetch_quote
