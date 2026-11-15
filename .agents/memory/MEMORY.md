@@ -25,3 +25,4 @@
 - [Streamlit component actions](streamlit-component-action-echoes.md) — visual toggles stay browser-local; server actions use callbacks; verify updates reach already-open tabs.
 - [One-button diagnostics](diagnostics-contract.md) — one action, explicit evidence and coverage limits; isolated exercises must never alter the user's chart.
 - [ARM64 Python wheels](arm64-python-wheels.md) — cross-platform pip builds need several compatible manylinux tags, not only the newest tag.
+- [Schwab market-data ownership](schwab-market-data.md) — use the owner's keys directly for Coolify portability; registered OAuth callback is on soxl.ai.

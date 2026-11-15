@@ -318,10 +318,11 @@ def render_options_projection(history: pd.DataFrame):
 
     st.markdown(f"**{loaded_kind.title()} quotes · {loaded_expiration:%b %d, %Y}**")
     fields = [
-        "ticker", "strike", "expiration", "type", "bid", "ask", "iv",
+        "source", "ticker", "strike", "expiration", "type", "bid", "ask", "iv",
         "quote_time", "spot", "spot_time", "multiplier",
     ]
     table = pd.DataFrame(chain).reindex(columns=fields).rename(columns={
+        "source": "Provider",
         "ticker": "Contract", "strike": "Strike ($)", "expiration": "Expiration",
         "type": "Type", "bid": "Bid ($)", "ask": "Ask ($)",
         "iv": "IV (decimal)", "quote_time": "Quote timestamp",
@@ -333,6 +334,8 @@ def render_options_projection(history: pd.DataFrame):
         "Timestamps are supplied by the provider. Quotes may be delayed or stale; "
         "underlying and option observations may have different timestamps."
     )
+    if any(row.get("delayed") is True for row in chain):
+        st.info("Schwab labels these option quotes delayed. They are not real-time execution prices.")
     selected = st.selectbox(
         "Select contract", range(len(chain)),
         format_func=lambda index: _contract_label(chain[index]),
@@ -348,7 +351,7 @@ def render_options_projection(history: pd.DataFrame):
     if missing:
         st.warning(
             "The provider returned this contract but omitted: " + ", ".join(missing)
-            + ". Check Polygon options-quote and underlying-data entitlements, or "
+            + ". Check your provider's options-quote and underlying-data entitlements, or "
             "select another contract. A trustworthy quote-based projection cannot "
             "be generated from these missing fields."
         )

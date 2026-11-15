@@ -27,6 +27,22 @@ feature is unavailable until its variables are supplied.
 | --- | --- | --- |
 | `EODHD_API_KEY` | Optional | EODHD historical market data. |
 | `POLYGON_API_KEY` | Optional | Polygon options-chain and options-history data. |
+| `SCHWAB_CLIENT_ID` | Optional | Your Schwab developer app's client ID. Enables Schwab as the preferred SOXL/benchmark quote and SOXL options-chain provider after owner authorization. |
+| `SCHWAB_CLIENT_SECRET` | With Schwab | Your Schwab developer app secret; also protects the owner-only connection form. Never exposed in page content or logs. |
+| `SCHWAB_REDIRECT_URI` | With Schwab | Must exactly match the developer portal callback; defaults to `https://soxl.ai/auth/schwab/callback`. Start authorization at `/auth/schwab/connect` on that same domain. |
+| `SCHWAB_TOKEN_FILE` | Recommended with Schwab | Private writable token file shared by this app's gateway and workers. Defaults to `/tmp/soxl-schwab/tokens.json` (ephemeral). On Coolify use `/data/schwab-tokens/tokens.json` and mount a persistent `/data` volume. Never commit or serve this file. |
+
+Schwab setup uses your own keys, not a Replit connector. Deploy this code and set
+the keys on the server serving `soxl.ai`, then open
+`https://soxl.ai/auth/schwab/connect`. Enter your existing Schwab app secret in
+that owner-verification form and complete authorization on Schwab's website.
+The public app has no login requirement. `/api/schwab/status` reports only
+sanitized connection state, never tokens or account data. Access tokens refresh
+automatically; Schwab ordinarily requires renewed owner authorization after
+approximately seven days. Existing quote sources and Polygon remain fallbacks;
+the integration never calls trading or account endpoints. Preserve the token
+volume across redeployments; use one app instance (or a filesystem supporting
+shared POSIX locks) to prevent concurrent refresh-token rotation.
 
 ## AI and text-quality providers
 

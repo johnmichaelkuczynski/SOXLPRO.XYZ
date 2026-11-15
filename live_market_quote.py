@@ -75,6 +75,16 @@ def select_quote(yahoo, robinhood, now=None):
 @st.cache_data(ttl=50, show_spinner=False)
 def fetch_live_quote():
     errors = []
+    from schwab_market_data import configured, fetch_quote, SchwabError
+    schwab_quote = None
+    if configured():
+        try:
+            schwab_quote = fetch_quote()
+            if not schwab_quote["stale"]:
+                return schwab_quote
+            errors.append("Schwab's last trade is more than 15 minutes old")
+        except SchwabError as exc:
+            errors.append(str(exc))
     try:
         yahoo = yf.Ticker("SOXL").info
     except Exception:
@@ -89,6 +99,8 @@ def fetch_live_quote():
         robinhood = {}
         errors.append("Robinhood quote unavailable")
     quote = select_quote(yahoo, robinhood)
+    if schwab_quote and (not quote or schwab_quote["observed_at"] >= quote["observed_at"]):
+        quote = schwab_quote
     if quote:
         quote["feed_warning"] = "; ".join(errors)
     return quote

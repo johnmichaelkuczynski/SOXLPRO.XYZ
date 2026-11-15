@@ -175,7 +175,11 @@ async def run(port):
     global ready, state
     from stripe_webhook import StripeWebhook
     from full_diagnostics import DiagnosticsRun, DiagnosticsStatus
+    from schwab_auth import Connect, Callback, Status
     application = tornado.web.Application([
+        (r"/auth/schwab/connect", Connect),
+        (r"/auth/schwab/callback", Callback),
+        (r"/api/schwab/status", Status),
         (r"/api/stripe/webhook", StripeWebhook),
         (r"/api/diagnostics/run", DiagnosticsRun, {"port": port}),
         (r"/api/diagnostics/([a-f0-9]{32})", DiagnosticsStatus),

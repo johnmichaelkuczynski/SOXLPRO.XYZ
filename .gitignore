@@ -1,2 +1,4 @@
 .streamlit/secrets.toml
 /generated-artifacts/
+**/schwab-tokens/
+**/.schwab-*

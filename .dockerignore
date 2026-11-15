@@ -27,4 +27,6 @@ promo_assets_v3
 promo_assets_v4
 screenshots
 generated-artifacts
+**/schwab-tokens
+**/.schwab-*
 *.py[cod]

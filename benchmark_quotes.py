@@ -78,6 +78,15 @@ def valid_quote(price, timestamp, currency, source, unit=None):
 
 def fetch_quote(symbol):
     import requests
+    from schwab_market_data import configured, fetch_quote as schwab_quote, SchwabError
+    if configured() and symbol in SYMBOLS and symbol != "BTC":
+        try:
+            result = schwab_quote(symbol)
+            if not result["stale"]:
+                return valid_quote(result["price"], datetime.fromisoformat(result["observed_at"]).timestamp(),
+                                   "USD", result["source"], "points" if symbol in ("VIX", "SOX") else None)
+        except SchwabError:
+            pass  # Existing provider remains a timestamped fallback.
     if symbol in SYMBOLS:
         response = requests.get(
             "https://query1.finance.yahoo.com/v8/finance/chart/" + SYMBOLS[symbol],

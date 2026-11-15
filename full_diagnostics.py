@@ -166,8 +166,22 @@ def _options():
     quoted = sum(1 for c in contracts if isinstance(c.get("bid"), (int, float))
                  and isinstance(c.get("ask"), (int, float)) and c["ask"] >= c["bid"] >= 0)
     return ("pass" if quoted else "fail",
-            f"Polygon {expiration} calls: {len(contracts)} contracts, {quoted} with bid/ask. "
+            f"{contracts[0].get('source', 'Options provider') if contracts else 'Options provider'} "
+            f"{expiration} calls: {len(contracts)} contracts, {quoted} with bid/ask. "
             "Provider cache may be reused for up to 60 seconds.")
+
+
+def _schwab():
+    from schwab_market_data import status, fetch_quote
+    current = status()
+    if current["state"] == "not_configured":
+        return "not_tested", current["message"]
+    if current["state"] != "authorized":
+        return "warning", current["message"] + " Open /auth/schwab/connect on the callback domain."
+    quote = fetch_quote()
+    return ("warning" if quote["stale"] else "pass",
+            f"{quote['source']} returned SOXL ${quote['price']:.2f}, observed {quote['observed_at']}. "
+            "This direct request does not refresh the user's chart.")
 
 
 def _ai(provider):
@@ -213,7 +227,8 @@ def _work(job, base_url):
             ("Public page", "HTTP", lambda: _http(base_url + "/")),
             ("Gateway readiness", "HTTP", lambda: _http(base_url + "/_gateway/ready")),
             ("Interactive server", "HTTP", lambda: _http(base_url + "/_stcore/health")),
-            ("Polygon options chain and quotes", "Live services", _options),
+            ("Schwab authorization and quote", "Live services", _schwab),
+            ("Options chain and quotes", "Live services", _options),
             ("OpenAI answer generation", "Live services", lambda: _ai("OpenAI")),
             ("Anthropic answer generation", "Live services", lambda: _ai("Anthropic")),
         ]

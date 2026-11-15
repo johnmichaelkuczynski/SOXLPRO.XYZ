@@ -19,12 +19,20 @@ def stamp(value):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_chain(expiration, kind):
+    if kind not in ("call", "put"):
+        raise OptionsDataError("Select a call or put.")
+    from schwab_market_data import configured, load_option_chain, SchwabError
+    schwab_error = None
+    if configured():
+        try:
+            return load_option_chain(expiration, kind)
+        except SchwabError as exc:
+            schwab_error = str(exc)
     key = os.environ.get("POLYGON_API_KEY")
     if not key:
-        raise OptionsDataError(
-            "Options data is not connected. Add POLYGON_API_KEY in workspace Secrets "
-            "with access to options snapshots and bid/ask quotes, then refresh."
-        )
+        raise OptionsDataError(("Options data is not connected. " + schwab_error) if schwab_error else
+            "Options data is not connected. Add POLYGON_API_KEY with access to "
+            "options snapshots and bid/ask quotes, or authorize Schwab, then refresh.")
     if kind not in ("call", "put"):
         raise OptionsDataError("Select a call or put.")
     url = "https://api.polygon.io/v3/snapshot/options/SOXL"
@@ -53,6 +61,7 @@ def load_chain(expiration, kind):
                     quote_time=stamp(q.get("last_updated")),
                     spot=u.get("price"), spot_time=stamp(u.get("last_updated")),
                     adjusted=bool(d.get("additional_underlyings")),
+                    source="Polygon",
                 ))
             url = payload.get("next_url")
             if not url:
