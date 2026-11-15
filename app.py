@@ -36,6 +36,9 @@ from seo import ABOUT_HTML, TITLE
 
 st.set_page_config(page_title=TITLE, page_icon="📈", layout="wide")
 
+from top_soxl_price import render_top_soxl_price
+render_top_soxl_price()
+
 current_user = get_current_user()
 render_account_header()
 from app_diagnostics import render_full_diagnostics
