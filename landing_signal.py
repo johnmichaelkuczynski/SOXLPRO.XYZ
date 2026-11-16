@@ -223,13 +223,6 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
 
     st.markdown("### SOXL Daily Signal")
     from short_term_signal_ui import render_short_term_signal, render_full_signal_report
-    from short_term_signal import load_manifest
-    try:
-        manifest = saved["manifest"] if saved else load_manifest()
-        short_summary = ("next-month calls depend on the validated short-term rule."
-                         if manifest.get("passed") else "no reliable call for the next month.")
-    except Exception:
-        short_summary = "no reliable call for the next month."
     percentile = result["percentile"]
     long_summary = (
         "Near the bottom of its historical range for a 6–12 month hold"
@@ -240,7 +233,7 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
         if percentile < RATING_THRESHOLDS["possible_sell_min"] else
         "High in its historical range; be cautious about a 6–12 month entry"
     )
-    st.markdown(f"**{long_summary}; {short_summary}**")
+    st.markdown(f"**{long_summary}.**")
 
     long_term, short_term = st.columns(2)
     with long_term:

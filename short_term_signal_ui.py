@@ -2,10 +2,17 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from pathlib import Path
+from html import escape
 
 from short_term_signal import load_manifest, short_term_ratings
+from forecast_horizons import earliest_historical_outlook
 
 REPORT_PATH = Path(__file__).parent / "reports/signal_validation/report.html"
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _earliest_outlook(closes):
+    return earliest_historical_outlook(closes)
 
 
 def toggle_full_report():
@@ -33,31 +40,60 @@ def render_short_term_signal(closes, saved=None):
     except Exception:
         rating = "NO EDGE"
     passed = bool(manifest and manifest.get("passed"))
-    if not passed:
-        label = "NO CALL"
-        sentence = "Not enough history to predict the next month either way."
-    elif rating == "BUY":
-        label = "BUY"
-        sentence = "The validated short-term rule signals a possible buy for the next month."
+    outlook = _earliest_outlook(closes)
+    selected = outlook["selected"]
+    if selected:
+        label = selected["label"].upper()
+        frequency = f'{selected["higher_pct"]:.0f}% finished higher'
+        sentence = (
+            f'After {escape(outlook["rating"])} readings · '
+            f'{selected["observations"]:,} non-overlapping outcomes'
+        )
     else:
-        label = "NO CALL"
-        sentence = "The validated rule does not signal a next-month buy today."
+        label = "OUTCOME HISTORY"
+        frequency = "Sample target: 30"
+        largest = max((row["observations"] for row in outlook["candidates"]), default=0)
+        sentence = f'{largest:,} matching completed outcomes available'
     st.markdown(
         '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;'
         'background:white;margin:4px 0 6px;">'
         '<div style="font-size:1rem;color:#475569;letter-spacing:.03em;font-weight:800;">'
-        'NEXT-MONTH OUTLOOK</div>'
-        f'<div style="font-size:2.5rem;line-height:1.1;font-weight:850;color:#334155;margin:2px 0;">{label}</div>'
+        'EARLIEST HISTORICAL OUTLOOK</div>'
+        f'<div style="font-size:1.6rem;line-height:1.15;font-weight:850;color:#334155;margin:3px 0;">{label}</div>'
+        f'<div style="font-size:2rem;line-height:1.15;font-weight:850;color:#334155;margin:3px 0;">{frequency}</div>'
         f'<p style="font-size:1.125rem;line-height:1.3;color:#334155;margin:4px 0 0;">{sentence}</p></div>',
         unsafe_allow_html=True,
     )
-    with st.expander("Frozen short-term rule and validation", expanded=False):
+    with st.expander("Outlook evidence and frozen monthly rule", expanded=False):
+        st.write(
+            f'Historical evaluation: {outlook["evaluation_start"]} through '
+            f'{outlook["evaluation_end"]}. Entry at the next session close; '
+            'the displayed holding period starts at entry.'
+        )
+        if selected:
+            st.write(
+                f'Historical frequency: {selected["wins"]} of {selected["observations"]} '
+                f'finished higher. Baseline: {selected["baseline_pct"]:.1f}%; '
+                f'difference: {selected["difference_pp"]:+.1f} percentage points.'
+            )
+            st.write(
+                f'95% Wilson interval: {selected["interval_low_pct"]:.1f}%–'
+                f'{selected["interval_high_pct"]:.1f}%.'
+            )
+        st.write("The shortest horizon with at least 30 non-overlapping matching outcomes is shown.")
+        st.dataframe([{
+            "Horizon": row["label"], "Matching outcomes": row["observations"],
+            "Finished higher (%)": row["higher_pct"], "Baseline (%)": row["baseline_pct"],
+        } for row in outlook["candidates"]], hide_index=True)
+        st.markdown("**Frozen one-month rule**")
         st.write(f"Close through {closes.index[-1]:%Y-%m-%d}")
         if manifest is None:
             st.warning("Frozen validation results are unavailable. Buy signals are disabled.")
             return
         if not passed:
             st.write("The frozen rule did not meet the out-of-sample acceptance criteria.")
+        else:
+            st.write(f"Current frozen monthly rule: {rating}.")
         stats = manifest.get("test_metrics", {})
         if stats:
             st.write(

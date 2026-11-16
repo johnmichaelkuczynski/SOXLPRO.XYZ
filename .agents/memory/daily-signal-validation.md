@@ -27,3 +27,15 @@ optimized away. A high percentage with a tiny sample is not sufficient.
 future study as a separately identified experiment rather than overwriting the
 holdout or presenting a retrospectively gated policy as real-time recommendations.
 Keep the existing common-calendar non-overlap and next-session-close conventions.
+
+Show the earliest measurable historical outlook instead of a hard-coded
+next-month dead end. Select the shortest horizon with enough matching completed,
+non-overlapping cases, not the horizon with the highest outcome rate.
+
+**Why:** The user asked for the soonest principled timeframe rather than simply
+saying that the app cannot predict next month.
+
+**How to apply:** Label retrospective outcome frequencies as historical, show
+their baseline and sample evidence in the dropdown, and keep them separate from
+the frozen monthly BUY gate. Reused historical data is not fresh validation;
+sample sufficiency alone is not a proven trading edge.
