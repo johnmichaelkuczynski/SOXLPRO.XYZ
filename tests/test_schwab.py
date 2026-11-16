@@ -51,6 +51,20 @@ class ProviderTests(unittest.TestCase):
             self.assertFalse(provider.configured())
             self.assertEqual(provider.status()["state"], "not_configured")
 
+    def test_credentials_are_trimmed_and_read_at_runtime(self):
+        with patch.dict(os.environ, {"SCHWAB_CLIENT_ID": " \ttest-client\n",
+                                     "SCHWAB_CLIENT_SECRET": " \ttest-secret\r\n"}):
+            self.assertTrue(provider.configured())
+            response = Mock(status_code=200)
+            response.json.return_value = dict(access_token="new-access", expires_in=1800)
+            with patch.object(provider.requests, "post", return_value=response) as post:
+                provider._token_request({"grant_type": "authorization_code", "code": "test-code"})
+            self.assertEqual(post.call_args.kwargs["auth"], ("test-client", "test-secret"))
+            os.environ["SCHWAB_CLIENT_SECRET"] = "replacement"
+            self.assertEqual(provider.client_secret(), "replacement")
+            os.environ["SCHWAB_CLIENT_SECRET"] = " \r\n"
+            self.assertFalse(provider.configured())
+
     def test_valid_token_reused_and_file_private(self):
         self.save()
         self.assertEqual(stat.S_IMODE(provider.token_path().stat().st_mode), 0o600)
@@ -225,6 +239,64 @@ class OAuthTests(AsyncHTTPTestCase):
         response = self.fetch("/auth/schwab/connect", method="POST",
                               body="secret=test-secret&nonce=untrusted")
         self.assertEqual(response.code, 403)
+
+    def submit(self, nonce, cookie="", secret="test-secret", **headers):
+        return self.fetch("/auth/schwab/connect", method="POST", headers={
+            "Host": "soxl.ai", "Cookie": cookie,
+            "Content-Type": "application/x-www-form-urlencoded", **headers},
+            body=urlencode(dict(nonce=nonce, secret=secret)), follow_redirects=False)
+
+    def test_trimmed_secret_and_cookie_work_behind_https_proxy(self):
+        # Coolify terminates TLS; Tornado receives HTTP. Cookies must still be
+        # Secure, and the relative form POST must carry the same host/path cookie.
+        with patch.dict(os.environ, {"SCHWAB_CLIENT_SECRET": " \ttest-secret\r\n"}):
+            nonce, cookie = self.begin()
+            response = self.submit(nonce, cookie, " \r\ntest-secret \t",
+                                   **{"X-Forwarded-Proto": "https",
+                                      "X-Forwarded-Host": "soxl.ai"})
+            self.assertEqual(response.code, 302)
+            self.assertTrue(response.headers["Location"].startswith(
+                "https://api.schwabapi.com/v1/oauth/authorize?"))
+            morsel = SimpleCookie()
+            morsel.load(response.headers["Set-Cookie"])
+            self.assertTrue(morsel[auth.COOKIE]["secure"])
+            self.assertTrue(morsel[auth.COOKIE]["httponly"])
+            self.assertEqual(morsel[auth.COOKIE]["samesite"], "Lax")
+            self.assertEqual(morsel[auth.COOKIE]["path"], "/auth/schwab")
+
+    def test_whitespace_only_env_change_does_not_invalidate_cookie(self):
+        nonce, cookie = self.begin()
+        with patch.dict(os.environ, {"SCHWAB_CLIENT_SECRET": "\ntest-secret "}):
+            self.assertEqual(self.submit(nonce, cookie).code, 302)
+
+    def test_runtime_rotation_does_not_accept_old_secret(self):
+        nonce, cookie = self.begin()
+        with patch.dict(os.environ, {"SCHWAB_CLIENT_SECRET": "replacement-secret"}):
+            with self.assertLogs(level="WARNING") as logs:
+                response = self.submit(nonce, cookie)
+            self.assertEqual(response.code, 403)
+            self.assertIn("reason=cookie_invalid_or_expired", "\n".join(logs.output))
+            nonce, cookie = self.begin()
+            self.assertEqual(self.submit(nonce, cookie, "replacement-secret").code, 302)
+
+    def test_failures_log_distinct_reasons_without_credentials(self):
+        nonce, cookie = self.begin()
+        for reason, form_nonce, form_cookie, secret in [
+            ("cookie_missing", nonce, "", "test-secret"),
+            ("cookie_invalid_or_expired", nonce, auth.COOKIE + "=invalid-cookie", "test-secret"),
+            ("nonce_mismatch", "other-nonce", cookie, "test-secret"),
+            ("secret_mismatch", nonce, cookie, "wrong-secret"),
+        ]:
+            auth.ATTEMPTS.clear()
+            with self.subTest(reason=reason), self.assertLogs(level="WARNING") as logs:
+                response = self.submit(form_nonce, form_cookie, secret,
+                                       **{"X-Forwarded-Proto": "https"})
+            self.assertEqual(response.code, 403)
+            output = "\n".join(logs.output)
+            self.assertIn("reason=" + reason, output)
+            self.assertIn("forwarded_https=True", output)
+            for sensitive in ("test-secret", "wrong-secret", nonce, cookie, "other-nonce", "invalid-cookie"):
+                self.assertNotIn(sensitive, output)
 
 
 if __name__ == "__main__":

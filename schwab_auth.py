@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import html
 import logging
-import os
 import secrets
 import time
 from collections import OrderedDict
@@ -20,11 +19,23 @@ ATTEMPTS = OrderedDict()
 
 def _cookie_secret():
     # Dedicated purpose, derived server-side. Never sent to the browser.
-    return hmac.new(os.environ.get("SCHWAB_CLIENT_SECRET", "").encode(),
+    return hmac.new(schwab.client_secret().encode(),
                     b"soxl-schwab-owner-oauth", hashlib.sha256).digest()
 
 
 class Base(tornado.web.RequestHandler):
+    def setup_failure(self, reason, message, status=403):
+        # Fixed reason codes and booleans only: never log POST bodies, cookies,
+        # nonces, secret values, secret lengths, or credential fingerprints.
+        forwarded = self.request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+        logging.warning(
+            "Schwab setup rejected reason=%s cookie_present=%s "
+            "backend_https=%s forwarded_https=%s",
+            reason, bool(self.get_cookie(COOKIE)),
+            self.request.protocol == "https", forwarded == "https")
+        self.set_status(status)
+        self.page("Setup was not authorized", message)
+
     def set_default_headers(self):
         self.set_header("Cache-Control", "no-store")
         self.set_header("Referrer-Policy", "no-referrer")
@@ -54,6 +65,8 @@ class Base(tornado.web.RequestHandler):
                         path="/auth/schwab", max_age=600)
 
     def get_setup(self):
+        if not self.get_cookie(COOKIE):
+            return None
         value = tornado.web.decode_signed_value(
             _cookie_secret(), COOKIE, self.get_cookie(COOKIE, ""), max_age_days=10 / 1440)
         return value.decode() if value else None
@@ -100,30 +113,45 @@ class Connect(Base):
             history = [stamp for stamp in ATTEMPTS.get(key, []) if now - stamp < 60]
             ATTEMPTS[key] = history
             if len(history) >= (5 if key != "*" else 60):
-                self.set_status(429)
-                self.page("Please wait", "Too many setup attempts. Retry in one minute.")
+                self.setup_failure("rate_limited", "Too many setup attempts. Retry in one minute.", 429)
                 return
             history.append(now)
         while len(ATTEMPTS) > 1000:
             ATTEMPTS.popitem(last=False)
-        nonce = self.get_body_argument("nonce", "")
-        expected = self.get_setup()
-        secret = self.get_body_argument("secret", "")
-        if (not schwab.configured() or not expected or
-                not hmac.compare_digest(expected.encode(), ("form:" + nonce).encode()) or
-                not hmac.compare_digest(secret.encode(), os.environ.get("SCHWAB_CLIENT_SECRET", "").encode())):
-            self.set_status(403)
-            self.page("Setup was not authorized", "Reopen Schwab setup and enter the correct app secret.")
+        if not schwab.configured():
+            self.setup_failure("configuration_missing",
+                               "Schwab keys are not configured on this server.", 503)
             return
         callback = urlsplit(schwab.redirect_uri())
         if self.request.host != callback.netloc:
-            self.set_status(403)
-            self.page("Wrong setup domain", "Open setup on the registered callback domain.")
+            self.setup_failure("wrong_host", "Open setup on the registered callback domain.")
+            return
+        if not self.get_cookie(COOKIE):
+            self.setup_failure("cookie_missing",
+                               "The setup cookie did not return. Open this page directly on the callback domain "
+                               "over HTTPS with cookies enabled, then submit again.")
+            return
+        expected = self.get_setup()
+        if not expected:
+            self.setup_failure("cookie_invalid_or_expired",
+                               "The setup cookie expired or could not be verified. Reopen this page and retry. "
+                               "All server instances must use the same Schwab app secret.")
+            return
+        nonce = self.get_body_argument("nonce", "", strip=False)
+        if not nonce or not hmac.compare_digest(expected.encode(), ("form:" + nonce).encode()):
+            self.setup_failure("nonce_mismatch", "The form no longer matches this browser's setup cookie. "
+                               "Reopen this page and submit the newest form.")
+            return
+        secret = self.get_body_argument("secret", "", strip=False).strip()
+        if not hmac.compare_digest(secret.encode(), schwab.client_secret().encode()):
+            self.setup_failure("secret_mismatch",
+                               "The entered app secret does not match this server's SCHWAB_CLIENT_SECRET. "
+                               "Check the running container's configuration and retry.")
             return
         state = secrets.token_urlsafe(32)
         self.set_setup("oauth:" + state)
         self.redirect("https://api.schwabapi.com/v1/oauth/authorize?" + urlencode({
-            "response_type": "code", "client_id": os.environ["SCHWAB_CLIENT_ID"],
+            "response_type": "code", "client_id": schwab.client_id(),
             "redirect_uri": schwab.redirect_uri(), "state": state}))
 
 

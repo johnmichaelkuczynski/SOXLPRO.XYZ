@@ -30,9 +30,17 @@ class AuthorizationRejected(SchwabError):
     pass
 
 
+def client_id():
+    """Read deployment configuration at request time, not module import."""
+    return os.environ.get("SCHWAB_CLIENT_ID", "").strip()
+
+
+def client_secret():
+    return os.environ.get("SCHWAB_CLIENT_SECRET", "").strip()
+
+
 def configured():
-    return bool(os.environ.get("SCHWAB_CLIENT_ID") and
-                os.environ.get("SCHWAB_CLIENT_SECRET"))
+    return bool(client_id() and client_secret())
 
 
 def redirect_uri():
@@ -44,7 +52,7 @@ def token_path():
 
 
 def _fingerprint():
-    return hashlib.sha256(os.environ.get("SCHWAB_CLIENT_ID", "").encode()).hexdigest()
+    return hashlib.sha256(client_id().encode()).hexdigest()
 
 
 @contextmanager
@@ -110,7 +118,7 @@ def _token_request(form):
     try:
         response = requests.post(
             TOKEN_URL, data=form,
-            auth=(os.environ["SCHWAB_CLIENT_ID"], os.environ["SCHWAB_CLIENT_SECRET"]),
+            auth=(client_id(), client_secret()),
             timeout=8, allow_redirects=False)
         if response.status_code in (400, 401, 403):
             raise AuthorizationRejected("Schwab rejected authorization. Reconnect and check the app's approval and keys.")

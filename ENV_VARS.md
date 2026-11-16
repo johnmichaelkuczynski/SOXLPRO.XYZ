@@ -36,6 +36,18 @@ Schwab setup uses your own keys, not a Replit connector. Deploy this code and se
 the keys on the server serving `soxl.ai`, then open
 `https://soxl.ai/auth/schwab/connect`. Enter your existing Schwab app secret in
 that owner-verification form and complete authorization on Schwab's website.
+The setup form reads the credentials at request time and trims leading/trailing
+whitespace on both the entered and configured values. After changing Coolify
+environment settings, recreate/redeploy the container so it receives the new
+environment. Open a fresh setup page after a deployment or key change.
+
+Behind Coolify's HTTPS proxy, keep the public host `soxl.ai` intact. Setup uses a
+relative POST and a host-only, Secure, HttpOnly, SameSite=Lax cookie scoped to
+`/auth/schwab`; the cookie remains Secure even when internal proxy traffic is
+HTTP. All replicas must use the same Schwab secret. Failed setup attempts log
+only fixed reason codes (`configuration_missing`, `wrong_host`, `cookie_missing`,
+`cookie_invalid_or_expired`, `nonce_mismatch`, `secret_mismatch`, `rate_limited`)
+and cookie/protocol booleans, never the secret, POST body, nonce, or cookie value.
 The public app has no login requirement. `/api/schwab/status` reports only
 sanitized connection state, never tokens or account data. Access tokens refresh
 automatically; Schwab ordinarily requires renewed owner authorization after
