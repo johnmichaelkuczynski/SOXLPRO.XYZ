@@ -169,7 +169,6 @@ class OAuthTests(AsyncHTTPTestCase):
             "SCHWAB_CLIENT_ID": "test-client", "SCHWAB_CLIENT_SECRET": "test-secret",
             "SCHWAB_REDIRECT_URI": "https://soxl.ai/auth/schwab/callback"}, clear=True)
         self.env.start()
-        auth.ATTEMPTS.clear()
         super().setUp()
 
     def tearDown(self):
@@ -182,35 +181,35 @@ class OAuthTests(AsyncHTTPTestCase):
                             (r"/api/schwab/status", auth.Status)])
 
     def begin(self):
-        response = self.fetch("/auth/schwab/connect", headers={"Host": "soxl.ai"})
-        self.assertEqual(response.code, 200)
+        response = self.fetch("/auth/schwab/connect", headers={"Host": "soxl.ai"},
+                              follow_redirects=False)
+        self.assertEqual(response.code, 302)
         text = response.body.decode()
         self.assertNotIn("test-secret", text)
-        nonce = re.search(r'name="nonce" value="([^"]+)"', text)[1]
+        self.assertNotIn("<form", text)
+        params = parse_qs(urlsplit(response.headers["Location"]).query)
         cookie = SimpleCookie()
         cookie.load(response.headers["Set-Cookie"])
         self.assertTrue(cookie[auth.COOKIE]["secure"])
         self.assertTrue(cookie[auth.COOKIE]["httponly"])
-        return nonce, cookie.output(header="").strip().split(";")[0]
+        self.assertEqual(cookie[auth.COOKIE]["samesite"], "Lax")
+        self.assertEqual(cookie[auth.COOKIE]["path"], "/auth/schwab")
+        return params["state"][0], cookie.output(header="").strip().split(";")[0]
 
     def authorize(self):
-        nonce, cookie = self.begin()
-        response = self.fetch("/auth/schwab/connect", method="POST", headers={
-            "Host": "soxl.ai", "Cookie": cookie,
-            "Content-Type": "application/x-www-form-urlencoded"},
-            body=urlencode(dict(nonce=nonce, secret="test-secret")), follow_redirects=False)
-        return response
+        return self.fetch("/auth/schwab/connect", headers={
+            "Host": "soxl.ai", "X-Forwarded-Proto": "https"}, follow_redirects=False)
 
     def test_unauthorized_visitor_cannot_replace_owner_connection(self):
         with patch.object(provider, "exchange_code") as exchange:
             response = self.fetch("/auth/schwab/callback?code=untrusted&state=wrong")
             self.assertEqual(response.code, 403)
             exchange.assert_not_called()
-        nonce, cookie = self.begin()
+        _, cookie = self.begin()
         response = self.fetch("/auth/schwab/connect", method="POST", headers={
             "Host": "soxl.ai", "Cookie": cookie},
-            body=urlencode(dict(nonce=nonce, secret="wrong")))
-        self.assertEqual(response.code, 403)
+            body="secret=wrong")
+        self.assertEqual(response.code, 405)
 
     def test_oauth_redirect_and_callback(self):
         response = self.authorize()
@@ -218,6 +217,8 @@ class OAuthTests(AsyncHTTPTestCase):
         url = urlsplit(response.headers["Location"])
         self.assertEqual(url.netloc, "api.schwabapi.com")
         params = parse_qs(url.query)
+        self.assertEqual(params["client_id"], ["test-client"])
+        self.assertEqual(params["response_type"], ["code"])
         self.assertEqual(params["redirect_uri"], ["https://soxl.ai/auth/schwab/callback"])
         self.assertNotIn("test-secret", response.headers["Location"])
         cookie = SimpleCookie()
@@ -225,78 +226,75 @@ class OAuthTests(AsyncHTTPTestCase):
         with patch.object(provider, "exchange_code") as exchange:
             response = self.fetch("/auth/schwab/callback?" + urlencode({
                 "state": params["state"][0], "code": "test-code"}),
-                headers={"Host": "soxl.ai", "Cookie": cookie.output(header="").strip().split(";")[0]})
-            self.assertEqual(response.code, 200)
-            self.assertIn(b"authorization saved", response.body)
+                headers={"Host": "soxl.ai", "Cookie": cookie.output(header="").strip().split(";")[0]},
+                follow_redirects=False)
+            self.assertEqual(response.code, 302)
+            self.assertEqual(response.headers["Location"], "/")
             exchange.assert_called_once_with("test-code")
 
     def test_preview_domain_does_not_start_broken_cross_domain_oauth(self):
-        response = self.fetch("/auth/schwab/connect")
+        response = self.fetch("/auth/schwab/connect", follow_redirects=False)
         self.assertNotIn("Set-Cookie", response.headers)
-        self.assertIn(b"configured domain", response.body)
+        self.assertEqual(response.code, 302)
+        self.assertEqual(response.headers["Location"], "https://soxl.ai/auth/schwab/connect")
 
-    def test_post_without_csrf_cookie_is_rejected(self):
-        response = self.fetch("/auth/schwab/connect", method="POST",
-                              body="secret=test-secret&nonce=untrusted")
-        self.assertEqual(response.code, 403)
-
-    def submit(self, nonce, cookie="", secret="test-secret", **headers):
-        return self.fetch("/auth/schwab/connect", method="POST", headers={
-            "Host": "soxl.ai", "Cookie": cookie,
-            "Content-Type": "application/x-www-form-urlencoded", **headers},
-            body=urlencode(dict(nonce=nonce, secret=secret)), follow_redirects=False)
-
-    def test_trimmed_secret_and_cookie_work_behind_https_proxy(self):
-        # Coolify terminates TLS; Tornado receives HTTP. Cookies must still be
-        # Secure, and the relative form POST must carry the same host/path cookie.
+    def test_direct_redirect_does_not_require_entering_secret(self):
         with patch.dict(os.environ, {"SCHWAB_CLIENT_SECRET": " \ttest-secret\r\n"}):
-            nonce, cookie = self.begin()
-            response = self.submit(nonce, cookie, " \r\ntest-secret \t",
-                                   **{"X-Forwarded-Proto": "https",
-                                      "X-Forwarded-Host": "soxl.ai"})
+            response = self.authorize()
             self.assertEqual(response.code, 302)
             self.assertTrue(response.headers["Location"].startswith(
                 "https://api.schwabapi.com/v1/oauth/authorize?"))
-            morsel = SimpleCookie()
-            morsel.load(response.headers["Set-Cookie"])
-            self.assertTrue(morsel[auth.COOKIE]["secure"])
-            self.assertTrue(morsel[auth.COOKIE]["httponly"])
-            self.assertEqual(morsel[auth.COOKIE]["samesite"], "Lax")
-            self.assertEqual(morsel[auth.COOKIE]["path"], "/auth/schwab")
+            self.assertNotIn("test-secret", response.headers["Location"])
 
-    def test_whitespace_only_env_change_does_not_invalidate_cookie(self):
-        nonce, cookie = self.begin()
-        with patch.dict(os.environ, {"SCHWAB_CLIENT_SECRET": "\ntest-secret "}):
-            self.assertEqual(self.submit(nonce, cookie).code, 302)
+    def test_state_mismatch_never_exchanges_code(self):
+        _, cookie = self.begin()
+        with patch.object(provider, "exchange_code") as exchange, self.assertLogs(level="WARNING") as logs:
+            response = self.fetch("/auth/schwab/callback?code=private-code&state=wrong",
+                                  headers={"Host": "soxl.ai", "Cookie": cookie})
+        self.assertEqual(response.code, 403)
+        exchange.assert_not_called()
+        self.assertIn("reason=oauth_state_invalid", "\n".join(logs.output))
+        self.assertNotIn("private-code", "\n".join(logs.output))
 
-    def test_runtime_rotation_does_not_accept_old_secret(self):
-        nonce, cookie = self.begin()
-        with patch.dict(os.environ, {"SCHWAB_CLIENT_SECRET": "replacement-secret"}):
-            with self.assertLogs(level="WARNING") as logs:
-                response = self.submit(nonce, cookie)
-            self.assertEqual(response.code, 403)
-            self.assertIn("reason=cookie_invalid_or_expired", "\n".join(logs.output))
-            nonce, cookie = self.begin()
-            self.assertEqual(self.submit(nonce, cookie, "replacement-secret").code, 302)
+    def test_callback_stores_tokens_before_redirect_home(self):
+        state, cookie = self.begin()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+                "SCHWAB_TOKEN_FILE": directory + "/tokens.json"}), \
+                patch.object(provider, "_token_request", return_value={
+                    "access_token": "private-access", "refresh_token": "private-refresh",
+                    "expires_at": time.time() + 1800}) as token_request:
+            response = self.fetch("/auth/schwab/callback?" + urlencode({
+                "state": state, "code": "private-code"}),
+                headers={"Host": "soxl.ai", "Cookie": cookie, "X-Forwarded-Proto": "https"},
+                follow_redirects=False)
+            self.assertEqual(response.code, 302)
+            self.assertEqual(response.headers["Location"], "/")
+            self.assertEqual(provider.status()["state"], "authorized")
+            self.assertEqual(provider._read()["refresh_token"], "private-refresh")
+            self.assertEqual(stat.S_IMODE(provider.token_path().stat().st_mode), 0o600)
+            token_request.assert_called_once_with({
+                "grant_type": "authorization_code", "code": "private-code",
+                "redirect_uri": "https://soxl.ai/auth/schwab/callback"})
+            for secret in ("private-code", "private-access", "private-refresh", "test-secret"):
+                self.assertNotIn(secret, response.body.decode() + str(response.headers))
 
-    def test_failures_log_distinct_reasons_without_credentials(self):
-        nonce, cookie = self.begin()
-        for reason, form_nonce, form_cookie, secret in [
-            ("cookie_missing", nonce, "", "test-secret"),
-            ("cookie_invalid_or_expired", nonce, auth.COOKIE + "=invalid-cookie", "test-secret"),
-            ("nonce_mismatch", "other-nonce", cookie, "test-secret"),
-            ("secret_mismatch", nonce, cookie, "wrong-secret"),
-        ]:
-            auth.ATTEMPTS.clear()
-            with self.subTest(reason=reason), self.assertLogs(level="WARNING") as logs:
-                response = self.submit(form_nonce, form_cookie, secret,
-                                       **{"X-Forwarded-Proto": "https"})
-            self.assertEqual(response.code, 403)
-            output = "\n".join(logs.output)
-            self.assertIn("reason=" + reason, output)
-            self.assertIn("forwarded_https=True", output)
-            for sensitive in ("test-secret", "wrong-secret", nonce, cookie, "other-nonce", "invalid-cookie"):
-                self.assertNotIn(sensitive, output)
+    def test_cancelled_authorization_does_not_redirect_home(self):
+        state, cookie = self.begin()
+        with patch.object(provider, "exchange_code") as exchange:
+            response = self.fetch("/auth/schwab/callback?" + urlencode({
+                "state": state, "error": "access_denied"}),
+                headers={"Host": "soxl.ai", "Cookie": cookie}, follow_redirects=False)
+        self.assertEqual(response.code, 400)
+        exchange.assert_not_called()
+
+    def test_exchange_failure_does_not_redirect_home(self):
+        state, cookie = self.begin()
+        with patch.object(provider, "exchange_code", side_effect=provider.SchwabError("Schwab rejected authorization.")):
+            response = self.fetch("/auth/schwab/callback?" + urlencode({
+                "state": state, "code": "private-code"}),
+                headers={"Host": "soxl.ai", "Cookie": cookie}, follow_redirects=False)
+        self.assertEqual(response.code, 502)
+        self.assertNotIn("Location", response.headers)
 
 
 if __name__ == "__main__":

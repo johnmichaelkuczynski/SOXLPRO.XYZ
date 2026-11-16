@@ -1,12 +1,10 @@
-"""Owner-only OAuth setup; this never gates public access to the SOXL app."""
+"""Direct Schwab OAuth connection; this never gates public app access."""
 import asyncio
 import hashlib
 import hmac
 import html
 import logging
 import secrets
-import time
-from collections import OrderedDict
 from urllib.parse import urlencode, urlsplit
 
 import tornado.web
@@ -14,7 +12,6 @@ import tornado.web
 import schwab_market_data as schwab
 
 COOKIE = "soxl_schwab_setup"
-ATTEMPTS = OrderedDict()
 
 
 def _cookie_secret():
@@ -90,63 +87,7 @@ class Connect(Base):
         # Set up and complete OAuth on the same host; do not issue a cookie
         # on a preview domain that can never accompany the production callback.
         if self.request.host != callback.netloc:
-            self.page("Open setup on your configured domain",
-                      "Schwab must return to the same domain that starts authorization.",
-                      '<a href="' + html.escape(f"https://{callback.netloc}/auth/schwab/connect", quote=True)
-                      + '">Open Schwab setup on the configured domain</a>')
-            return
-        nonce = secrets.token_urlsafe(32)
-        self.set_setup("form:" + nonce)
-        self.page("Connect Schwab market data",
-                  schwab.status()["message"] + " This owner-only setup does not sign visitors in or enable trading.",
-                  '<form method="post" action="/auth/schwab/connect">'
-                  '<input type="hidden" name="nonce" value="' + nonce + '">'
-                  '<label for="secret">Schwab app secret — owner verification</label>'
-                  '<input id="secret" name="secret" type="password" required autocomplete="off">'
-                  '<button>Authorize with Schwab</button></form>'
-                  '<p>Use your existing Schwab app secret to protect this shared market-data connection. '
-                  'Then sign in on Schwab’s own website. Schwab normally requires reconnection about weekly.</p>')
-
-    def post(self):
-        now = time.monotonic()
-        for key in (self.request.remote_ip, "*"):
-            history = [stamp for stamp in ATTEMPTS.get(key, []) if now - stamp < 60]
-            ATTEMPTS[key] = history
-            if len(history) >= (5 if key != "*" else 60):
-                self.setup_failure("rate_limited", "Too many setup attempts. Retry in one minute.", 429)
-                return
-            history.append(now)
-        while len(ATTEMPTS) > 1000:
-            ATTEMPTS.popitem(last=False)
-        if not schwab.configured():
-            self.setup_failure("configuration_missing",
-                               "Schwab keys are not configured on this server.", 503)
-            return
-        callback = urlsplit(schwab.redirect_uri())
-        if self.request.host != callback.netloc:
-            self.setup_failure("wrong_host", "Open setup on the registered callback domain.")
-            return
-        if not self.get_cookie(COOKIE):
-            self.setup_failure("cookie_missing",
-                               "The setup cookie did not return. Open this page directly on the callback domain "
-                               "over HTTPS with cookies enabled, then submit again.")
-            return
-        expected = self.get_setup()
-        if not expected:
-            self.setup_failure("cookie_invalid_or_expired",
-                               "The setup cookie expired or could not be verified. Reopen this page and retry. "
-                               "All server instances must use the same Schwab app secret.")
-            return
-        nonce = self.get_body_argument("nonce", "", strip=False)
-        if not nonce or not hmac.compare_digest(expected.encode(), ("form:" + nonce).encode()):
-            self.setup_failure("nonce_mismatch", "The form no longer matches this browser's setup cookie. "
-                               "Reopen this page and submit the newest form.")
-            return
-        secret = self.get_body_argument("secret", "", strip=False).strip()
-        if not hmac.compare_digest(secret.encode(), schwab.client_secret().encode()):
-            self.setup_failure("secret_mismatch",
-                               "The entered app secret does not match this server's SCHWAB_CLIENT_SECRET. "
-                               "Check the running container's configuration and retry.")
+            self.redirect(f"https://{callback.netloc}/auth/schwab/connect")
             return
         state = secrets.token_urlsafe(32)
         self.set_setup("oauth:" + state)
@@ -161,9 +102,8 @@ class Callback(Base):
         expected = self.get_setup()
         self.clear_setup()
         if not expected or not state or not hmac.compare_digest(expected.encode(), ("oauth:" + state).encode()):
-            self.set_status(403)
-            self.page("Authorization could not be verified",
-                      "Start again at /auth/schwab/connect in this browser. No connection was changed.")
+            self.setup_failure("oauth_state_invalid",
+                               "Start again at /auth/schwab/connect in this browser. No connection was changed.")
             return
         code = self.get_query_argument("code", "")
         if self.get_query_argument("error", "") or not code:
@@ -181,9 +121,11 @@ class Callback(Base):
             self.page("Schwab authorization could not be saved",
                       "Configure a private writable SCHWAB_TOKEN_FILE location, then reconnect.")
             return
-        self.page("Schwab authorization saved",
-                  "The app can now request Schwab market data. Background prices update on their normal schedule. "
-                  "No trades or account changes were made.", '<a href="/">Return to SOXL</a>')
+        # Ensure the homepage's independently refreshed price uses the newly
+        # authorized connection rather than a previously cached account quote.
+        from live_market_quote import fetch_live_quote
+        fetch_live_quote.clear()
+        self.redirect("/")
 
 
 class Status(Base):

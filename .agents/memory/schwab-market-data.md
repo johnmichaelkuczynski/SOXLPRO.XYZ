@@ -30,13 +30,13 @@ SOXL's current price.
 **How to apply:** Preserve historical analysis and benchmark functionality, but
 never reuse an old saved quote to conceal a failed current Schwab request.
 
-Keep owner-verification failures distinguishable without exposing credentials,
-and preserve secure browser cookies across HTTPS-terminating Coolify proxies.
+Do not add a secret-entry form before Schwab OAuth. Connect must go directly to
+Schwab login; after code exchange and token storage the callback returns home.
+Keep client secrets server-side, and retain secure OAuth-state cookie validation.
 
-**Why:** The owner reported that the correct Schwab secret was rejected in
-Coolify; a single generic error could not distinguish secret mismatch from a
-missing, expired, or unverifiable setup cookie.
+**Why:** The user explicitly removed the local secret-entry check after it
+blocked authorization in Coolify.
 
-**How to apply:** Never claim the production cause is proven from local tests
-alone. Use safe reason codes to establish the actual failing check after deploy,
-and do not weaken cookie or nonce validation to make authorization succeed.
+**How to apply:** Do not reintroduce owner-verification passwords or extra submit
+steps. State verification is still required; removing the secret form is not
+permission to accept unsolicited OAuth callbacks.

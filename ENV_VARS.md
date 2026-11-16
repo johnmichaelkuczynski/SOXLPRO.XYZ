@@ -28,26 +28,31 @@ feature is unavailable until its variables are supplied.
 | `EODHD_API_KEY` | Optional | EODHD historical market data. |
 | `POLYGON_API_KEY` | Optional | Polygon options-chain and options-history data. |
 | `SCHWAB_CLIENT_ID` | Required for SOXL quotes | Your Schwab developer app's client ID. SOXL current quotes use Schwab exclusively after owner authorization. Also enables Schwab benchmark quotes and SOXL options chains. |
-| `SCHWAB_CLIENT_SECRET` | With Schwab | Your Schwab developer app secret; also protects the owner-only connection form. Never exposed in page content or logs. |
+| `SCHWAB_CLIENT_SECRET` | With Schwab | Server-side Schwab client secret for token exchange and refresh, and OAuth-state cookie signing. Never entered in a browser form or exposed in page content or logs. |
 | `SCHWAB_REDIRECT_URI` | With Schwab | Must exactly match the developer portal callback; defaults to `https://soxl.ai/auth/schwab/callback`. Start authorization at `/auth/schwab/connect` on that same domain. |
 | `SCHWAB_TOKEN_FILE` | Recommended with Schwab | Private writable token file shared by this app's gateway and workers. Defaults to `/tmp/soxl-schwab/tokens.json` (ephemeral). On Coolify use `/data/schwab-tokens/tokens.json` and mount a persistent `/data` volume. Never commit or serve this file. |
 
 Schwab setup uses your own keys, not a Replit connector. Deploy this code and set
 the keys on the server serving `soxl.ai`, then open
-`https://soxl.ai/auth/schwab/connect`. Enter your existing Schwab app secret in
-that owner-verification form and complete authorization on Schwab's website.
-The setup form reads the credentials at request time and trims leading/trailing
-whitespace on both the entered and configured values. After changing Coolify
-environment settings, recreate/redeploy the container so it receives the new
-environment. Open a fresh setup page after a deployment or key change.
+`https://soxl.ai/auth/schwab/connect`. This immediately redirects to Schwab's
+OAuth login and consent page; there is no local form or secret-entry step.
+The callback verifies OAuth state, exchanges the code, privately stores tokens,
+and redirects to `/`, where the price display requests the Schwab SOXL quote.
+Other hosts redirect to the configured callback host before starting OAuth so
+the secure state cookie returns to the same host.
+Credentials are read at request time with surrounding whitespace trimmed.
+After changing Coolify environment settings, recreate/redeploy the container so
+it receives the new environment.
 
-Behind Coolify's HTTPS proxy, keep the public host `soxl.ai` intact. Setup uses a
-relative POST and a host-only, Secure, HttpOnly, SameSite=Lax cookie scoped to
+Behind Coolify's HTTPS proxy, keep the public host `soxl.ai` intact. OAuth uses a
+host-only, Secure, HttpOnly, SameSite=Lax state cookie scoped to
 `/auth/schwab`; the cookie remains Secure even when internal proxy traffic is
-HTTP. All replicas must use the same Schwab secret. Failed setup attempts log
-only fixed reason codes (`configuration_missing`, `wrong_host`, `cookie_missing`,
-`cookie_invalid_or_expired`, `nonce_mismatch`, `secret_mismatch`, `rate_limited`)
-and cookie/protocol booleans, never the secret, POST body, nonce, or cookie value.
+HTTP. All replicas must use the same Schwab secret. Invalid callbacks log the
+fixed reason `oauth_state_invalid` and cookie/protocol booleans, never secrets,
+authorization codes, state values, or cookies.
+Anyone who can reach the connect route can initiate Schwab consent; a completed
+authorization replaces this server's shared market-data connection. There is no
+local owner-password check and no public app login wall.
 The public app has no login requirement. `/api/schwab/status` reports only
 sanitized connection state, never tokens or account data. Access tokens refresh
 automatically; Schwab ordinarily requires renewed owner authorization after
