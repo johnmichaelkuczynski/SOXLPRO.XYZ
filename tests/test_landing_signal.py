@@ -78,7 +78,9 @@ class LandingSignalTests(unittest.TestCase):
             0: "STRONG BUY",
             14.99: "STRONG BUY",
             15: "STRONG BUY",
-            15.01: "BUY",
+            15.01: "STRONG BUY",
+            22.5: "STRONG BUY",
+            22.51: "BUY",
             54.99: "BUY",
             55: "BUY",
             55.01: "DO NOTHING",
@@ -94,7 +96,7 @@ class LandingSignalTests(unittest.TestCase):
                 self.assertEqual(signal_from_percentile(percentile), signal)
 
     def test_config_exports_new_and_old_thresholds(self):
-        self.assertEqual(DEFAULT_THRESHOLDS, (15.0, 55.0, 65.0, 85.0))
+        self.assertEqual(DEFAULT_THRESHOLDS, (22.5, 55.0, 65.0, 85.0))
         self.assertEqual(DEFAULT_THRESHOLDS, tuple(RATING_THRESHOLDS.values()))
         self.assertEqual(OLD_THRESHOLDS, (15.0, 35.0, 65.0, 85.0))
 
@@ -102,10 +104,10 @@ class LandingSignalTests(unittest.TestCase):
         bands = rating_bands()
         buy = next(band for band in bands if band["label"] == "BUY")
         possible_buy = next(band for band in bands if band["label"] == "POSSIBLE BUY")
-        self.assertEqual(buy["width"], 15.0)
-        self.assertEqual(possible_buy["width"], 40.0)
-        self.assertEqual(signal_from_percentile(15), "STRONG BUY")
-        self.assertEqual(signal_from_percentile(15.01), "BUY")
+        self.assertEqual(buy["width"], 15.0 * 1.5)
+        self.assertEqual(possible_buy["width"], 32.5)
+        self.assertEqual(signal_from_percentile(22.5), "STRONG BUY")
+        self.assertEqual(signal_from_percentile(22.51), "BUY")
         self.assertEqual(signal_from_percentile(55), "BUY")
         self.assertEqual(signal_from_percentile(55.01), "DO NOTHING")
 
@@ -132,16 +134,16 @@ class LandingSignalTests(unittest.TestCase):
 
     def test_bar_and_prose_are_generated_from_config(self):
         bands = rating_bands()
-        self.assertEqual([band["width"] for band in bands], [15, 40, 10, 20, 15])
+        self.assertEqual([band["width"] for band in bands], [22.5, 32.5, 10, 20, 15])
         self.assertEqual(sum(band["width"] for band in bands), 100)
         card = _signal_card(5, "STRONG BUY", "2026-10-20")
         self.assertIn("Long-term signal (6–12 months)", card)
-        self.assertIn("grid-template-columns:15% 40% 10% 20% 15%", card)
+        self.assertIn("grid-template-columns:22.5% 32.5% 10% 20% 15%", card)
         for band in bands:
             self.assertIn(f'<span>{band["label"]}</span>', card)
         prose = rating_threshold_description()
-        self.assertIn("BUY: 0% through 15% (inclusive)", prose)
-        self.assertIn("POSSIBLE BUY: above 15% through 55% (inclusive)", prose)
+        self.assertIn("BUY: 0% through 22.5% (inclusive)", prose)
+        self.assertIn("POSSIBLE BUY: above 22.5% through 55% (inclusive)", prose)
         self.assertIn("DO NOTHING: above 55% to below 65%", prose)
         self.assertIn("POSSIBLE SELL: 65% to below 85%", prose)
         self.assertIn("SELL: 85% through 100% (inclusive)", prose)

@@ -209,7 +209,11 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
     else:
         readings = pd.DataFrame(saved["readings"])
         closes = price_data["Close"].loc[:saved["close_date"]]
-        result = saved["composite"]
+        # Saved percentiles remain valid when the displayed rating bands change.
+        result = {
+            **saved["composite"],
+            "signal": signal_from_percentile(saved["composite"]["percentile"]),
+        }
     if closes.empty or not np.isfinite(result["percentile"]):
         st.warning("The daily SOXL signal is unavailable until price history loads.")
         return st.container()
