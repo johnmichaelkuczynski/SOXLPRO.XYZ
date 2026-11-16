@@ -176,7 +176,9 @@ async def run(port):
     from stripe_webhook import StripeWebhook
     from full_diagnostics import DiagnosticsRun, DiagnosticsStatus
     from schwab_auth import Connect, Callback, Status
+    from stock_chart_api import StockHistory
     application = tornado.web.Application([
+        (r"/api/chart/stock", StockHistory),
         (r"/auth/schwab/connect", Connect),
         (r"/auth/schwab/callback", Callback),
         (r"/api/schwab/status", Status),

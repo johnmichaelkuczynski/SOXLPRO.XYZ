@@ -9,6 +9,16 @@ Register drawing and relayout handlers through Plotly's event API after the plot
 
 **How to apply:** When features depend on user-drawn Plotly shapes, bind the relayout handler after the initial plot promise resolves and verify both the visible shape and the synchronized application state.
 
+Treat drawing-model restoration and visible drawing removal as separate Undo
+checks. Preserve the viewport without preserving obsolete native drawing edits.
+
+**Why:** Undo restored an empty model while Plotly retained a native line shape
+under a stable viewport revision. A model-only assertion falsely passed.
+
+**How to apply:** Check native/SVG shapes and application-owned channel traces
+as well as the restored model. Keep editable-shape revision separate from
+viewport revision when consuming temporary native shapes into trace data.
+
 Use one projection-tooltip owner, not simultaneous Plotly and custom readouts.
 
 **Why:** The user could not read the lower trendline's future projection because
@@ -39,3 +49,14 @@ leave the analysis mode they previously enabled.
 
 **How to apply:** Distinguish an enabled mode from an active gesture when deciding
 whether to suppress readouts, and check that readouts return on mouse release.
+
+Do not rely solely on native DOM double-click events for chart shortcuts.
+Recognize real pointer taps without counting pan drags, include sibling chart
+overlays, and disable Plotly's conflicting double-click autoscale behavior.
+
+**Why:** The user reported that the horizontal guide was unavailable despite a
+native double-click listener passing a synthetic DOM-event check.
+
+**How to apply:** Regression checks must exercise pointer down/up sequences
+without dispatching a native double-click, and ensure one gesture creates only
+one undo entry when both event paths fire.

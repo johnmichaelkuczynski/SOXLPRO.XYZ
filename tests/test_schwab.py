@@ -1,12 +1,13 @@
 """No real credentials, account consent, provider calls, or token files."""
+from contextlib import contextmanager
+from copy import deepcopy
 from datetime import date
 from http.cookies import SimpleCookie
 import json
 import os
 from pathlib import Path
 import re
-import stat
-import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -19,25 +20,51 @@ import schwab_market_data as provider
 import schwab_auth as auth
 
 
+class MemoryStore:
+    """Test double only; production always uses PostgreSQL."""
+    def __init__(self):
+        self.rows = {}
+        self.lock = threading.RLock()
+
+    def read(self, app):
+        with self.lock:
+            return deepcopy(self.rows.get(app, {}))
+
+    @contextmanager
+    def locked(self, app):
+        with self.lock:
+            store = self
+            class Record:
+                def read(self):
+                    return store.read(app)
+
+                def write(self, value):
+                    store.rows[app] = deepcopy(value)
+            yield Record()
+
+
 class ProviderTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {
             "SCHWAB_CLIENT_ID": "test-client", "SCHWAB_CLIENT_SECRET": "test-secret",
-            "SCHWAB_TOKEN_FILE": self.temp.name + "/tokens.json"}, clear=True)
+            "DATABASE_URL": "postgresql://test-only"}, clear=True)
         self.env.start()
+        self.store = MemoryStore()
+        self.addCleanup(patch.stopall)
+        patch.object(provider.token_store, "locked", self.store.locked).start()
+        patch.object(provider.token_store, "read", self.store.read).start()
 
     def tearDown(self):
         self.env.stop()
-        self.temp.cleanup()
 
     def save(self, **overrides):
         value = dict(app=provider._fingerprint(), access_token="test-access",
                      refresh_token="test-refresh", expires_at=time.time() + 1800,
+                     refresh_expires_at=time.time() + 6 * 86400,
                      authorized_at="2026-11-15T00:00:00+00:00")
         value.update(overrides)
-        with provider._locked():
-            provider._write(value)
+        with provider._locked() as record:
+            record.write(value)
 
     def test_keys_without_owner_authorization_make_no_network_request(self):
         with patch.object(provider.requests, "post") as post:
@@ -65,9 +92,8 @@ class ProviderTests(unittest.TestCase):
             os.environ["SCHWAB_CLIENT_SECRET"] = " \r\n"
             self.assertFalse(provider.configured())
 
-    def test_valid_token_reused_and_file_private(self):
+    def test_valid_token_reused_and_status_private(self):
         self.save()
-        self.assertEqual(stat.S_IMODE(provider.token_path().stat().st_mode), 0o600)
         with patch.object(provider.requests, "post") as post:
             self.assertEqual(provider.access_token(), "test-access")
             post.assert_not_called()
@@ -90,10 +116,70 @@ class ProviderTests(unittest.TestCase):
     def test_rejected_refresh_requires_reauthorization(self):
         self.save(expires_at=0)
         response = Mock(status_code=400)
+        response.json.return_value = {"error": "invalid_grant"}
         with patch.object(provider.requests, "post", return_value=response):
             with self.assertRaises(provider.SchwabError):
                 provider.access_token()
         self.assertEqual(provider.status()["state"], "authorization_required")
+
+    def test_five_minute_refresh_threshold_before_market_request(self):
+        self.save(expires_at=time.time() + 240)
+        response = Mock(status_code=200)
+        response.json.return_value = {}
+        with patch.object(provider, "_token_request", return_value={
+                "access_token": "fresh-access", "expires_at": time.time() + 1800}) as refresh, \
+                patch.object(provider.requests, "get", return_value=response) as get:
+            provider._get("/quotes", {"symbols": "SOXL"})
+        refresh.assert_called_once()
+        self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer fresh-access")
+        self.assertEqual(provider._read()["refresh_token"], "test-refresh")
+
+    def test_refresh_does_not_extend_seven_day_expiry(self):
+        deadline = time.time() + 600
+        self.save(expires_at=0, refresh_expires_at=deadline)
+        with patch.object(provider, "_token_request", return_value={
+                "access_token": "fresh-access", "refresh_token": "rotated",
+                "expires_at": time.time() + 1800, "refresh_token_expires_in": 604800}):
+            provider.access_token()
+        self.assertEqual(provider._read()["refresh_expires_at"], deadline)
+
+    def test_expired_refresh_token_requires_consent_without_a_network_call(self):
+        self.save(refresh_expires_at=time.time() - 1)
+        with patch.object(provider, "_token_request") as refresh:
+            with self.assertRaisesRegex(provider.SchwabError, "/auth/schwab/connect"):
+                provider.access_token()
+        refresh.assert_not_called()
+        self.assertEqual(provider.status()["state"], "authorization_required")
+
+    def test_temporary_refresh_failure_retains_consent_and_saves_cooldown(self):
+        self.save(expires_at=0)
+        with patch.object(provider, "_token_request",
+                          side_effect=provider.SchwabError("Temporarily unavailable")) as refresh:
+            with self.assertRaises(provider.SchwabError):
+                provider.access_token()
+            with self.assertRaises(provider.SchwabError):
+                provider.access_token()
+        refresh.assert_called_once()
+        self.assertFalse(provider._read().get("reauthorize"))
+        self.assertEqual(provider._read()["refresh_token"], "test-refresh")
+        self.assertEqual(provider.status()["state"], "authorized")
+
+    def test_invalid_app_credentials_do_not_revoke_refresh_token(self):
+        self.save(expires_at=0)
+        response = Mock(status_code=401)
+        response.json.return_value = {"error": "invalid_client"}
+        with patch.object(provider.requests, "post", return_value=response):
+            with self.assertRaisesRegex(provider.SchwabError, "app credentials"):
+                provider.access_token()
+        self.assertFalse(provider._read().get("reauthorize"))
+        self.assertEqual(provider.status()["state"], "authorized")
+
+    def test_storage_outage_is_not_reported_as_missing_authorization(self):
+        with patch.object(provider.token_store, "read",
+                          side_effect=provider.token_store.TokenStorageError("Database unavailable")):
+            state = provider.status()
+        self.assertEqual(state["state"], "storage_unavailable")
+        self.assertNotIn("authorize", state["message"])
 
     def test_quote_timestamp_is_trade_time_not_quote_time(self):
         now = int(time.time() * 1000)
@@ -169,10 +255,18 @@ class OAuthTests(AsyncHTTPTestCase):
             "SCHWAB_CLIENT_ID": "test-client", "SCHWAB_CLIENT_SECRET": "test-secret",
             "SCHWAB_REDIRECT_URI": "https://soxl.ai/auth/schwab/callback"}, clear=True)
         self.env.start()
+        self.store = MemoryStore()
+        self.store_patches = [
+            patch.object(provider.token_store, "locked", self.store.locked),
+            patch.object(provider.token_store, "read", self.store.read)]
+        for item in self.store_patches:
+            item.start()
         super().setUp()
 
     def tearDown(self):
         super().tearDown()
+        for item in self.store_patches:
+            item.stop()
         self.env.stop()
 
     def get_app(self):
@@ -258,9 +352,7 @@ class OAuthTests(AsyncHTTPTestCase):
 
     def test_callback_stores_tokens_before_redirect_home(self):
         state, cookie = self.begin()
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-                "SCHWAB_TOKEN_FILE": directory + "/tokens.json"}), \
-                patch.object(provider, "_token_request", return_value={
+        with patch.object(provider, "_token_request", return_value={
                     "access_token": "private-access", "refresh_token": "private-refresh",
                     "expires_at": time.time() + 1800}) as token_request:
             response = self.fetch("/auth/schwab/callback?" + urlencode({
@@ -271,7 +363,7 @@ class OAuthTests(AsyncHTTPTestCase):
             self.assertEqual(response.headers["Location"], "/")
             self.assertEqual(provider.status()["state"], "authorized")
             self.assertEqual(provider._read()["refresh_token"], "private-refresh")
-            self.assertEqual(stat.S_IMODE(provider.token_path().stat().st_mode), 0o600)
+            self.assertGreater(provider._read()["refresh_expires_at"], time.time() + 6 * 86400)
             token_request.assert_called_once_with({
                 "grant_type": "authorization_code", "code": "private-code",
                 "redirect_uri": "https://soxl.ai/auth/schwab/callback"})

@@ -137,10 +137,15 @@ class LandingSignalTests(unittest.TestCase):
         self.assertEqual([band["width"] for band in bands], [22.5, 32.5, 10, 20, 15])
         self.assertEqual(sum(band["width"] for band in bands), 100)
         card = _signal_card(5, "STRONG BUY", "2026-10-20")
-        self.assertIn("Long-term signal (6–12 months)", card)
-        self.assertIn("grid-template-columns:22.5% 32.5% 10% 20% 15%", card)
+        self.assertIn("6–12 MONTH OUTLOOK", card)
+        self.assertIn("a buy-side reading for a 6–12 month hold", card)
+        self.assertNotIn("Composite historical-range percentile", card)
+        self.assertNotIn("period lows", card)
+        self.assertNotIn("period highs", card)
+        self.assertNotIn("font-size:.68rem", card)
         for band in bands:
-            self.assertIn(f'<span>{band["label"]}</span>', card)
+            self.assertIn(f'title="{band["label"]}"', card)
+            self.assertIn(f'width:{band["width"]:g}%', card)
         prose = rating_threshold_description()
         self.assertIn("BUY: 0% through 22.5% (inclusive)", prose)
         self.assertIn("POSSIBLE BUY: above 22.5% through 55% (inclusive)", prose)
@@ -151,7 +156,7 @@ class LandingSignalTests(unittest.TestCase):
         with patch.dict(RATING_THRESHOLDS, buy_max=4, possible_buy_max=14):
             changed_card = _signal_card(5, "BUY", "2026-10-20")
             self.assertIn(
-                "grid-template-columns:4% 10% 51% 20% 15%", changed_card
+                "width:51%", changed_card
             )
             self.assertIn(
                 "POSSIBLE BUY: above 4% through 14% (inclusive)",

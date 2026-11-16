@@ -28,5 +28,26 @@ internally scrollable controls and a reachable drag header.
 **Why:** The user could not reach date inputs when a freely moved panel extended
 below the screen; enlarging the page must not be necessary to use it.
 
-**How to apply:** Apply viewport height limits to free positioning as well as
-docked positioning; preserve intentional below-chart parking separately.
+**How to apply:** Apply viewport height limits to free positioning. A docked
+console in its own reserved gutter may use full height without covering the
+plot; preserve intentional below-chart parking separately.
+
+Do not choose responsive docking only from the iframe's initial script-time
+width. Re-evaluate after Plotly initializes and when the host resizes.
+
+**Why:** A Streamlit iframe can start narrow and expand before its final layout,
+leaving a desktop console wrongly parked below the plot with an unused gutter.
+
+Free dragging must permit placing the console above the entire embedded chart
+section, into the surrounding main page—not just into the component's own
+benchmark/action area. The plot boundary applies only to side docking.
+
+**Why:** The user again reported the console stuck inside the graph after the
+earlier within-component movement change. An iframe clips its contents regardless
+of their stacking priority; removing a plot-top clamp alone is insufficient.
+
+**How to apply:** Prove a real drag across the iframe's upper boundary in the
+actual Streamlit host. Preserve the existing drawing model and control callbacks
+when changing the console's hosting document; pointer events must follow that
+document. Isolated diagnostic frames must never promote controls onto the user's
+main page.

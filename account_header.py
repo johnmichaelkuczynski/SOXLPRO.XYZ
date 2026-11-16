@@ -147,14 +147,20 @@ def render_account_header():
     flush_analytics()
     # Public investor access: do not require identity, query billing, or launch
     # checkout from legacy query parameters. Existing purchase records remain.
-    logo = Path(__file__).resolve().parent / "assets" / "zhi_logo.png"
+    logo = Path(__file__).resolve().parent / "assets" / "zhi_uploaded_mark.png"
     logo_markup = (
         f'<img src="data:image/png;base64,{base64.b64encode(logo.read_bytes()).decode("ascii")}" '
-        'alt="ZHI Systems" style="display:block;width:38px;height:38px;border-radius:8px;">'
+        'alt="ZHI Systems" style="display:block;width:56px;height:56px;border-radius:8px;">'
         if logo.is_file()
         else '<span aria-label="ZHI Systems" style="display:flex;width:38px;height:38px;'
              'align-items:center;justify-content:center;border-radius:8px;background:#fff;'
              'color:#111827;font-size:22px;font-weight:700;">知</span>'
+    )
+    logo_markup = (
+        '<span style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;">'
+        + logo_markup +
+        '<span style="font-size:13px;font-weight:750;letter-spacing:.05em;'
+        'color:#111827;white-space:nowrap;">ZHI SYSTEMS</span></span>'
     )
     with st.container(key="account_header"):
         title, contact, refresh = st.columns([5.75, 1.15, 0.85])

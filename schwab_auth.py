@@ -119,7 +119,7 @@ class Callback(Base):
         except OSError:
             self.set_status(503)
             self.page("Schwab authorization could not be saved",
-                      "Configure a private writable SCHWAB_TOKEN_FILE location, then reconnect.")
+                      "Check this server's DATABASE_URL and PostgreSQL access, then retry.")
             return
         # Ensure the homepage's independently refreshed price uses the newly
         # authorized connection rather than a previously cached account quote.
@@ -129,5 +129,5 @@ class Callback(Base):
 
 
 class Status(Base):
-    def get(self):
-        self.finish(schwab.status())
+    async def get(self):
+        self.finish(await asyncio.to_thread(schwab.status))

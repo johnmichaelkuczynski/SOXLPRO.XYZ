@@ -22,6 +22,18 @@ amounts for all benchmarks, analogous to the prominent SOXL price.
 the chart. Disclose delayed, stale, failed, and unavailable quotes; never label
 the latest daily historical point as a current quote.
 
+Keep benchmark prices in one non-wrapping line of compact symbol-and-price
+readouts, with no separate visible heading. On narrow screens allow horizontal
+scrolling rather than wrapping into tall cards.
+Omit provider, timestamp and feed-check commentary from benchmark readouts,
+including hover text; omit the section's explanatory footer. Keep price-feed
+provider names out of the public price displays without changing which feed
+supplies or validates the data.
+
+**Why:** The user explicitly said this repeated information takes too much
+space and hides the useful prices and chart, and subsequently insisted the
+provider names appear nowhere in that displayed information.
+
 Refresh prices independently from the full Streamlit page.
 
 **Why:** The user has repeatedly reported losing the prepared historical-chart

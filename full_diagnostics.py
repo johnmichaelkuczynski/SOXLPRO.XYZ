@@ -171,11 +171,21 @@ def _options():
             "Provider cache may be reused for up to 60 seconds.")
 
 
+def _tiingo():
+    from tiingo_market_data import fetch_quote
+    quote = fetch_quote()
+    return ("warning" if quote["stale"] else "pass",
+            f"Current price feed returned SOXL ${quote['price']:.2f}, observed {quote['observed_at']}. "
+            "This direct request does not refresh the user's chart.")
+
+
 def _schwab():
     from schwab_market_data import status, fetch_quote
     current = status()
     if current["state"] == "not_configured":
         return "not_tested", current["message"]
+    if current["state"] == "storage_unavailable":
+        return "fail", current["message"]
     if current["state"] != "authorized":
         return "warning", current["message"] + " Open /auth/schwab/connect on the callback domain."
     quote = fetch_quote()
@@ -227,6 +237,7 @@ def _work(job, base_url):
             ("Public page", "HTTP", lambda: _http(base_url + "/")),
             ("Gateway readiness", "HTTP", lambda: _http(base_url + "/_gateway/ready")),
             ("Interactive server", "HTTP", lambda: _http(base_url + "/_stcore/health")),
+            ("Current stock-price feed", "Live services", _tiingo),
             ("Schwab authorization and quote", "Live services", _schwab),
             ("Options chain and quotes", "Live services", _options),
             ("OpenAI answer generation", "Live services", lambda: _ai("OpenAI")),

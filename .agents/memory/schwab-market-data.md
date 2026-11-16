@@ -40,3 +40,16 @@ blocked authorization in Coolify.
 **How to apply:** Do not reintroduce owner-verification passwords or extra submit
 steps. State verification is still required; removing the secret form is not
 permission to accept unsolicited OAuth callbacks.
+
+Persist Schwab authorization only in the PostgreSQL database selected by
+`DATABASE_URL`, shared by the live site and all workers. No local token files or
+in-memory token authority. Refresh access tokens within five minutes of expiry;
+retain the seven-day refresh-token deadline and distinguish temporary outages
+from rejected/expired refresh credentials.
+
+**Why:** The user reported losing authorization after Coolify redeploys and
+explicitly required shared database persistence.
+
+**How to apply:** All processes must target the same database and serialize
+refresh-token rotation there. A healthy provider connection on one database
+does not authorize a preview pointed at another database.

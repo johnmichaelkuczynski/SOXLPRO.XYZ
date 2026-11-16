@@ -5,8 +5,14 @@
 <title>Interactive SOXL historical price chart</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="area_measure.js"></script>
+<script src="price_guide.js"></script>
+<script src="page_actions.js"></script>
+<script src="channel_resize.js"></script>
 <script src="benchmark_visibility.js"></script>
-<style>
+<script src="custom_stocks.js"></script>
+<script src="price_axis.js"></script>
+<script src="page_console.js"></script>
+<style id="chart-controls-styles">
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; position: relative; }
   #toolbar {
@@ -97,7 +103,7 @@
     border-radius: 6px; color: #0f172a; background: #fff;
   }
   .rail-label { font-size: 12px; font-weight: 800; color: #334155; }
-  #benchmark-controls {
+  #benchmark-controls, #stock-entry-controls {
     padding: 7px; border: 1px solid #cbd5e1; border-radius: 6px;
     background: #fff;
   }
@@ -171,7 +177,8 @@
      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
    }
-  #chart-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; position: relative; }
+  #chart-scroll { width: calc(100% - 308px); overflow-x: auto; overflow-y: hidden; position: relative; }
+  @media (max-width:760px) { #chart-scroll {width:100%;} }
   #chart-container { position: relative; width: 100%; min-width: 50%; }
   #chart { width: 100%; }
   #select-overlay {
@@ -269,7 +276,19 @@
     <button class="rail-move-btn" onclick="parkControlRail(event)" title="Move controls below chart">&#8595;</button>
     <button class="rail-move-btn" onclick="collapseControlRail(event)" title="Collapse controls">&#8722;</button>
   </div>
-  <strong style="text-align:center;color:#0f172a;">CHART CONTROLS</strong>
+  <div id="stock-entry-controls" aria-label="Add a stock to the chart">
+    <form id="custom-stock-form">
+      <label for="custom-stock-symbol" style="display:block;font-size:16px;font-weight:800;color:#0f172a;">Add a stock ticker</label>
+      <div style="display:flex;gap:5px;margin-top:5px;">
+        <input id="custom-stock-symbol" type="text" maxlength="30" autocomplete="off" autocapitalize="characters"
+          placeholder="Symbol, e.g. AAPL" aria-label="Stock symbol"
+          style="min-width:0;width:100%;font:inherit;padding:6px;border:1px solid #cbd5e1;border-radius:4px;">
+        <button id="custom-stock-add" type="submit">Add</button>
+      </div>
+      <div id="custom-stock-status" role="status" aria-live="polite" style="font-size:13px;line-height:1.4;margin-top:5px;"></div>
+    </form>
+    <div id="custom-stock-list"></div>
+  </div>
   <div id="benchmark-controls" aria-label="Choose benchmark chart lines">
     <span class="rail-label">SHOW BENCHMARK LINES</span>
     <div id="benchmark-toggle-grid"></div>
@@ -277,6 +296,7 @@
   <button class="tbtn" id="undoBtn" onclick="undoLastAction()" aria-label="Undo last line change">&#8630; Undo Last Line Change</button>
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
   <span class="rail-label" style="text-align:center;">AUTOMATIC CHANNEL LINES</span>
+  <span style="font-size:12px;color:#475569;">Drag a channel's round end handles to resize it.</span>
   <button class="tbtn" id="medianLineBtn" onclick="addAutomaticChannelLine('median')">Median Line</button>
   <button class="tbtn" id="upperChannelBtn" onclick="addAutomaticChannelLine('upper')">Upper Channel Line</button>
   <button class="tbtn" id="lowerChannelBtn" onclick="addAutomaticChannelLine('lower')">Lower Channel Line</button>
@@ -289,13 +309,16 @@
     <option value="">Nearest line to pointer</option>
   </select>
   <button class="tbtn" id="selectBtn" aria-pressed="false" onclick="toggleSelect()">&#9634; Analyze Period</button>
+  <button class="tbtn active" id="priceGuideToggle" aria-pressed="true">Current Price Line: On</button>
+  <button class="tbtn" id="pickPricePoint" aria-pressed="false" title="Click this button, then any point inside the plot to read its price on the Y-axis.">Pick Price Point</button>
+  <button class="tbtn" id="removePricePoint" disabled>Remove Picked Price Line</button>
+  <span id="pickedPriceStatus" role="status" aria-live="polite" style="font-size:12px;color:#92400e;"></span>
   <button class="tbtn" id="axisAreaToggle" aria-pressed="false" title="Connect a hovered price point to both visible axes and measure the rectangle">Axis Lines &amp; Area</button>
   <button class="tbtn" id="axisAreaFollow" hidden>Follow cursor</button>
   <div id="axisAreaOutput" hidden style="white-space:pre-line;font-size:12px;line-height:1.5;padding:8px;background:#fffbeb;color:#78350f;border-radius:6px;"></div>
-  <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT SOXL PRICES</button>
+  <button class="tbtn" id="quick-fit" onclick="fitSoxlPrices(event)">FIT PRICES</button>
   <button class="tbtn" onclick="resetView()">&#8634; Reset View</button>
   <button class="tbtn" onclick="openRotationView()">Rotate Graph / Fit Screen</button>
-  <button class="tbtn" id="tiltBtn" aria-pressed="false" onclick="setMode(currentMode === 'tilt' ? 'pan' : 'tilt')" title="Drag upward to steepen the chart, downward to flatten it. Only the display scale changes; prices and projections stay unchanged.">Adjust Inclination</button>
   <span class="scale-group" role="group" aria-label="Price scale">
     <button class="tbtn active" id="logScaleBtn" aria-pressed="true" onclick="setScale('log')">Log Scale</button>
     <button class="tbtn" id="linearScaleBtn" aria-pressed="false" onclick="setScale('linear')">Linear Scale</button>
@@ -303,7 +326,9 @@
   <label class="height-control" for="futureHorizon">
     Future horizon
     <select id="futureHorizon" onchange="setFutureHorizon(this.value)">
-      <option value="5" selected>5 years</option>
+      <option value="0" selected>Historical only</option>
+      <option value="1">1 year</option>
+      <option value="5">5 years</option>
       <option value="10">10 years</option>
       <option value="20">20 years</option>
       <option value="30">30 years</option>
@@ -312,24 +337,14 @@
   </label>
   <label class="height-control size-control" for="heightSlider">
     Vertical size
-    <input id="heightSlider" type="range" min="300" max="1400" step="25" value="900" oninput="setChartHeight(this.value)" onchange="trackEvent('chart_height_changed', {pixels: Number(this.value)})">
-    <span id="heightValue">900 px</span>
+    <input id="heightSlider" type="range" min="300" max="2400" step="25" value="650" oninput="setChartHeight(this.value)" onchange="trackEvent('chart_height_changed', {pixels: Number(this.value)})">
+    <span id="heightValue">650 px</span>
   </label>
   <label class="height-control size-control" for="widthSlider">
     Horizontal size
     <input id="widthSlider" type="range" min="50" max="300" step="10" value="100" oninput="setChartWidth(this.value)" onchange="trackEvent('chart_width_changed', {percent: Number(this.value)})">
     <span id="widthValue">100%</span>
   </label>
-  <div id="keyboard-selection" aria-labelledby="keyboard-selection-heading">
-    <span id="keyboard-selection-heading">Or enter analysis dates</span>
-    <label for="start-date">Start date
-      <input id="start-date" type="date">
-    </label>
-    <label for="end-date">End date
-      <input id="end-date" type="date">
-    </label>
-    <button class="range-apply" onclick="applyKeyboardSelection()">Apply date range</button>
-  </div>
   <span id="status"><strong>DRAG THE CHART TO MOVE IT</strong> &#8226; Press Draw Line when you are ready to draw</span>
   <span id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
   <div id="analyze-bar">
@@ -350,22 +365,30 @@
   <div class="rail-resize-handle rail-resize-sw" data-direction="sw"></div>
 </div>
 <section id="benchmark-readouts" aria-label="Latest benchmark prices" aria-live="polite" hidden
-  style="padding:12px;background:#f8fafc;border:1px solid #dbe3ed;border-radius:8px;margin:8px 0">
-  <strong>Latest benchmark prices</strong>
-  <div id="benchmark-price-cards" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px"></div>
-  <small>Refreshes every minute. Quotes may be delayed; observation times are shown. Chart overlays are scaled for comparison; these are actual, unscaled values.</small>
+  style="padding:8px 10px;background:#f8fafc;border:1px solid #dbe3ed;border-radius:8px;margin:8px 0">
+  <div id="benchmark-price-cards" style="display:flex;flex-wrap:nowrap;align-items:center;gap:12px;overflow-x:auto;white-space:nowrap"></div>
 </section>
-<div id="inclination-bar" style="position:relative;z-index:400;background:#edf3fa;border:1px solid #cad7e5;border-radius:7px;padding:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-  <label for="inclination-slider"><strong>Chart incline</strong> — Flatter</label>
-  <input id="inclination-slider" aria-label="Chart incline: flatter to steeper"
-    type="range" min="20" max="180" value="100" step="5"
-    style="flex:1;min-width:150px;max-width:500px;cursor:ew-resize"
-    onpointerdown="captureInclinationBase()" onkeydown="captureInclinationBase()"
-    oninput="applyInclinationSlider(this.value)">
-  <span>Steeper</span>
-  <output id="inclination-value" for="inclination-slider">100%</output>
+<div id="chart-action-row" style="min-height:52px;display:flex;align-items:center;justify-content:flex-end;padding:6px 0;" aria-label="Chart actions"></div>
+<p style="font-size:15px;color:#334155;margin:4px 0 8px;">Double-click any point on the graph for a horizontal line and its exact price on the Y-axis.</p>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;">
+  <label for="channel-price-date">Channel prices on</label>
+  <input id="channel-price-date" type="date" style="font:inherit;padding:6px;border:1px solid #cbd5e1;border-radius:5px;">
+  <button class="tbtn" onclick="showChannelPricesForDate()">Show low / median / high</button>
+  <div id="channel-date-prices" role="status" aria-live="polite" style="width:100%;font-size:16px;"></div>
+</div>
+<div id="chart-view-bar" style="position:relative;z-index:30;background:#edf3fa;border:1px solid #cad7e5;border-radius:7px;padding:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <div id="keyboard-selection" aria-labelledby="keyboard-selection-heading" style="display:flex">
+    <span id="keyboard-selection-heading">Date window</span>
+    <label for="start-date">From <input id="start-date" type="date"></label>
+    <label for="end-date">To <input id="end-date" type="date"></label>
+    <button class="range-apply" onclick="applyKeyboardSelection()">Apply dates</button>
+    <button class="range-apply" onclick="showAllHistory()">All history</button>
+  </div>
   <button class="tbtn" onclick="resetView()">Reset View</button>
-  <small style="width:100%">Changes the live chart’s visual slope only. Prices, dates, trendlines and projection popups remain unchanged.</small>
+  <button class="tbtn" onclick="fitSoxlPrices(event)">Fit prices</button>
+  <button class="tbtn" id="below-chart" onclick="jumpBelowChart(event)"
+    style="font-weight:700;color:#fff;background:#175cd3;border-color:#175cd3">Below chart &#8595;</button>
+  <span id="view-date-message" role="status" aria-live="polite"></span>
 </div>
 <div id="chart-render-error" role="alert" hidden
   style="padding:12px;background:#fff1f2;border:1px solid #e11d48;color:#881337;border-radius:6px">
@@ -397,6 +420,13 @@
   </div>
 </div>
 <div id="line-list"></div>
+<div id="chart-size-grip" role="slider" tabindex="0" aria-label="Resize chart height"
+  aria-valuemin="300" aria-valuemax="2400" aria-valuenow="650"
+  style="width:100%;height:30px;cursor:ns-resize;touch-action:none;text-align:center;color:#475569;background:#eef2f6;border:1px solid #cbd5e1;border-radius:0 0 6px 6px;font-size:14px;">↕ Drag down to make the chart taller</div>
+<label style="display:flex;gap:12px;align-items:center;margin:8px 0;">Chart width
+  <input aria-label="Chart width outside console" type="range" min="50" max="300" step="10" value="100"
+    style="max-width:420px;flex:1;" oninput="setChartWidth(this.value)">
+</label>
 <section id="chart-market-summary" aria-label="SOXL regular and extended-hours prices">
   <strong>SOXL · Regular session, after-hours &amp; pre-market</strong>
   <div class="market-summary-grid">
@@ -405,8 +435,6 @@
     <div>Pre-market<strong id="market-pre-price">—</strong><small id="market-pre-time">Waiting for price data</small></div>
   </div>
   <p id="market-summary-state" role="status"></p>
-  <small>These prices are plotted in the SOXL chart above. Yahoo Finance five-minute data; may be delayed.
-    Updates every minute while open. No 8 p.m.–4 a.m. ET coverage. Gaps indicate no supplied prices, not zero movement.</small>
 </section>
 
 <script>
@@ -431,10 +459,12 @@ var chartRenderTask = null;
 var pendingChartRender = null;
 var knownShapeCount = 0;
 var scaleMode = 'log';
-var currentChartHeight = 900;
+var currentChartHeight = 650;
 var currentChartWidth = 100;
 var plotlyEventsBound = false;
-var futureHorizonYears = 5;
+var futureHorizonYears = 0;
+var chartWindow = null;
+var lastFittedWindow = '';
 var undoStack = [];
 var hoveredLineIndex = -1;
 var hoveredLineDistance = Infinity;
@@ -443,12 +473,15 @@ var hitProbabilityModel = null;
 var projectionAnalyticsSeen = new Set();
 var toolbarEl = document.getElementById('toolbar');
 var railContentEl = document.getElementById('rail-content');
-var railDock = 'right';
+var railDock = window.innerWidth < 760 ? 'bottom' : 'right';
+var railAutoBelow = window.innerWidth < 760;
+var railResponsiveDock = true;
 var railFreeLeft = null;
 var railFreeTop = null;
 var railTopOffset = 0;
 var railCollapsed = false;
 var railManuallySized = false;
+var pageConsole = null;
 
 function visibleRailBounds() {
   var bounds = {top: 12, bottom: window.innerHeight - 12};
@@ -457,6 +490,8 @@ function visibleRailBounds() {
       var frameRect = window.frameElement.getBoundingClientRect();
       var parentHeader = window.parent.document.querySelector('[data-testid="stHeader"]');
       var parentTop = parentHeader ? Math.max(0, parentHeader.getBoundingClientRect().bottom) : 0;
+      var pageActions = window.parent.document.getElementById('soxl-page-actions');
+      if (pageActions) parentTop = Math.max(parentTop, pageActions.getBoundingClientRect().bottom);
       bounds.top = Math.max(12, parentTop - frameRect.top + 12);
       bounds.bottom = Math.min(document.documentElement.clientHeight - 12, window.parent.innerHeight - frameRect.top - 12);
     }
@@ -472,15 +507,23 @@ function visibleRailBounds() {
 
 function positionRightControlRail() {
   fitRailContent();
+  if (pageConsole && pageConsole.active) {
+    pageConsole.position();
+    return;
+  }
   var bounds = visibleRailBounds();
-  var inclineBar = document.getElementById('inclination-bar');
+  var inclineBar = document.getElementById('chart-view-bar');
   var safeTop = inclineBar.offsetTop + inclineBar.offsetHeight + 12;
-  bounds.top = Math.max(bounds.top, safeTop);
+  // Only docked controls belong beside the plot. A freely dragged console
+  // must also be allowed in the benchmark / action space above the plot.
+  var dockedBesidePlot = railDock === 'right' || railDock === 'left';
+  if (dockedBesidePlot) bounds.top = Math.max(bounds.top, safeTop);
   var availableHeight = bounds.bottom - bounds.top;
   var railHeight = Math.min(parseFloat(toolbarEl.style.height) || 720, Math.max(140, availableHeight));
   var top;
   if (railDock === 'bottom') {
     var parkingArea = document.getElementById('chart-market-summary');
+    if (railFreeTop == null || railAutoBelow) railFreeTop = parkingArea.offsetTop + 18;
     var documentBottom = Math.max(parkingArea.offsetTop + parkingArea.offsetHeight,
       (railFreeTop || 8) + toolbarEl.offsetHeight + 8);
     railFreeTop = Math.max(8, Math.min(railFreeTop || 8, documentBottom - toolbarEl.offsetHeight - 8));
@@ -499,10 +542,11 @@ function positionRightControlRail() {
   if (!railManuallySized && (railDock === 'right' || railDock === 'left')) {
     top = Math.max(bounds.top, Math.min(safeTop + railTopOffset, bounds.bottom - railHeight));
   }
-  top = Math.max(safeTop, top);
+  top = Math.max(dockedBesidePlot ? safeTop : 8, top);
+  if (railDock === 'right' || railDock === 'left') top = safeTop + 12 + railTopOffset;
   toolbarEl.style.top = top + 'px';
   // Clip the scrollable viewport, never scale down the readable controls.
-  toolbarEl.style.maxHeight = railDock !== 'bottom'
+  toolbarEl.style.maxHeight = railDock === 'free'
     ? Math.max(140, bounds.bottom - top) + 'px' : 'none';
   if (railDock === 'left') {
     toolbarEl.style.left = '12px';
@@ -518,7 +562,7 @@ function positionRightControlRail() {
   }
 
   var tab = document.getElementById('rail-collapsed-tab');
-  tab.style.top = Math.max(safeTop, bounds.top) + 'px';
+  tab.style.top = Math.max(dockedBesidePlot ? safeTop : 8, bounds.top) + 'px';
   if (railDock === 'left') {
     tab.style.left = '8px';
     tab.style.right = 'auto';
@@ -573,6 +617,7 @@ function positionRailResizeHandles() {
 }
 
 function dockControlRail(side, event) {
+  railResponsiveDock = false;
   if (event) event.stopPropagation();
   if (railCollapsed) showControlRail();
   railDock = side;
@@ -596,7 +641,33 @@ function scrollRailParent(options) {
   window.parent.scrollBy(options);
 }
 
+function jumpBelowChart(event) {
+  if (event) event.stopPropagation();
+  var target = document.getElementById('chart-market-summary');
+  var frameTop = window.frameElement ? window.frameElement.getBoundingClientRect().top : 0;
+  scrollRailParent({top: frameTop + target.getBoundingClientRect().top - 76, behavior:'instant'});
+}
+
+function scrollPageOverChart(event) {
+  // Wheel scrolling navigates the page. Zoom remains available via +/-.
+  // Preserve browser zoom and deliberate horizontal trackpad scrolling.
+  if (event.ctrlKey || event.metaKey || event.shiftKey ||
+      !event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+  var distance = event.deltaY * (event.deltaMode === 1 ? 20 :
+    event.deltaMode === 2 ? Math.max(300, window.innerHeight) : 1);
+  try {
+    scrollRailParent({top: distance, behavior:'instant'});
+    event.preventDefault();
+    event.stopPropagation();
+  } catch (error) {
+    // Leave native scroll chaining available if embedded cross-origin.
+    console.warn('Chart could not forward scrolling to its parent page.');
+  }
+}
+chartScroll.addEventListener('wheel', scrollPageOverChart, {capture:true, passive:false});
+
 function parkControlRail(event) {
+  railResponsiveDock = false;
   if (event) event.stopPropagation();
   if (railCollapsed) showControlRail();
   var parkingArea = document.getElementById('chart-market-summary');
@@ -630,7 +701,7 @@ function resetControlRailSize(event) {
 var railFocusBeforeCollapse = null;
 function collapseControlRail(event) {
   if (event) event.stopPropagation();
-  railFocusBeforeCollapse = toolbarEl.contains(document.activeElement) ? document.activeElement : null;
+  railFocusBeforeCollapse = toolbarEl.contains(toolbarEl.ownerDocument.activeElement) ? toolbarEl.ownerDocument.activeElement : null;
   railCollapsed = true;
   toolbarEl.style.display = 'none';
   document.getElementById('rail-resize-handles').style.display = 'none';
@@ -640,7 +711,7 @@ function collapseControlRail(event) {
 }
 
 function showControlRail() {
-  var restoreFocus = document.activeElement === document.getElementById('rail-collapsed-tab');
+  var restoreFocus = toolbarEl.ownerDocument.activeElement === document.getElementById('rail-collapsed-tab');
   railCollapsed = false;
   document.getElementById('rail-collapsed-tab').style.display = 'none';
   toolbarEl.style.display = 'flex';
@@ -676,9 +747,17 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     suppressPanelClick = false;
     return;
   }
+  // Start a drag, not browser text selection. Keep receiving pointer moves
+  // when a fast upward drag leaves the panel itself.
+  event.preventDefault();
+  if (toolbarEl.setPointerCapture && event.pointerId != null) {
+    toolbarEl.setPointerCapture(event.pointerId);
+  }
   var startX = event.clientX;
   var startY = event.clientY;
   var startRect = toolbarEl.getBoundingClientRect();
+  var pointerDocument = toolbarEl.ownerDocument;
+  var requestedHeight = parseFloat(toolbarEl.style.height) || startRect.height;
   var moving = false;
 
   function moveRail(moveEvent) {
@@ -688,16 +767,17 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     if (!moving) {
       railManuallySized = true;
       toolbarEl.style.width = startRect.width + 'px';
-      toolbarEl.style.height = startRect.height + 'px';
+      toolbarEl.style.height = (pageConsole && pageConsole.active ? requestedHeight : startRect.height) + 'px';
     }
     moving = true;
     moveEvent.preventDefault();
+    railResponsiveDock = false;
     railDock = 'free';
     railFreeLeft = startRect.left + dx;
     railFreeTop = startRect.top + dy;
     positionRightControlRail();
     try {
-      if (window.parent && window.frameElement) {
+      if (!(pageConsole && pageConsole.active) && window.parent && window.frameElement) {
         var pointerInParent = window.frameElement.getBoundingClientRect().top + moveEvent.clientY;
         if (pointerInParent > window.parent.innerHeight - 45) scrollRailParent({top: 24});
         if (pointerInParent < 45) scrollRailParent({top: -24});
@@ -706,23 +786,31 @@ toolbarEl.addEventListener('pointerdown', function(event) {
   }
   function stopMoving() {
     if (moving) suppressPanelClick = true;
-    document.removeEventListener('pointermove', moveRail);
-    document.removeEventListener('pointerup', stopMoving);
-    document.removeEventListener('pointercancel', stopMoving);
+    if (toolbarEl.hasPointerCapture && toolbarEl.hasPointerCapture(event.pointerId)) {
+      toolbarEl.releasePointerCapture(event.pointerId);
+    }
+    pointerDocument.removeEventListener('pointermove', moveRail);
+    pointerDocument.removeEventListener('pointerup', stopMoving);
+    pointerDocument.removeEventListener('pointercancel', stopMoving);
+    toolbarEl.removeEventListener('console-dispose', stopMoving);
   }
-  document.addEventListener('pointermove', moveRail);
-  document.addEventListener('pointerup', stopMoving);
-  document.addEventListener('pointercancel', stopMoving);
+  pointerDocument.addEventListener('pointermove', moveRail);
+  pointerDocument.addEventListener('pointerup', stopMoving);
+  pointerDocument.addEventListener('pointercancel', stopMoving);
+  toolbarEl.addEventListener('console-dispose', stopMoving, {once:true});
 });
 
 document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
   handle.addEventListener('pointerdown', function(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (handle.setPointerCapture && event.pointerId != null) handle.setPointerCapture(event.pointerId);
     var direction = handle.dataset.direction;
     var startX = event.clientX;
     var startY = event.clientY;
     var startRect = toolbarEl.getBoundingClientRect();
+    var pointerDocument = toolbarEl.ownerDocument;
+    railResponsiveDock = false;
     railDock = 'free';
     railFreeLeft = startRect.left;
     railFreeTop = startRect.top;
@@ -746,7 +834,8 @@ document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
         top = startRect.bottom - height;
       }
 
-      left = Math.max(8, Math.min(left, document.documentElement.clientWidth - width - 8));
+      var viewportWidth = pageConsole && pageConsole.active ? window.parent.innerWidth : document.documentElement.clientWidth;
+      left = Math.max(8, Math.min(left, viewportWidth - width - 8));
       top = Math.max(8, top);
       railFreeLeft = left;
       railFreeTop = top;
@@ -757,11 +846,18 @@ document.querySelectorAll('.rail-resize-handle').forEach(function(handle) {
     }
 
     function stopResizing() {
-      document.removeEventListener('pointermove', resizeRail);
-      document.removeEventListener('pointerup', stopResizing);
+      if (handle.hasPointerCapture && handle.hasPointerCapture(event.pointerId)) {
+        handle.releasePointerCapture(event.pointerId);
+      }
+      pointerDocument.removeEventListener('pointermove', resizeRail);
+      pointerDocument.removeEventListener('pointerup', stopResizing);
+      pointerDocument.removeEventListener('pointercancel', stopResizing);
+      toolbarEl.removeEventListener('console-dispose', stopResizing);
     }
-    document.addEventListener('pointermove', resizeRail);
-    document.addEventListener('pointerup', stopResizing);
+    pointerDocument.addEventListener('pointermove', resizeRail);
+    pointerDocument.addEventListener('pointerup', stopResizing);
+    pointerDocument.addEventListener('pointercancel', stopResizing);
+    toolbarEl.addEventListener('console-dispose', stopResizing, {once:true});
   });
 });
 
@@ -793,8 +889,11 @@ function setFrameHeight() {
   // Feeding it back with added padding grows the iframe on every redraw.
   var summary = document.getElementById('chart-market-summary');
   var bottom = summary.offsetTop + summary.offsetHeight;
-  if (!railCollapsed && (railDock === 'free' || railDock === 'bottom')) {
+  if (!railCollapsed && !(pageConsole && pageConsole.active)) {
     bottom = Math.max(bottom, toolbarEl.offsetTop + toolbarEl.offsetHeight);
+  }
+  if (!railCollapsed && pageConsole && pageConsole.active && railDock === 'bottom') {
+    bottom = Math.max(bottom, summary.offsetTop + 18 + (parseFloat(toolbarEl.style.height) || 720));
   }
   sendToStreamlit("streamlit:setFrameHeight", {height: Math.ceil(bottom + 20)});
 }
@@ -820,7 +919,7 @@ function configureKeyboardDateInputs() {
   var startInput = document.getElementById('start-date');
   var endInput = document.getElementById('end-date');
   var minDate = msToDateStr(new Date(chartData.dates[0]).getTime());
-  var maxDate = msToDateStr(new Date(chartData.dates[chartData.dates.length - 1]).getTime());
+  var maxDate = msToDateStr(getFutureEndMs());
   startInput.min = minDate;
   startInput.max = maxDate;
   endInput.min = minDate;
@@ -829,8 +928,45 @@ function configureKeyboardDateInputs() {
   if (!endInput.value) endInput.value = maxDate;
 }
 
+function dataDateWindow() {
+  var first=Infinity,last=-Infinity;
+  function include(date,price) {
+    var time=typeof date==='number'?date:Date.parse(date);
+    if(Number.isFinite(time)&&Number.isFinite(price)&&price>0) {
+      first=Math.min(first,time);last=Math.max(last,time);
+    }
+  }
+  chartData.dates.forEach(function(date,i){include(date,chartData.prices[i]);});
+  if(marketFeed) (marketFeed.points||[]).forEach(function(point){include(point.date,point.price);});
+  if(latestMarketQuote) include(latestMarketQuote.observed_at,latestMarketQuote.price);
+  return [Date.parse(msToDateStr(first)+'T00:00:00Z'),
+    Date.parse(msToDateStr(last)+'T23:59:59.999Z')];
+}
+
+function currentDateWindow() {
+  return chartWindow || dataDateWindow();
+}
+
+function showAllHistory() {
+  chartWindow=null;selectedRange=null;
+  futureHorizonYears=0;document.getElementById('futureHorizon').value='0';
+  document.getElementById('analyze-bar').style.display='none';
+  document.getElementById('view-date-message').textContent='';
+  return renderChart({resetViewport:true});
+}
+
 var latestMarketQuote = null;
 var benchmarkQuotes = {};
+var customStocks = SOXLCustomStocks.install({
+  base: function() { return chartData; },
+  changed: function() { renderChart(); renderBenchmarkPrices(); positionRightControlRail(); },
+  quotes: function(values) { Object.assign(benchmarkQuotes, values); },
+  showExisting: function(symbol) {
+    if (SOXLBenchmarkVisibility.names.indexOf(symbol) === -1) return false;
+    SOXLBenchmarkVisibility.write(Object.assign({}, benchmarkVisibility, {[symbol]:true}));
+    return true;
+  }
+});
 function renderBenchmarkPrices() {
   if (!chartData) return;
   var cards = document.getElementById('benchmark-price-cards');
@@ -839,41 +975,32 @@ function renderBenchmarkPrices() {
     return {name:name, key:name.toLowerCase()};
   });
   if (chartData.custom_label) specs.push({name:chartData.custom_label, key:'custom'});
+  customStocks.entries().filter(function(stock) { return stock.visible; }).forEach(function(stock) {
+    specs.push({name:stock.symbol, key:stock.symbol, dates:stock.dates, extra:true});
+  });
   specs.forEach(function(spec) {
-    var dates = chartData[spec.key + '_dates'] || [];
-    if (!dates.length && spec.key !== 'custom' &&
+    var dates = spec.dates || chartData[spec.key + '_dates'] || [];
+    if (!spec.extra && !dates.length && spec.key !== 'custom' &&
         (chartData.selected_benchmarks || []).indexOf(spec.name) === -1) return;
     var q = benchmarkQuotes[spec.name] || {};
     var card = document.createElement('div');
-    card.style.cssText = 'flex:1 1 185px;padding:10px;background:white;border:1px solid #dbe3ed;border-radius:6px;color:#172b4d';
+    card.style.cssText = 'display:flex;flex:0 0 auto;align-items:center;gap:4px;color:#172b4d;white-space:nowrap';
     var name = document.createElement('strong');
     name.textContent = spec.name;
+    name.style.fontSize = '12px';
     var value = document.createElement('div');
-    value.style.cssText = 'font-size:23px;font-weight:700;margin:4px 0';
-    var detail = document.createElement('small');
-    detail.style.cssText = 'display:block;line-height:1.5';
+    value.style.cssText = 'font-size:14px;font-weight:700';
     var valid = Number.isFinite(q.price) && q.price > 0 && Number.isFinite(Date.parse(q.observed_at));
     if (valid) {
       var points = q.unit === 'points' || spec.name === 'VIX' || spec.name === 'SOX';
       value.textContent = (points ? '' : q.currency === 'USD' ? '$' : '') +
         q.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) +
-        (points ? ' points' : q.currency && q.currency !== 'USD' ? ' ' + q.currency : '');
-      var old = Date.now() - Date.parse(q.observed_at) > 15*60*1000;
-      detail.textContent = (q.error ? 'Update unavailable — last available quote. ' : old ? 'Last available quote (not live). ' : 'Latest available quote; may be delayed. ') +
-        new Date(q.observed_at).toLocaleString('en-US', {timeZone:'America/New_York'}) +
-        ' ET · ' + q.source + (!q.currency && !points ? ' · Provider currency not supplied' : '');
+        (!points && q.currency && q.currency !== 'USD' ? ' ' + q.currency : '');
     } else {
       value.textContent = 'Quote unavailable';
-      var actual = chartData[spec.key + '_actual'] || [];
-      var last = actual[actual.length-1];
-      detail.textContent = dates.length && Number.isFinite(last)
-        ? 'Chart history: ' + last.toFixed(2) + ' on ' + dates[dates.length-1] +
-          ' (daily historical value, not a current quote).'
-        : 'Awaiting a timestamped provider quote.';
     }
-    if (q.checked_at) detail.textContent += ' Checked ' +
-      new Date(q.checked_at).toLocaleTimeString('en-US', {timeZone:'America/New_York'}) + ' ET.';
-    card.append(name, value, detail);
+    card.ariaLabel = spec.name + ' ' + value.textContent + (points ? ' points' : '');
+    card.append(name, value);
     cards.appendChild(card);
   });
   document.getElementById('benchmark-readouts').hidden = !cards.childElementCount;
@@ -945,7 +1072,7 @@ function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
   benchmarkQuotes = payload.benchmark_quotes || {};
   renderBenchmarkPrices();
-  latestMarketQuote = payload.quote && payload.quote.source === 'Schwab' && Number.isFinite(payload.quote.price) &&
+  latestMarketQuote = payload.quote && payload.quote.source === 'Tiingo' && Number.isFinite(payload.quote.price) &&
     payload.quote.price > 0 && Number.isFinite(Date.parse(payload.quote.observed_at))
     ? payload.quote : null;
   marketFeedError = payload.error || null;
@@ -958,6 +1085,12 @@ function acceptMarketFeed(payload) {
     if (points.length) marketFeed = {points: points, checked: payload.checked};
   }
   updateMarketFeedStatus();
+  if (chartDiv._priceGuide) chartDiv._priceGuide.refresh();
+}
+
+function publicPriceText(value) {
+  return String(value || '').replace(/\/auth\/schwab\/connect/gi, 'the price-feed connection page')
+    .replace(/\b(?:schwab|yahoo(?: finance)?)\b/gi, 'price feed');
 }
 
 function updateMarketFeedStatus() {
@@ -966,15 +1099,15 @@ function updateMarketFeedStatus() {
   if (latestMarketQuote) {
     var q = latestMarketQuote;
     status.textContent = 'SOXL $' + q.price.toFixed(2) + ' · ' + q.session +
-      ' · ' + q.source + ' · ' + q.observed_label +
+      ' · ' + q.observed_label +
       (Date.now() - Date.parse(q.observed_at) > 900000 ? ' · Last available quote (not live)' : ' · May be delayed') +
-      (marketFeedError ? ' · ' + marketFeedError : '');
-    status.title = 'Schwab trade quote and Schwab trade timestamp, refreshed every minute. Historical chart bars are separate from the current quote. ' +
-      (q.feed_warning || '') + ' Checked: ' + q.checked_at;
+      (marketFeedError ? ' · ' + publicPriceText(marketFeedError) : '');
+    status.title = 'Latest trade and observation time. Historical chart bars are separate from the current quote. ' +
+      publicPriceText(q.feed_warning) + ' Checked: ' + q.checked_at;
     return;
   }
-  if (marketFeedError) { status.textContent = marketFeedError; return; }
-  status.textContent = 'Schwab price unavailable. No fallback quote is used.';
+  if (marketFeedError) { status.textContent = publicPriceText(marketFeedError); return; }
+  status.textContent = 'Current price unavailable.';
   status.title = 'Historical chart data is not a current quote.';
 }
 
@@ -984,9 +1117,9 @@ function updateMarketSummary() {
     var last = latestMarketQuote && latestMarketQuote.session === pair[0] ? latestMarketQuote : null;
     document.getElementById('market-' + pair[1] + '-price').textContent = last ? '$' + last.price.toFixed(4) : 'Unavailable';
     document.getElementById('market-' + pair[1] + '-time').textContent = last
-      ? 'Schwab · ' + last.observed_label : 'No Schwab trade supplied for this session.';
+      ? last.observed_label : 'No trade supplied for this session.';
   });
-  state.textContent = marketFeedError || (marketFeed
+  state.textContent = publicPriceText(marketFeedError) || (marketFeed
     ? 'Feed checked: ' + new Date(marketFeed.checked).toLocaleString('en-US', {timeZone:'America/New_York'}) +
       ' ET. Each session shows its own latest available timestamp.'
     : 'Waiting for price data.');
@@ -1082,7 +1215,7 @@ window.addEventListener("message", function(event) {
       custom_prices: args.custom_prices || [],
       custom_actual: args.custom_actual || [],
       future_end: args.future_end,
-      chart_height: args.chart_height || 900
+      chart_height: args.chart_height || 650
     };
     hitProbabilityModel = null;
     if (!rendered) {
@@ -1107,12 +1240,6 @@ sendToStreamlit("streamlit:componentReady", {apiVersion: 1});
 
 function setMode(mode) {
   currentMode = mode;
-  var tiltBtn = document.getElementById('tiltBtn');
-  tiltBtn.classList.toggle('active', mode === 'tilt');
-  tiltBtn.setAttribute('aria-pressed', mode === 'tilt' ? 'true' : 'false');
-  tiltBtn.textContent = mode === 'tilt' ? 'Done Adjusting Inclination' : 'Adjust Inclination';
-  chartDiv.style.touchAction = mode === 'tilt' ? 'none' : '';
-  chartDiv.style.cursor = mode === 'tilt' ? 'ns-resize' : '';
   var drawBtn = document.getElementById('drawBtn');
   var selectBtn = document.getElementById('selectBtn');
   drawBtn.classList.toggle('active', mode === 'draw');
@@ -1123,7 +1250,6 @@ function setMode(mode) {
   selectBtn.textContent = mode === 'select' ? '[ ] Stop Selecting' : '\u25A2 Select Period';
 
   selectOverlay.style.display = mode === 'select' ? 'block' : 'none';
-  document.getElementById('keyboard-selection').style.display = mode === 'select' ? 'flex' : 'none';
 
   if (mode !== 'select' && selectedRange) {
     clearSelection();
@@ -1132,7 +1258,6 @@ function setMode(mode) {
   var statusText = 'Right-click for Draw, Extend, Erase, and Undo \u2022 Double-click a line to erase it';
   if (mode === 'draw') statusText = 'Click and drag to draw a line \u2022 Right-click near the cursor for other line tools';
   if (mode === 'select') statusText = 'Drag across the chart to select a time period for analysis';
-  if (mode === 'tilt') statusText = 'Drag up to steepen; down to flatten. Prices and projections are unchanged. Reset View restores the original inclination.';
   document.getElementById('status').textContent = statusText;
   var modeAnnouncement = mode === 'draw'
     ? 'Draw Line mode enabled.'
@@ -1143,7 +1268,7 @@ function setMode(mode) {
   setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
 
   Plotly.relayout(chartDiv, {
-    dragmode: mode === 'draw' ? 'drawline' : mode === 'tilt' ? false : 'pan',
+    dragmode: mode === 'draw' ? 'drawline' : 'pan',
     'newshape.line.color': '#888',
     'newshape.line.width': 2
   });
@@ -1153,59 +1278,6 @@ function setMode(mode) {
 function toggleDraw() { setMode(currentMode === 'draw' ? 'pan' : 'draw'); }
 function toggleSelect() { setMode(currentMode === 'select' ? 'pan' : 'select'); }
 
-// Change the displayed slope using the actual Plotly axis range, rather than
-// rotating its DOM: transformed SVGs break Plotly's pointer-to-price mapping.
-// This keeps dates upright and preserves drawing and projection hit-testing.
-var inclinationDrag = null;
-var inclinationFrame = null;
-var inclinationRange = null;
-function flushInclination() {
-  inclinationFrame = null;
-  if (!inclinationRange) return;
-  var range = inclinationRange;
-  inclinationRange = null;
-  Plotly.relayout(chartDiv, {'yaxis.range': range, 'yaxis.autorange': false});
-}
-chartDiv.addEventListener('pointerdown', function(event) {
-  if (currentMode !== 'tilt' || event.button !== 0 || !chartDiv._fullLayout) return;
-  if (event.target.closest('.modebar')) return;
-  var axis = chartDiv._fullLayout.yaxis;
-  inclinationDrag = {
-    id: event.pointerId, y: event.clientY,
-    low: Number(axis.range[0]), high: Number(axis.range[1]),
-    height: Math.max(1, axis._length)
-  };
-  chartDiv.setPointerCapture(event.pointerId);
-  trendTooltip.style.display = 'none';
-  document.body.classList.remove('projection-readout-active');
-  event.preventDefault();
-  event.stopImmediatePropagation();
-}, true);
-chartDiv.addEventListener('pointermove', function(event) {
-  var drag = inclinationDrag;
-  if (!drag || event.pointerId !== drag.id) return;
-  // Positive factor also works in log coordinates. The midpoint is fixed.
-  var factor = Math.exp(Math.max(-2.3, Math.min(2.3,
-    (event.clientY - drag.y) / drag.height * 3)));
-  var middle = (drag.low + drag.high) / 2;
-  var half = (drag.high - drag.low) * factor / 2;
-  inclinationRange = [middle - half, middle + half];
-  if (inclinationFrame === null) inclinationFrame = requestAnimationFrame(flushInclination);
-  event.preventDefault();
-  event.stopImmediatePropagation();
-}, true);
-function finishInclination(event) {
-  if (!inclinationDrag || event.pointerId !== inclinationDrag.id) return;
-  inclinationDrag = null;
-  if (inclinationFrame !== null) cancelAnimationFrame(inclinationFrame);
-  flushInclination();
-  if (chartDiv.hasPointerCapture(event.pointerId)) chartDiv.releasePointerCapture(event.pointerId);
-  chartGestureActive = false;
-  if (pendingMarketUpdate) setTimeout(refreshMarketTrace, 150);
-}
-chartDiv.addEventListener('pointerup', finishInclination, true);
-chartDiv.addEventListener('pointercancel', finishInclination, true);
-chartDiv.addEventListener('lostpointercapture', finishInclination, true);
 
 function suggestedExtensionDate(line) {
   var latest = new Date(Math.max(lineTimestamp(line, 1), lineTimestamp(line, 2)));
@@ -1293,30 +1365,13 @@ function openCursorTools(event) {
   trendTooltip.style.display = 'none';
 }
 
-function allVisiblePrices() {
-  if (!chartData) return [];
-  var series = [
-    chartData.prices, chartData.qqq_prices, chartData.tqqq_prices,
-    chartData.tlt_prices, chartData.xlu_prices, chartData.vix_prices,
-    chartData.sox_prices, chartData.gush_prices, chartData.btc_prices,
-    chartData.custom_prices
-  ];
-  var values = [];
-  series.forEach(function(items) {
-    (items || []).forEach(function(value) {
-      if (Number.isFinite(value) && value > 0) values.push(value);
-    });
-  });
-  return values;
-}
-
 function getFutureEndMs() {
   if (!chartData || !chartData.dates || chartData.dates.length === 0) {
     var today = new Date();
     today.setFullYear(today.getFullYear() + futureHorizonYears);
     return today.getTime();
   }
-  var lastDate = new Date(chartData.dates[chartData.dates.length - 1]);
+  var lastDate = new Date(dataDateWindow()[1]);
   lastDate.setFullYear(lastDate.getFullYear() + futureHorizonYears);
   return lastDate.getTime();
 }
@@ -1326,58 +1381,27 @@ function getFutureEnd() {
 }
 
 function setFutureHorizon(value) {
-  futureHorizonYears = Math.max(5, Math.min(50, Number(value) || 30));
+  futureHorizonYears = Math.max(0, Math.min(50, Number(value) || 0));
+  chartWindow=[dataDateWindow()[0],getFutureEndMs()];
+  selectedRange=null;
+  document.getElementById('analyze-bar').style.display='none';
   renderChart({resetViewport: true});
   announce('Future projection horizon set to ' + futureHorizonYears + ' years.');
   trackEvent('future_horizon_changed', {years: futureHorizonYears});
 }
 
-function yAxisRange() {
-  var values = allVisiblePrices();
-  if (values.length === 0) return null;
-  var priceMin = Math.min.apply(null, values);
-  var priceMax = Math.max.apply(null, values);
-  if (scaleMode === 'log') {
-    var logPad = 0.12;
-    return [Math.log10(priceMin) - logPad, Math.log10(priceMax) + logPad];
-  }
-  var span = Math.max(priceMax - priceMin, priceMax * 0.02, 0.01);
-  var pad = span * 0.06;
-  return [Math.max(0, priceMin - pad), priceMax + pad];
-}
-
-function soxlYAxisRange() {
-  if (!chartData || !chartData.prices) return yAxisRange();
-  var values = chartData.prices.filter(function(value) {
-    return Number.isFinite(value) && value > 0;
-  });
-  if (values.length === 0) return yAxisRange();
-  var priceMin = Math.min.apply(null, values);
-  var priceMax = Math.max.apply(null, values);
-  if (scaleMode === 'log') {
-    return [Math.log10(priceMin) - 0.12, Math.log10(priceMax) + 0.12];
-  }
-  var span = Math.max(priceMax - priceMin, priceMax * 0.02, 0.01);
-  return [Math.max(0, priceMin - span * 0.06), priceMax + span * 0.06];
-}
-
 function fitSoxlPrices(event) {
-  resetInclinationSlider();
   if (event) {
     event.preventDefault();
     event.stopPropagation();
   }
   if (!chartData) return;
-  Plotly.relayout(chartDiv, {
-    'yaxis.type': scaleMode,
-    'yaxis.range': soxlYAxisRange()
-  });
-  announce('Chart fitted to the SOXL price range.');
+  renderChart({resetViewport:true});
+  announce('Chart fitted to visible prices in the selected date window.');
   if (event) trackEvent('chart_prices_fitted', {scale: scaleMode});
 }
 
 function setScale(mode) {
-  resetInclinationSlider();
   if (mode !== 'log' && mode !== 'linear') return;
   scaleMode = mode;
   var logBtn = document.getElementById('logScaleBtn');
@@ -1392,9 +1416,12 @@ function setScale(mode) {
 }
 
 function setChartHeight(value) {
-  currentChartHeight = Math.max(300, Math.min(1400, Number(value) || 900));
+  currentChartHeight = Math.max(300, Math.min(2400, Number(value) || 650));
+  document.getElementById('heightSlider').value = currentChartHeight;
+  document.getElementById('chart-size-grip').setAttribute('aria-valuenow', currentChartHeight);
   document.getElementById('heightValue').textContent = currentChartHeight + ' px';
   Plotly.relayout(chartDiv, {height: currentChartHeight}).then(function() {
+    positionRightControlRail();
     setFrameHeight(document.body.scrollHeight + 20);
   });
 }
@@ -1414,17 +1441,26 @@ function setChartWidth(value) {
 
 window.addEventListener('resize', function() {
   if (!chartData) return;
+  updateWorkspaceDock();
   setChartWidth(currentChartWidth);
 });
 
+function updateWorkspaceDock() {
+  if (!railResponsiveDock) return;
+  var narrow = document.documentElement.clientWidth <= 760;
+  railDock = narrow ? 'bottom' : 'right';
+  railAutoBelow = narrow;
+  if (!narrow) railFreeTop = null;
+  positionRightControlRail();
+}
+
 function resetView() {
-  resetInclinationSlider();
   if (!chartData) return;
   selecting = false;
   selectedRange = null;
   document.getElementById('analyze-bar').style.display = 'none';
   setMode('pan');
-  currentChartHeight = chartData.chart_height || 900;
+  currentChartHeight = chartData.chart_height || 650;
   currentChartWidth = 100;
   document.getElementById('heightSlider').value = currentChartHeight;
   document.getElementById('heightValue').textContent = currentChartHeight + ' px';
@@ -1433,35 +1469,27 @@ function resetView() {
   chartContainer.style.width = '100%';
   trendTooltip.style.display = 'none';
   document.body.classList.remove('projection-readout-active');
-  return Plotly.relayout(chartDiv, {
-    'xaxis.range': [chartData.dates[0], getFutureEnd()],
-    'xaxis.autorange': false,
-    'yaxis.type': scaleMode,
-    'yaxis.range': yAxisRange(),
-    'yaxis.autorange': false,
-    width: chartScroll.clientWidth,
-    height: currentChartHeight,
-    shapes: []
-  }).then(function() {
+  return renderChart({resetViewport:true}).then(function() {
     chartScroll.scrollLeft = 0;
     chartScroll.scrollTop = 0;
     positionRightControlRail();
     setFrameHeight(document.body.scrollHeight + 20);
-    announce('View reset. Full history and normal chart size restored; trendlines preserved.');
+    announce('View reset to the selected dates and actual plotted prices; trendlines preserved.');
     trackEvent('chart_view_reset', {scale: scaleMode, horizon_years: futureHorizonYears});
   });
 }
 
 function clearAll() {
-  if (lines.length === 0) return;
-  saveUndoState();
+  // Clear means a complete page reset, not just deleting the last drawing.
+  // Retain one private-to-this-tab recovery snapshot for the visible Undo.
+  try {
+    window.sessionStorage.setItem('soxl-clear-undo', JSON.stringify(chartUndoSnapshot()));
+  } catch (error) {}
   lines = [];
   knownShapeCount = 0;
-  clearSelection();
-  renderChart();
-  renderLineList();
-  setComponentValue({action: "set_all", lines: lines});
-  announce('All drawn lines cleared.');
+  if (chartDiv._axisArea) chartDiv._axisArea.restore(null);
+  if (chartDiv._priceGuide) chartDiv._priceGuide.restore(null);
+  try { window.parent.location.reload(); } catch (error) { window.location.reload(); }
 }
 
 function deleteLine(idx) {
@@ -1523,7 +1551,7 @@ function automaticLineEndMs() {
   return Math.max(getFutureEndMs(), tenYearsFromToday.getTime());
 }
 
-function addAutomaticChannelLine(kind) {
+function addAutomaticChannelLine(kind, previewOnly) {
   if (!chartData || ['median', 'upper', 'lower'].indexOf(kind) < 0) return;
 
   var rangeStart = selectedRange ? selectedRange.startMs : -Infinity;
@@ -1599,8 +1627,7 @@ function addAutomaticChannelLine(kind) {
     upper: '#E53935',
     lower: '#43A047'
   };
-  saveUndoState();
-  lines.push({
+  var generated = {
     x1_ms: startMs,
     y1: startPrice,
     x2_ms: endMs,
@@ -1610,7 +1637,10 @@ function addAutomaticChannelLine(kind) {
     label: labels[kind],
     color: colors[kind],
     automaticType: kind
-  });
+  };
+  if (previewOnly) return generated;
+  saveUndoState();
+  lines.push(generated);
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
@@ -1626,26 +1656,44 @@ function addAutomaticChannelLine(kind) {
   });
 }
 
+function chartUndoSnapshot() {
+  return {
+    lines: cloneLines(lines),
+    selection: selectedRange ? Object.assign({}, selectedRange) : null,
+    axisArea: chartDiv._axisArea ? chartDiv._axisArea.snapshot() : null,
+    priceGuide: chartDiv._priceGuide ? chartDiv._priceGuide.snapshot() : null
+  };
+}
+
 function saveUndoState() {
   freezePanelGeometry();
-  undoStack.push(cloneLines(lines));
+  undoStack.push(chartUndoSnapshot());
   if (undoStack.length > 50) undoStack.shift();
   updateLineActionButtons();
 }
 
 function undoLastAction() {
+  if (chartDiv._channelResize && chartDiv._channelResize.isDragging())
+    chartDiv._channelResize.cancel();
   if (undoStack.length === 0) {
-    announce('There is no line change to undo yet.');
-    document.getElementById('status').textContent = 'Nothing to undo yet \u2022 Draw, erase, extend, or delete a line first';
+    announce('There is no chart change to undo yet.');
+    document.getElementById('status').textContent = 'Nothing to undo yet';
     return;
   }
   freezePanelGeometry();
-  lines = undoStack.pop();
+  var previous = undoStack.pop();
+  lines = previous.lines;
+  selectedRange = previous.selection;
+  document.getElementById('analyze-bar').style.display = selectedRange ? 'flex' : 'none';
+  if (selectedRange)
+    document.getElementById('analyze-text').textContent = 'Selected: ' + selectedRange.start + ' to ' + selectedRange.end;
+  if (chartDiv._axisArea) chartDiv._axisArea.restore(previous.axisArea);
+  if (chartDiv._priceGuide) chartDiv._priceGuide.restore(previous.priceGuide);
   knownShapeCount = 0;
   renderChart();
   renderLineList();
   setComponentValue({action: "set_all", lines: lines});
-  announce('Last line action undone.');
+  announce('Last chart change undone.');
 }
 
 document.addEventListener('keydown', function(event) {
@@ -1658,6 +1706,7 @@ document.addEventListener('keydown', function(event) {
 
 function updateLineActionButtons() {
   document.getElementById('undoBtn').classList.toggle('active', undoStack.length > 0);
+  if (window._chartPageActions) window._chartPageActions.update(undoStack.length);
 }
 
 function clearSelection() {
@@ -1679,8 +1728,15 @@ function applyKeyboardSelection() {
     announce('The start date must be on or before the end date.');
     return;
   }
-  var startMs = new Date(startDate + 'T00:00:00').getTime();
-  var endMs = new Date(endDate + 'T23:59:59').getTime();
+  var startMs = new Date(startDate + 'T00:00:00Z').getTime();
+  var endMs = new Date(endDate + 'T23:59:59.999Z').getTime();
+  var fitted=SOXLPriceAxis.fitWindow(chartDiv.data,[startMs,endMs],scaleMode,latestMarketQuote);
+  if(!fitted) {
+    document.getElementById('view-date-message').textContent='Choose dates containing price data.';
+    return;
+  }
+  document.getElementById('view-date-message').textContent='';
+  chartWindow=[startMs,endMs];
   selectedRange = {start: startDate, end: endDate, startMs: startMs, endMs: endMs};
   document.getElementById('analyze-text').textContent = 'Selected: ' + startDate + ' to ' + endDate;
   document.getElementById('analyze-bar').style.display = 'flex';
@@ -2170,6 +2226,9 @@ chartDiv.addEventListener('plotly_doubleclick', function(e) {
 });
 
 chartDiv.addEventListener('dblclick', function(e) {
+  // Ordinary double-click now reads a point's exact price. Keep the legacy
+  // nearest-line deletion gesture available only with Alt.
+  if (!e.altKey) return;
   if (lines.length === 0) return;
   if (currentMode === 'select') return;
 
@@ -2295,6 +2354,19 @@ function renderChart(options) {
     pendingChartRender = Object.assign({}, pendingChartRender || {}, options);
     return chartRenderTask;
   }
+  if(selectedRange && !selecting) {
+    chartWindow=[Date.parse(selectedRange.start+'T00:00:00Z'),
+      Date.parse(selectedRange.end+'T23:59:59.999Z')];
+  }
+  var dateWindow=currentDateWindow();
+  var windowKey=dateWindow.join(':');
+  if(lastFittedWindow!==windowKey) {
+    options.resetViewport=true;
+    lastFittedWindow=windowKey;
+    document.getElementById('start-date').value=msToDateStr(dateWindow[0]);
+    document.getElementById('end-date').value=msToDateStr(dateWindow[1]);
+    configureKeyboardDateInputs();
+  }
   var lockedViewport = options.resetViewport ? null : captureChartViewport();
   var traces = [];
 
@@ -2307,7 +2379,8 @@ function renderChart(options) {
   var hasGUSH = chartData.gush_dates && chartData.gush_dates.length > 0;
   var hasBTC = chartData.btc_dates && chartData.btc_dates.length > 0;
   var hasCustom = chartData.custom_dates && chartData.custom_dates.length > 0;
-  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX || hasGUSH || hasBTC || hasCustom;
+  var hasOverlay = hasQQQ || hasTQQQ || hasTLT || hasXLU || hasVIX || hasSOX || hasGUSH || hasBTC || hasCustom ||
+    customStocks.entries().some(function(stock) { return stock.visible; });
 
   var marketTrace = soxlMarketTrace();
   traces.push({
@@ -2407,6 +2480,7 @@ function renderChart(options) {
     });
   }
 
+  traces.push.apply(traces, customStocks.traces(chartData));
   if (hasCustom) {
     traces.push({
       x: chartData.custom_dates, y: chartData.custom_prices,
@@ -2438,6 +2512,7 @@ function renderChart(options) {
 
     traces.push({
       x: segment.dates, y: segment.prices,
+      meta: {channelLineIndex: i, channelSegment: 'main'},
       customdata: segment.hitProbabilities,
       mode: 'lines+markers', showlegend: false,
       line: {color: color, width: 2.5},
@@ -2450,12 +2525,13 @@ function renderChart(options) {
     var fwdStart = scaleMode === 'log' ? Math.log10(fwdY0) : fwdY0;
     var fwdTransformedY = fwdStart + transformedSlope * (futureMs - fwdEnd);
     var fwdY = scaleMode === 'log' ? Math.pow(10, fwdTransformedY) : fwdTransformedY;
-    var forward = futureMs > fwdEnd
+    var forward = !ln.manualExtent && futureMs > fwdEnd
       ? trendPoints(fwdEnd, futureMs, fwdY0, transformedSlope)
       : {dates: [], prices: [], hitProbabilities: []};
     if (forward.dates.length > 1) {
       traces.push({
         x: forward.dates,
+        meta: {channelLineIndex: i, channelSegment: 'forward'},
         y: forward.prices,
         customdata: forward.hitProbabilities,
         mode: 'lines+markers', showlegend: false,
@@ -2471,10 +2547,13 @@ function renderChart(options) {
     var backStart = scaleMode === 'log' ? Math.log10(backY0) : backY0;
     var backTransformedY = backStart + transformedSlope * (backMs - backEnd);
     var backY = scaleMode === 'log' ? Math.pow(10, backTransformedY) : backTransformedY;
-    var backward = trendPoints(backMs, backEnd, backY, transformedSlope);
+    var backward = ln.manualExtent
+      ? {dates: [], prices: [], hitProbabilities: []}
+      : trendPoints(backMs, backEnd, backY, transformedSlope);
     if (backward.dates.length > 1) {
       traces.push({
         x: backward.dates,
+        meta: {channelLineIndex: i, channelSegment: 'backward'},
         y: backward.prices,
         customdata: backward.hitProbabilities,
         mode: 'lines+markers', showlegend: false,
@@ -2486,7 +2565,7 @@ function renderChart(options) {
   }
 
   var shapes = [];
-  if (selectedRange) {
+  if (selectedRange && (selecting || !chartWindow)) {
     shapes.push({
       type: 'rect',
       xref: 'x', yref: 'paper',
@@ -2503,16 +2582,35 @@ function renderChart(options) {
       trace.visible = Boolean(benchmarkVisibility[trace.name]);
   });
 
+  var xAxisRange=SOXLPriceAxis.dateRange(lockedViewport ? lockedViewport.xRange : dateWindow,dateWindow);
+  var fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote);
+  if(!fittedWindow) {
+    xAxisRange=dateWindow;
+    fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote);
+  }
+  if(!fittedWindow) {
+    document.getElementById('view-date-message').textContent='No valid prices in this date window.';
+    return;
+  }
+  var priceAxisRange=fittedWindow.range;
+  var priceTickConfig = SOXLPriceAxis.ticks(priceAxisRange, currentChartHeight - 88, scaleMode);
   var layout = {
     yaxis: {
       type: scaleMode, tickprefix: '$', title: '',
+      ...priceTickConfig,
       gridcolor: '#eee',
-      range: lockedViewport ? lockedViewport.yRange : yAxisRange(),
+      range: priceAxisRange,
+      autorange: false,
+      minallowed: priceAxisRange[0],
+      maxallowed: priceAxisRange[1],
       fixedrange: false
     },
     xaxis: {
       type: 'date',
-      range: lockedViewport ? lockedViewport.xRange : [chartData.dates[0], getFutureEnd()],
+      range: xAxisRange.map(function(value){return new Date(value).toISOString();}),
+      autorange: false,
+      minallowed: new Date(dateWindow[0]).toISOString(),
+      maxallowed: new Date(dateWindow[1]).toISOString(),
       title: '', gridcolor: '#eee',
       tickformatstops: [
         {dtickrange: [null, 86400000], value: '%b %d, %Y'},
@@ -2528,11 +2626,15 @@ function renderChart(options) {
     // Reserve a header row for the live quote so it cannot cover the legend.
     margin: {l: 65, r: 20, t: 48, b: 40},
     uirevision: 'explicit-viewport-lock',
+    // Native drawline shapes are temporary input; persisted lines render as
+    // traces. Do not let the stable viewport revision preserve those shapes
+    // after the authoritative line model changes (including Undo).
+    editrevision: JSON.stringify(lines),
     showlegend: hasOverlay,
     legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(255,255,255,0.8)', bordercolor: '#ddd', borderwidth: 1 },
     hovermode: 'closest',
     hoverdistance: 20,
-    dragmode: currentMode === 'draw' ? 'drawline' : currentMode === 'tilt' ? false : 'pan',
+    dragmode: currentMode === 'draw' ? 'drawline' : 'pan',
     newshape: {
       line: { color: '#888', width: 2 }
     },
@@ -2544,7 +2646,8 @@ function renderChart(options) {
 
 
   var config = {
-    scrollZoom: currentMode !== 'select',
+    doubleClick: false,
+    scrollZoom: false,
     displayModeBar: currentMode !== 'select',
     modeBarButtonsToRemove: ['select2d', 'lasso2d', 'drawclosedpath', 'drawopenpath', 'drawcircle', 'drawrect', 'eraseshape', 'autoScale2d', 'resetScale2d']
   };
@@ -2553,7 +2656,64 @@ function renderChart(options) {
     return Plotly.react(chartDiv, traces, layout, config);
   }).then(function() {
     document.getElementById('chart-render-error').hidden = true;
+    SOXLPriceAxis.install(chartDiv, function() {
+      return {window:currentDateWindow(),mode:scaleMode,quote:latestMarketQuote};
+    });
     installAxisArea(chartDiv);
+    installPriceGuide(chartDiv, function() { return latestMarketQuote; }, function() {
+      return lines.map(function(line, index) {
+        return Object.assign({}, line, {color: line.color || COLORS[index % COLORS.length]});
+      });
+    });
+    installChannelResize(chartDiv, {
+      lines: function() { return lines; },
+      scale: function() { return scaleMode; },
+      date: msToDateStr,
+      active: function(active) {
+        chartGestureActive = active;
+        if (active) {
+          trendTooltip.style.display = 'none';
+          document.body.classList.remove('projection-readout-active');
+        }
+      },
+      begin: function() {
+        channelUndoDepth = undoStack.length;
+        saveUndoState();
+      },
+      update: function(index, updated) {
+        lines[index] = updated;
+        renderLineReadouts();
+        previewResizedChannel(index);
+      },
+      commit: function(index) {
+        if (channelPreviewFrame !== null) cancelAnimationFrame(channelPreviewFrame);
+        channelPreviewFrame = null;
+        renderChart();
+        renderLineList();
+        setComponentValue({action: "set_all", lines: lines});
+        announce((lines[index].label || 'Channel line') + ' resized.');
+      },
+      cancel: function(index, original) {
+        if (channelPreviewFrame !== null) cancelAnimationFrame(channelPreviewFrame);
+        channelPreviewFrame = null;
+        lines[index] = original;
+        undoStack.length = channelUndoDepth;
+        renderChart();
+        renderLineList();
+      }
+    });
+    var hadPageActions = Boolean(window._chartPageActions);
+    installPageActions({clear: clearAll, undo: undoLastAction});
+    if (!hadPageActions) updateWorkspaceDock();
+    if (!chartDiv._clearUndoLoaded) {
+      chartDiv._clearUndoLoaded = true;
+      try {
+        var recovery = JSON.parse(window.sessionStorage.getItem('soxl-clear-undo') || 'null');
+        window.sessionStorage.removeItem('soxl-clear-undo');
+        if (recovery && Array.isArray(recovery.lines)) undoStack.push(recovery);
+      } catch (error) {}
+    }
+    updateLineActionButtons();
     if (lockedViewport) {
       chartScroll.scrollLeft = lockedViewport.scrollLeft;
       chartScroll.scrollTop = lockedViewport.scrollTop;
@@ -2594,8 +2754,30 @@ function renderChart(options) {
   return chartRenderTask;
 }
 
+var channelUndoDepth = 0;
+var channelPreviewFrame = null;
+function previewResizedChannel(index) {
+  if (channelPreviewFrame !== null) cancelAnimationFrame(channelPreviewFrame);
+  channelPreviewFrame = requestAnimationFrame(function() {
+    channelPreviewFrame = null;
+    var line = lines[index];
+    if (!line) return;
+    chartDiv.data.forEach(function(trace, traceIndex) {
+      if (!trace.meta || trace.meta.channelLineIndex !== index) return;
+      var dates = trace.meta.channelSegment === 'main' ? [line.x1_ms, line.x2_ms] : [];
+      var prices = trace.meta.channelSegment === 'main' ? [line.y1, line.y2] : [];
+      Plotly.restyle(chartDiv, {
+        x: [dates.map(function(time) { return new Date(time); })],
+        y: [prices],
+        customdata: [prices.map(function(price, i) {
+          return formatHitProbability(price, dates[i]);
+        })]
+      }, [traceIndex]);
+    });
+  });
+}
+
 function renderLineList() {
-  var el = document.getElementById('line-list');
   var picker = document.getElementById('projection-line');
   var prior = picker.value;
   picker.replaceChildren(new Option('Nearest line to pointer', ''));
@@ -2604,9 +2786,15 @@ function renderLineList() {
   });
   picker.value = Number(prior) < lines.length ? prior : '';
   updateLineActionButtons();
-  if (lines.length === 0) { el.innerHTML = ''; return; }
-  var html = '';
+  renderLineReadouts();
+  if (lines.length === 0) return;
   document.getElementById('rail-extend-date').value = suggestedExtensionDate(lines[lines.length - 1]);
+  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+}
+
+function renderLineReadouts() {
+  var el = document.getElementById('line-list');
+  var html = '';
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
     var color = ln.color || COLORS[i % COLORS.length];
@@ -2617,39 +2805,74 @@ function renderLineList() {
       + '</div>';
   }
   el.innerHTML = html;
-  setTimeout(function() { setFrameHeight(document.body.scrollHeight + 20); }, 50);
+  if (channelDateReadoutActive) showChannelPricesForDate();
 }
+
+var channelDateReadoutActive = false;
+function showChannelPricesForDate() {
+  var value = document.getElementById('channel-price-date').value;
+  var output = document.getElementById('channel-date-prices');
+  var timestamp = Date.parse(value + 'T12:00:00Z');
+  if (!Number.isFinite(timestamp)) { output.textContent = 'Choose a date first.'; return; }
+  channelDateReadoutActive = true;
+  var values = ['lower', 'median', 'upper'].map(function(kind) {
+    var line = lines.find(function(item) { return item.automaticType === kind; }) ||
+      addAutomaticChannelLine(kind, true);
+    if (!line) return null;
+    var price = SOXLChannelResize.priceAt(line, timestamp, scaleMode);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  });
+  output.textContent = ['Low', 'Median', 'High'].map(function(label, i) {
+    return label + ': ' + (values[i] === null ? 'unavailable' :
+      '$' + values[i].toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
+  }).join('   ·   ') + ' — Channel estimates for ' + value + ', not actual daily trading highs/lows.';
+}
+
+var sizeGrip = document.getElementById('chart-size-grip');
+var sizeGripDrag = null;
+sizeGrip.addEventListener('pointerdown', function(event) {
+  event.preventDefault();
+  sizeGripDrag = {id:event.pointerId, y:event.clientY, height:currentChartHeight};
+  sizeGrip.setPointerCapture(event.pointerId);
+});
+sizeGrip.addEventListener('pointermove', function(event) {
+  if (!sizeGripDrag || event.pointerId !== sizeGripDrag.id) return;
+  setChartHeight(sizeGripDrag.height + event.clientY - sizeGripDrag.y);
+});
+sizeGrip.addEventListener('pointerup', function() { sizeGripDrag = null; });
+sizeGrip.addEventListener('pointercancel', function() { sizeGripDrag = null; });
+sizeGrip.addEventListener('keydown', function(event) {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  event.preventDefault();
+  setChartHeight(currentChartHeight + (event.key === 'ArrowDown' ? 50 : -50));
+});
 </script>
 <script src="rotation_view.js"></script>
 <script src="diagnostics.js"></script>
 <script>
-var sliderInclinationBase = null;
-function resetInclinationSlider() {
-  sliderInclinationBase = null;
-  document.getElementById('inclination-slider').value = 100;
-  document.getElementById('inclination-value').textContent = '100%';
-}
-function captureInclinationBase() {
-  if (!chartDiv._fullLayout) return;
-  var range = chartDiv._fullLayout.yaxis.range;
-  var value = Number(document.getElementById('inclination-slider').value);
-  sliderInclinationBase = {
-    middle: (Number(range[0]) + Number(range[1])) / 2,
-    span: (Number(range[1]) - Number(range[0])) * value / 100
-  };
-}
-function applyInclinationSlider(value) {
-  if (!sliderInclinationBase) {
-    var range = chartDiv._fullLayout.yaxis.range;
-    sliderInclinationBase = {middle:(Number(range[0])+Number(range[1]))/2,
-      span:Number(range[1])-Number(range[0])};
+pageConsole = SOXLFloatingConsole.install({
+  toolbar:toolbarEl,
+  handles:document.getElementById('rail-resize-handles'),
+  tab:document.getElementById('rail-collapsed-tab'),
+  state:function() {
+    return {dock:railDock,left:railFreeLeft,top:railFreeTop,
+      width:parseFloat(toolbarEl.style.width)||280,
+      height:parseFloat(toolbarEl.style.height)||720};
+  },
+  plot:function() {
+    return {top:chartScroll.offsetTop,
+      bottom:chartScroll.offsetTop+Math.max(chartScroll.offsetHeight,currentChartHeight),
+      parking:document.getElementById('chart-market-summary').offsetTop};
+  },
+  positionHandles:positionRailResizeHandles,
+  cleanup:function() {
+    try {
+      window.parent.removeEventListener('scroll',positionRightControlRail,true);
+      window.parent.removeEventListener('resize',positionRightControlRail);
+    } catch (_) {}
   }
-  var half = sliderInclinationBase.span * 100 / Number(value) / 2;
-  document.getElementById('inclination-value').textContent = value + '%';
-  Plotly.relayout(chartDiv, {'yaxis.range':[
-    sliderInclinationBase.middle-half, sliderInclinationBase.middle+half],
-    'yaxis.autorange':false});
-}
+});
+positionRightControlRail();
 </script>
 </body>
 </html>

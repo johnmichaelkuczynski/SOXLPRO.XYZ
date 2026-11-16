@@ -61,4 +61,3 @@ APP_ENV = "production"
 [userenv.shared]
 APP_ENV = "development"
 PUBLIC_APP_URL = "https://soxlpro.xyz"
-SCHWAB_REDIRECT_URI = "https://soxl.ai/auth/schwab/callback"

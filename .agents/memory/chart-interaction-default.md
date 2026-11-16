@@ -60,3 +60,20 @@ adjusting display scale; don't require browser zoom or panel manipulation.
 operations. Capture the live axis ranges and chart scroll offsets before a
 rerender and put those exact values into the replacement layout. Do not
 reposition the controls panel as a side effect of updating the line list.
+
+Keep modest Clear All and Undo buttons side by side in a dedicated row above
+the actual chart, outside the plotting area and scrolling console. Never float
+them over the chart or other controls.
+
+**Why:** The user repeatedly complained about having to search for controls
+while a chart measurement obscured the graph, then explicitly rejected large
+stacked floating buttons and requested smaller side-by-side buttons above it.
+
+**How to apply:** Undo must cover chart measurements as well as lines. Clear All
+acts immediately and resets/reloads the entire page, not only selected lines.
+
+Double-clicking a point must create its horizontal price-to-Y-axis guide
+directly, without requiring another button. Do not shade a beige rectangle.
+
+**Why:** The user explicitly rejected the shaded measurement area and the
+multi-step workflow when all they wanted was a horizontal price reference.

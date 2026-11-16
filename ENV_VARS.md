@@ -17,8 +17,8 @@ feature is unavailable until its variables are supplied.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `NEON_DATABASE_URL` | Recommended when using your own Neon database | Full PostgreSQL connection string. Takes priority over `DATABASE_URL` for all app database connections. |
-| `DATABASE_URL` | Recommended if `NEON_DATABASE_URL` is unset | Standard PostgreSQL connection URL used for market snapshots, diagnostics, anonymous visitor counts, and Stripe event persistence. On Coolify, set either variable to your own database connection string. |
+| `NEON_DATABASE_URL` | Optional for non-Schwab app data | Full PostgreSQL connection string. Takes priority for existing market snapshots and other app data, but NOT Schwab tokens. |
+| `DATABASE_URL` | Required for Schwab authorization | PostgreSQL connection URL for the shared `public.schwab_oauth_tokens` table. Every web replica and worker MUST use the same URL. Set this to your Neon connection string on Coolify. Other app data also uses it when `NEON_DATABASE_URL` is unset. |
 | `SESSION_SECRET` | Recommended | Signs Google-auth cookies and anonymous visitor identifiers. Use a long random value. |
 
 ## Market data
@@ -30,7 +30,6 @@ feature is unavailable until its variables are supplied.
 | `SCHWAB_CLIENT_ID` | Required for SOXL quotes | Your Schwab developer app's client ID. SOXL current quotes use Schwab exclusively after owner authorization. Also enables Schwab benchmark quotes and SOXL options chains. |
 | `SCHWAB_CLIENT_SECRET` | With Schwab | Server-side Schwab client secret for token exchange and refresh, and OAuth-state cookie signing. Never entered in a browser form or exposed in page content or logs. |
 | `SCHWAB_REDIRECT_URI` | With Schwab | Must exactly match the developer portal callback; defaults to `https://soxl.ai/auth/schwab/callback`. Start authorization at `/auth/schwab/connect` on that same domain. |
-| `SCHWAB_TOKEN_FILE` | Recommended with Schwab | Private writable token file shared by this app's gateway and workers. Defaults to `/tmp/soxl-schwab/tokens.json` (ephemeral). On Coolify use `/data/schwab-tokens/tokens.json` and mount a persistent `/data` volume. Never commit or serve this file. |
 
 Schwab setup uses your own keys, not a Replit connector. Deploy this code and set
 the keys on the server serving `soxl.ai`, then open
@@ -63,8 +62,21 @@ New York time it requires `extended.lastPrice` and `extended.tradeTime`,
 otherwise `quote.lastPrice` and `quote.tradeTime`. Historical analysis data is
 unchanged. Existing benchmark sources and Polygon options remain fallbacks;
 the integration never calls trading or account endpoints. Preserve the token
-volume across redeployments; use one app instance (or a filesystem supporting
-shared POSIX locks) to prevent concurrent refresh-token rotation.
+database across redeployments. Access tokens, refresh tokens, and both expiry
+times live only in PostgreSQL, never an application file or process cache.
+The database user needs permission to create/use `public.schwab_oauth_tokens`;
+the table is initialized lazily on the first storage access. A transaction-scoped
+PostgreSQL advisory lock serializes refreshes across workers/replicas, including
+through a transaction-pooling proxy. Access tokens refresh before a market API
+call when they have five minutes or less remaining. Rotating the refresh token
+does not extend the original seven-day consent deadline. Temporary provider or
+database failures display availability errors and preserve authorization;
+only absent, expired or provider-rejected refresh credentials request consent.
+Old token files are no longer read. After the first deployment of database
+storage, authorize once at `/auth/schwab/connect` if the database has no token
+record yet. Later restarts reuse the same database record. To share authorization
+with a development preview, it too must use that same DATABASE_URL and Schwab
+client ID; a different database deliberately remains a separate connection.
 
 ## AI and text-quality providers
 

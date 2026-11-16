@@ -37,10 +37,10 @@ from seo import ABOUT_HTML, TITLE
 st.set_page_config(page_title=TITLE, page_icon="📈", layout="wide")
 
 from top_soxl_price import render_top_soxl_price
-render_top_soxl_price()
 
 current_user = get_current_user()
 render_account_header()
+render_top_soxl_price()
 from app_diagnostics import render_full_diagnostics
 render_full_diagnostics()
 
@@ -228,9 +228,6 @@ try:
 except Exception:
     quote = None
 
-st.caption("Saved market results · computed " + saved_market["computed_at"])
-
-
 @st.fragment(run_every="30s")
 def _background_update_diagnostics(saved):
     from market_health import render_diagnostics
@@ -238,9 +235,6 @@ def _background_update_diagnostics(saved):
     render_diagnostics(saved, latest=load_state())
 
 
-_background_update_diagnostics(saved_market)
-if saved_market.get("_read_warning"):
-    st.warning(saved_market["_read_warning"] + " Observation times remain unchanged.")
 def _render_summary_below_chart():
     render_market_snapshot(data, quote=quote, saved=saved_market)
     render_visitor_counter()
@@ -364,7 +358,7 @@ with price_cols[0]:
         f"""<div style="padding:6px 2px;">
             <div style="color:#6b7280;font-size:0.8rem;margin-bottom:4px;white-space:nowrap;">SOXL ({latest_date})</div>
             <div style="font-size:1.6rem;font-weight:600;color:#111827;line-height:1;white-space:nowrap;
-                        font-variant-numeric:tabular-nums;">{f"${quote['price']:,.2f}" if quote else "Schwab unavailable"}</div>
+                        font-variant-numeric:tabular-nums;">{f"${quote['price']:,.2f}" if quote else "Price unavailable"}</div>
         </div>""",
         unsafe_allow_html=True,
     )
@@ -462,7 +456,7 @@ with tab_chart:
             st.session_state.custom_benchmark = None
             st.rerun()
 
-    future_end = (datetime.now() + relativedelta(years=5)).strftime("%Y-%m-%d")
+    future_end = (datetime.now() + relativedelta(years=1)).strftime("%Y-%m-%d")
     dates_list, prices_list = clean_chart_points(data.index, data["Close"])
 
     # Keep all saved series in the browser so visibility never requires a rerun.
@@ -550,7 +544,7 @@ with tab_chart:
         custom_actual=custom_actual_list,
         lines=st.session_state.lines,
         future_end=future_end,
-        chart_height=900,
+        chart_height=650,
         market_feed=fetch_chart_market_feed(),
         key="soxl_chart",
         default=None,
@@ -1669,5 +1663,7 @@ st.markdown(
 )
 with st.expander("About SOXL Pro"):
     st.markdown(ABOUT_HTML, unsafe_allow_html=True)
+
+_background_update_diagnostics(saved_market)
 
 flush_analytics()

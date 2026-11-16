@@ -4,6 +4,7 @@
 - [Startup latency](startup-latency.md) — DB-backed saved page within two seconds; distinguish initial results from interactive readiness and preserve proxy headers.
 - [Plotly heatmap hover safety](plotly-heatmap-hover-safety.md) — mixed customdata can trigger SVG NaN errors on hover; prefer preformatted hovertext.
 - [Plotly drawn-shape events](plotly-drawn-shape-events.md) — bind drawing events through Plotly after initialization; log-axis shape coordinates are already data values.
+- [Price-axis readability](price-axis-readability.md) — adaptive labels must stay legible; fit only visible series and keep price fitting directly above the graph.
 - [Projection hit probabilities](projection-hit-probabilities.md) — show historically calibrated by-or-before hit odds directly beside projected date and price.
 - [Panel gesture priority](panel-gesture-priority.md) — slider adjustment takes priority over the panel's drag-anywhere interaction.
 - [Embedded rail regressions](embedded-rail-regressions.md) — use real Streamlit scrolling and browser layout zoom; standalone geometry misses host-container behavior.
@@ -26,3 +27,4 @@
 - [One-button diagnostics](diagnostics-contract.md) — one action, explicit evidence and coverage limits; isolated exercises must never alter the user's chart.
 - [ARM64 Python wheels](arm64-python-wheels.md) — cross-platform pip builds need several compatible manylinux tags, not only the newest tag.
 - [Schwab market-data ownership](schwab-market-data.md) — use the owner's keys directly for Coolify portability; registered OAuth callback is on soxl.ai.
+- [Tiingo price feed](tiingo-price-feed.md) — active SOXL quotes use Tiingo; valid timestamped reference prices may have null entitlement-only trade fields.

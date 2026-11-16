@@ -65,12 +65,12 @@ def fetch_chart_market_feed():
     from benchmark_quotes import read_quotes
     saved = load_state()
     payload = dict(saved.get("market_feed", {})) if saved else {"points": [], "error": "Background refresh pending"}
-    from schwab_market_data import SchwabError
+    from tiingo_market_data import TiingoError
     try:
         payload["quote"] = fetch_live_quote()
-    except (SchwabError, OSError):
+    except (TiingoError, OSError):
         payload["quote"] = None
-        payload["error"] = "Schwab price unavailable; no fallback quote is used."
+        payload["error"] = "Current price unavailable."
     payload["benchmark_quotes"] = read_quotes(st.session_state.get("custom_benchmark"))
     return payload
 

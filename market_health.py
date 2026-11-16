@@ -88,5 +88,7 @@ def render_diagnostics(saved, latest=None):
     import streamlit as st
     from market_state_store import read_health
     with st.expander("Background updates & saved data", expanded=False):
+        if saved and saved.get("_read_warning"):
+            st.warning(saved["_read_warning"] + " Observation times remain unchanged.")
         for line in diagnostic_lines(saved, read_health(refresh=True), latest=latest):
             st.text(line)

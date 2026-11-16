@@ -4,6 +4,7 @@ from html import escape
 import numpy as np
 import pandas as pd
 import streamlit as st
+from price_labels import public_price_text
 
 
 RETURN_PERIODS = OrderedDict([
@@ -84,7 +85,7 @@ def compute_market_snapshot(price_data, quote=None):
     state = (quote or {}).get("state", "")
     if (quote or {}).get("observed_label"):
         price_context = (
-            f'{quote["session"]} · {quote["source"]} · {quote["observed_label"]}'
+            f'{quote["session"]} · {quote["observed_label"]}'
             + (" · Last available quote (not live)" if quote["stale"] else " · May be delayed")
         )
     elif (quote or {}).get("extended"):
@@ -129,12 +130,11 @@ def _price_card(label, value, css_class):
 
 @st.fragment(run_every="60s")
 def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=None):
-    from schwab_market_data import SchwabError
+    from tiingo_market_data import TiingoError
     try:
         from live_market_quote import fetch_live_quote
         quote = fetch_live_quote()
-    except (SchwabError, OSError):
-        st.error("Schwab price unavailable. Market snapshot cannot show a current price.")
+    except (TiingoError, OSError):
         return
     snapshot = compute_market_snapshot(price_data, quote=quote)
     if snapshot is None:
@@ -192,7 +192,7 @@ def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=N
         <div class="soxl-market-strip">
           <div class="soxl-market-heading">
             <strong>SOXL Market Snapshot</strong>
-            <span>{escape(snapshot["price_context"])}</span>
+            <span>{escape(public_price_text(snapshot["price_context"]))}</span>
           </div>
           <div class="soxl-stat-grid">
             <div class="soxl-stat primary">
@@ -208,7 +208,7 @@ def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=N
     if refresh_quotes:
         warning = (quote or {}).get("feed_warning")
         st.caption(
-            (f"{warning}. " if warning else "")
+            (f"{public_price_text(warning)}. " if warning else "")
             + ("Quote feeds unavailable; showing historical close. " if not quote else "")
             + "Quotes checked every minute. Robinhood overnight quotes are best-effort; "
             "continuous 8 p.m.–4 a.m. coverage is not guaranteed."

@@ -1,5 +1,6 @@
 """Offline evidence checks for diagnostics and independent worker heartbeats."""
 import unittest
+import ast
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
@@ -15,6 +16,18 @@ STAMP = NOW.isoformat()
 
 
 class HealthTests(unittest.TestCase):
+    def test_background_details_render_at_the_bottom_of_the_app(self):
+        source = (Path(__file__).resolve().parents[1] / "app.py").read_text()
+        module = ast.parse(source)
+        calls = [
+            node.value.func.id for node in module.body
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+        ]
+        self.assertEqual(calls.count("_background_update_diagnostics"), 1)
+        self.assertEqual(calls[-2:], ["_background_update_diagnostics", "flush_analytics"])
+        self.assertNotIn('st.caption("Saved market results', source)
+
     def evidence(self, status="ok", stamp=STAMP):
         return {"status": status, "checked_at": STAMP,
                 "worker_read_status": "ok" if status in ("ok", "empty") else status,

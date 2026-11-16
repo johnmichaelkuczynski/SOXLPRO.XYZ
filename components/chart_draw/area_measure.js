@@ -31,11 +31,33 @@
     const follow = document.getElementById("axisAreaFollow");
     const output = document.getElementById("axisAreaOutput");
     // Keep measurements readable independently of the resizable controls panel.
-    output.style.cssText = "position:absolute;top:38px;left:70px;z-index:5;" +
+    output.style.cssText = "position:absolute;top:38px;left:70px;z-index:110;" +
       "max-width:290px;width:calc(100% - 110px);box-sizing:border-box;" +
-      "white-space:pre-line;font:12px/1.5 sans-serif;padding:10px;" +
-      "background:rgba(255,251,235,.96);color:#78350f;border:1px solid #f59e0b;" +
-      "border-radius:6px;pointer-events:none";
+      "font:16px/1.5 sans-serif;padding:12px 16px;" +
+      "background:rgba(255,255,255,.97);color:#172033;border:1px solid #cbd5e1;" +
+      "border-radius:8px;pointer-events:auto";
+    const priceText = document.createElement("div");
+    priceText.style.cssText = "font-size:28px;font-weight:800;line-height:1.2;color:#172033";
+    const dateText = document.createElement("div");
+    dateText.style.cssText = "font-size:16px;margin-top:4px";
+    const details = document.createElement("details");
+    details.style.cssText = "margin-top:8px;font-size:15px";
+    const summary = document.createElement("summary");
+    summary.textContent = "Details";
+    summary.style.cssText = "cursor:pointer;font-weight:650;padding:3px 0";
+    const detailText = document.createElement("div");
+    detailText.style.cssText = "white-space:pre-line;font-size:15px;line-height:1.5;" +
+      "max-height:220px;overflow-y:auto;padding-top:8px";
+    details.append(summary, detailText);
+    // Reuse the disclosure so quote/hover updates do not close it.
+    function conciseReadout(price, timestamp, information) {
+      priceText.textContent = "$" + price.toLocaleString("en-US", {
+        minimumFractionDigits: 2, maximumFractionDigits: price < 1 ? 6 : 2
+      });
+      dateText.textContent = date(timestamp) + (pinned ? " · Held" : "");
+      detailText.textContent = information;
+      output.replaceChildren(priceText, dateText, details);
+    }
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:4";
     svg.setAttribute("aria-hidden", "true");
@@ -90,27 +112,24 @@
       Object.entries({x:x._offset, y:y._offset, width:x._length, height:y._length})
         .forEach(([key, value]) => bounds.setAttribute(key, value));
       clip.appendChild(bounds);
-      element("rect", {x:Math.min(left,right), y:Math.min(top,bottom),
-        width:Math.abs(right-left), height:Math.abs(bottom-top), fill:"#f59e0b",
-        opacity:0.12, "clip-path":"url(#axis-area-clip)"});
-      element("path", {d:`M ${left} ${top} H ${right} V ${bottom}`,
-        fill:"none", stroke:"#b45309", "stroke-width":2, "stroke-dasharray":"5 3",
+      element("path", {d:`M ${left} ${top} H ${right}`,
+        fill:"none", stroke:"#1565c0", "stroke-width":2, "stroke-dasharray":"5 3",
         "clip-path":"url(#axis-area-clip)"});
-      element("circle", {cx:right, cy:top, r:4, fill:"#b45309", "clip-path":"url(#axis-area-clip)"});
-      const labelStyle = {fill:"#92400e", "font-size":11, "font-weight":600,
+      element("circle", {cx:right, cy:top, r:4, fill:"#1565c0", "clip-path":"url(#axis-area-clip)"});
+      const labelStyle = {fill:"#1565c0", "font-size":14, "font-weight":700,
         stroke:"white", "stroke-width":3, "paint-order":"stroke"};
       if (top >= y._offset && top <= y._offset+y._length)
         element("text", {...labelStyle, x:x._offset-4, y:top-5, "text-anchor":"end"}, "$" + fmt(point.y));
       if (right >= x._offset && right <= x._offset+x._length)
         element("text", {...labelStyle, x:Math.min(right, x._offset+x._length-38),
           y:y._offset+y._length+30, "text-anchor":"middle"}, date(result.time));
-      output.textContent = `${pinned ? "Held" : "Cursor"}: ${date(result.time)} · $${fmt(point.y)}\n` +
+      conciseReadout(point.y, result.time,
         `Fixed origin: ${date(result.start)} · $${fmt(bottomPrice)}\n` +
         `Width: ${fmt(result.days)} calendar days\n` +
         `Price–time area: ${fmt(result.dollarDays)} dollar-days\n` +
         (result.logScale ? `Log-chart area: ${fmt(result.axisArea)} log₁₀-price × days\n` : "") +
         "Held boxes move with the chart; panning and zooming preserve their area. " +
-        "These custom boxes are not validated forecasts. See the separate fixed-rule area/channel study below the chart.";
+        "These custom boxes are not validated forecasts. See the separate fixed-rule area/channel study below the chart.");
     }
     function readPoint(event) {
       const p = event && event.points && event.points[0];
@@ -124,6 +143,7 @@
       } : null;
     }
     toggle.addEventListener("click", () => {
+      if (typeof root.saveUndoState === "function") root.saveUndoState();
       enabled = !enabled;
       if (!enabled) {point = null; pinned = false;}
       toggle.setAttribute("aria-pressed", String(enabled));
@@ -131,7 +151,10 @@
       refresh();
       if (typeof root.fitRailContent === "function") root.fitRailContent();
     });
-    follow.addEventListener("click", () => {pinned = false; point = null; refresh();});
+    follow.addEventListener("click", () => {
+      if (typeof root.saveUndoState === "function") root.saveUndoState();
+      pinned = false; point = null; refresh();
+    });
     chart.on("plotly_hover", event => {
       if (!enabled || pinned) return;
       point = readPoint(event);
@@ -140,7 +163,10 @@
     chart.on("plotly_click", event => {
       if (!enabled) return;
       const selected = readPoint(event);
-      if (selected) {point = selected; pinned = true; refresh();}
+      if (selected) {
+        if (typeof root.saveUndoState === "function") root.saveUndoState();
+        point = selected; pinned = true; refresh();
+      }
     });
     chart.on("plotly_unhover", () => {
       if (enabled && !pinned) {point = null; refresh();}
@@ -148,7 +174,18 @@
     chart.on("plotly_relayout", refresh);
     chart.on("plotly_relayouting", refresh);
     chart.on("plotly_afterplot", refresh);
-    chart._axisArea = {refresh};
+    chart._axisArea = {
+      refresh,
+      snapshot: () => ({enabled, pinned, point: point ? {...point} : null}),
+      restore: state => {
+        enabled = Boolean(state && state.enabled);
+        pinned = Boolean(state && state.pinned);
+        point = state && state.point ? {...state.point} : null;
+        toggle.setAttribute("aria-pressed", String(enabled));
+        toggle.classList.toggle("active", enabled);
+        refresh();
+      }
+    };
     refresh();
   };
 })(typeof window === "undefined" ? globalThis : window);

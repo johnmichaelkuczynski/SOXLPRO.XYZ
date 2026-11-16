@@ -161,42 +161,45 @@ def _signal_card(percentile, signal, close_date):
     marker = float(np.clip(percentile, 0.0, 100.0))
     color = SIGNAL_COLORS.get(signal, "#64748b")
     display_signal = display_signal_label(signal)
+    if percentile <= RATING_THRESHOLDS["buy_max"]:
+        explanation = (
+            f"SOXL is near the bottom of its historical range ({percentile:.1f}th percentile), "
+            "a buy-side reading for a 6–12 month hold."
+        )
+    elif percentile <= RATING_THRESHOLDS["possible_buy_max"]:
+        explanation = (
+            f"SOXL is in the lower part of its historical range ({percentile:.1f}th percentile), "
+            "suggesting a possible entry for a 6–12 month hold."
+        )
+    elif percentile < RATING_THRESHOLDS["possible_sell_min"]:
+        explanation = "SOXL is near the middle of its historical range; there is no strong long-term buy or sell reading."
+    else:
+        explanation = (
+            f"SOXL is near the top of its historical range ({percentile:.1f}th percentile), "
+            "a reason for caution over a 6–12 month hold."
+        )
     bands = rating_bands()
     bar_segments = "".join(
-        f'<div style="width:{band["width"]:g}%;background:{band["color"]};"></div>'
+        f'<div title="{band["label"]}" style="width:{band["width"]:g}%;background:{band["color"]};"></div>'
         for band in bands
     )
-    grid_columns = " ".join(f'{band["width"]:g}%' for band in bands)
-    band_labels = "".join(f'<span>{band["label"]}</span>' for band in bands)
     return f"""
-    <div style="border:1px solid #e2e8f0;border-radius:14px;padding:20px 22px;
-                background:#ffffff;margin:8px 0 12px;">
-      <div style="font-size:.78rem;color:#64748b;letter-spacing:.09em;
-                  font-weight:800;">Long-term signal (6–12 months)</div>
-      <div style="font-size:2.25rem;font-weight:850;color:{color};margin:2px 0;">
+    <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;
+                background:#ffffff;margin:4px 0 6px;">
+      <div style="font-size:1rem;color:#475569;letter-spacing:.03em;
+                  font-weight:800;">6–12 MONTH OUTLOOK</div>
+      <div style="font-size:2.5rem;line-height:1.1;font-weight:850;color:{color};margin:2px 0;">
         {display_signal}
       </div>
-      <div style="font-size:.94rem;color:#475569;margin-bottom:14px;">
-        Composite historical-range percentile:
-        <strong>{percentile:.1f}%</strong> · Close through {close_date}
-      </div>
-      <div style="position:relative;padding-top:14px;">
-        <div style="display:flex;height:20px;border-radius:10px;overflow:hidden;">
+      <p style="font-size:1.125rem;line-height:1.3;color:#334155;margin:4px 0 6px;">{explanation}</p>
+      <div style="position:relative;padding-top:8px;">
+        <div style="display:flex;height:16px;border-radius:8px;overflow:hidden;">
           {bar_segments}
         </div>
-        <div style="position:absolute;left:calc({marker:.2f}% - 8px);top:4px;
-                    width:16px;height:34px;border-radius:5px;background:#111827;
+        <div style="position:absolute;left:calc({marker:.2f}% - 8px);top:0;
+                    width:16px;height:28px;border-radius:5px;background:#111827;
                     border:3px solid white;box-shadow:0 1px 5px rgba(0,0,0,.4);">
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:{grid_columns};
-                  margin-top:7px;font-size:.68rem;font-weight:750;color:#475569;
-                  text-align:center;">
-        {band_labels}
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px;
-                  color:#94a3b8;font-size:.68rem;">
-        <span>0% · period lows</span><span>100% · period highs</span>
       </div>
     </div>
     """
@@ -220,6 +223,24 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
 
     st.markdown("### SOXL Daily Signal")
     from short_term_signal_ui import render_short_term_signal, render_full_signal_report
+    from short_term_signal import load_manifest
+    try:
+        manifest = saved["manifest"] if saved else load_manifest()
+        short_summary = ("next-month calls depend on the validated short-term rule."
+                         if manifest.get("passed") else "no reliable call for the next month.")
+    except Exception:
+        short_summary = "no reliable call for the next month."
+    percentile = result["percentile"]
+    long_summary = (
+        "Near the bottom of its historical range for a 6–12 month hold"
+        if percentile <= RATING_THRESHOLDS["buy_max"] else
+        "A possible entry for a 6–12 month hold"
+        if percentile <= RATING_THRESHOLDS["possible_buy_max"] else
+        "No strong long-term buy or sell reading"
+        if percentile < RATING_THRESHOLDS["possible_sell_min"] else
+        "High in its historical range; be cautious about a 6–12 month entry"
+    )
+    st.markdown(f"**{long_summary}; {short_summary}**")
 
     long_term, short_term = st.columns(2)
     with long_term:
@@ -231,12 +252,17 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
             ),
             unsafe_allow_html=True,
         )
-        st.caption(
-            "Mean-reversion reading for 6–12 months: lower percentiles are closer "
-            "to historical lows and produce buy-side signals; higher percentiles "
-            "are closer to historical highs and produce sell-side signals. "
-            + rating_threshold_description()
-        )
+        with st.expander("How the 6–12 month outlook is calculated"):
+            st.write(
+                f"Historical-range percentile: {result['percentile']:.1f}% · "
+                f"Close through {closes.index[-1]:%Y-%m-%d}"
+            )
+            st.write("Scale: " + " · ".join(band["label"] for band in rating_bands()))
+            st.caption(
+                "Lower percentiles are closer to historical lows; higher percentiles are closer to historical highs. "
+                + rating_threshold_description()
+            )
+            st.caption("Historical-range position is not proof that buying here will be profitable.")
     with short_term:
         if saved is None:
             render_short_term_signal(closes)

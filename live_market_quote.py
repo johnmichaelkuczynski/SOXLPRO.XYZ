@@ -1,4 +1,4 @@
-"""SOXL quotes exclusively from the owner's authorized Schwab market-data API."""
+"""SOXL quotes from the owner's configured Tiingo API key."""
 import streamlit as st
 
 
@@ -6,5 +6,5 @@ import streamlit as st
 def fetch_live_quote():
     # Do not catch failures here: callers must display an error, never substitute
     # another provider, a historical close, or a previously successful quote.
-    from schwab_market_data import fetch_quote
+    from tiingo_market_data import fetch_quote
     return fetch_quote("SOXL")

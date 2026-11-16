@@ -1,21 +1,17 @@
 """Owner-authorized Schwab market data. No account or trading endpoints.
 
-Tokens are shared by the gateway and workers using a private, locked file.
-On Coolify, put SCHWAB_TOKEN_FILE on a persistent volume.
+Tokens are shared by the gateway and workers through DATABASE_URL.
 """
 from contextlib import contextmanager
 from datetime import datetime, timezone
-import fcntl
 import hashlib
-import json
 import math
 import os
-from pathlib import Path
-import tempfile
 import time
 from zoneinfo import ZoneInfo
 
 import requests
+import schwab_token_store as token_store
 
 TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
 MARKET_URL = "https://api.schwabapi.com/marketdata/v1"
@@ -47,71 +43,44 @@ def redirect_uri():
     return os.environ.get("SCHWAB_REDIRECT_URI", DEFAULT_CALLBACK).strip()
 
 
-def token_path():
-    return Path(os.environ.get("SCHWAB_TOKEN_FILE", "/tmp/soxl-schwab/tokens.json"))
-
-
 def _fingerprint():
     return hashlib.sha256(client_id().encode()).hexdigest()
 
 
 @contextmanager
 def _locked():
-    path = token_path()
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(str(path) + ".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        deadline = time.monotonic() + 12
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() > deadline:
-                    raise SchwabError("Schwab authorization is busy; retry shortly.") from None
-                time.sleep(0.05)
-        yield
-    finally:
-        os.close(fd)
+        with token_store.locked(_fingerprint()) as record:
+            yield record
+    except token_store.TokenStorageError as exc:
+        raise SchwabError(str(exc)) from None
 
 
 def _read():
     try:
-        # Tokens from a different developer app must never be reused.
-        with token_path().open() as handle:
-            value = json.load(handle)
-        return value if value.get("app") == _fingerprint() else {}
-    except (OSError, ValueError, TypeError, AttributeError):
-        return {}
-
-
-def _write(value):
-    path = token_path()
-    fd, temporary = tempfile.mkstemp(prefix=".schwab-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w") as handle:
-            json.dump(value, handle, allow_nan=False)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+        return token_store.read(_fingerprint())
+    except token_store.TokenStorageError as exc:
+        raise SchwabError(str(exc)) from None
 
 
 def status():
     """Never return tokens, client IDs, account IDs, or provider response bodies."""
     if not configured():
         return {"state": "not_configured", "message": "Schwab app keys are not configured."}
-    data = _read()
+    try:
+        data = _read()
+    except SchwabError as exc:
+        return {"state": "storage_unavailable", "message": str(exc)}
     if not data.get("refresh_token"):
         return {"state": "authorization_required",
                 "message": "Schwab keys are saved. The owner must authorize market-data access."}
-    if data.get("reauthorize"):
+    if data.get("reauthorize") or data.get("refresh_expires_at", 0) <= time.time():
         return {"state": "authorization_required",
                 "message": "Schwab authorization expired or was revoked. The owner must reconnect."}
     return {"state": "authorized", "message": "Schwab authorization is saved.",
-            "authorized_at": data.get("authorized_at")}
+            "authorized_at": data.get("authorized_at"),
+            "access_expires_at": data.get("expires_at"),
+            "refresh_expires_at": data.get("refresh_expires_at")}
 
 
 def _token_request(form):
@@ -121,7 +90,16 @@ def _token_request(form):
             auth=(client_id(), client_secret()),
             timeout=8, allow_redirects=False)
         if response.status_code in (400, 401, 403):
-            raise AuthorizationRejected("Schwab rejected authorization. Reconnect and check the app's approval and keys.")
+            try:
+                error = response.json().get("error")
+            except (ValueError, AttributeError):
+                error = None
+            if error in ("invalid_grant", "invalid_token", "expired_token"):
+                raise AuthorizationRejected(
+                    "Schwab authorization expired or was rejected. The owner must authorize Schwab at /auth/schwab/connect.")
+            if error == "invalid_client":
+                raise SchwabError("Schwab rejected the server's app credentials; check its configuration.")
+            raise SchwabError("Schwab's authorization service rejected the request; retry or check server configuration.")
         response.raise_for_status()
         data = response.json()
         if not isinstance(data.get("access_token"), str) or not data["access_token"]:
@@ -140,23 +118,40 @@ def _token_request(form):
 def exchange_code(code):
     if not configured():
         raise SchwabError("Schwab app keys are not configured.")
-    with _locked():
+    with _locked() as record:
         value = _token_request({"grant_type": "authorization_code", "code": code,
                                 "redirect_uri": redirect_uri()})
         if not value.get("refresh_token"):
             raise SchwabError("Schwab did not return a refresh token. Reconnect.")
         value.update(app=_fingerprint(), authorized_at=datetime.now(timezone.utc).isoformat())
-        _write(value)
+        value["refresh_expires_at"] = _refresh_deadline(value)
+        record.write(value)
+
+
+def _refresh_deadline(response, existing=None):
+    """Never extend the seven-day consent window just because access refreshed."""
+    deadline = existing if existing is not None else time.time() + 7 * 86400
+    lifetime = response.get("refresh_token_expires_in")
+    if lifetime is not None:
+        try:
+            seconds = float(lifetime)
+            if math.isfinite(seconds) and seconds >= 0:
+                deadline = min(deadline, time.time() + seconds)
+        except (TypeError, ValueError):
+            pass
+    return deadline
 
 
 def access_token():
     if not configured():
         raise SchwabError("Schwab app keys are not configured.")
-    with _locked():
-        value = _read()
-        if not value.get("refresh_token") or value.get("reauthorize"):
+    failure = None
+    with _locked() as record:
+        value = record.read()
+        if (not value.get("refresh_token") or value.get("reauthorize") or
+                value.get("refresh_expires_at", 0) <= time.time()):
             raise SchwabError("The owner must authorize Schwab at /auth/schwab/connect.")
-        if value.get("access_token") and float(value.get("expires_at", 0)) > time.time() + 60:
+        if value.get("access_token") and float(value.get("expires_at", 0)) > time.time() + 300:
             return value["access_token"]
         if value.get("retry_after", 0) > time.time():
             raise SchwabError("Schwab authorization is temporarily unavailable; retry shortly.")
@@ -165,17 +160,23 @@ def access_token():
                                         "refresh_token": value["refresh_token"]})
         except SchwabError as exc:
             # Preserve the refresh token after temporary failures, but avoid
-            # hammering Schwab from every benchmark worker.
+            # hammering Schwab from every benchmark worker. Commit this state
+            # before raising, so rollback does not erase the rejection/cooldown.
             value["retry_after"] = time.time() + 60
             # Only an actual rejection requires renewed owner consent.
             if isinstance(exc, AuthorizationRejected):
                 value["reauthorize"] = True
-            _write(value)
-            raise
-        value.update(refreshed)
-        value.pop("retry_after", None)
-        _write(value)
-        return value["access_token"]
+            record.write(value)
+            failure = exc
+        else:
+            deadline = _refresh_deadline(refreshed, value["refresh_expires_at"])
+            value.update(refreshed)
+            value["refresh_expires_at"] = deadline
+            value.pop("retry_after", None)
+            record.write(value)
+    if failure is not None:
+        raise failure
+    return value["access_token"]
 
 
 def _get(path, params):
@@ -185,11 +186,11 @@ def _get(path, params):
                                 headers={"Authorization": "Bearer " + token}, timeout=8,
                                 allow_redirects=False)
         if response.status_code == 401:
-            with _locked():
-                value = _read()
+            with _locked() as record:
+                value = record.read()
                 if value.get("access_token") == token:
                     value["expires_at"] = 0
-                    _write(value)
+                    record.write(value)
             raise SchwabError("Schwab rejected its access token; a refresh will be attempted on the next check.")
         if response.status_code == 403:
             raise SchwabError("Schwab denied market-data access. Check market-data entitlements.")

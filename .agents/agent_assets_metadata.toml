@@ -523,3 +523,31 @@ mtime_ms = 1792692085952
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/89ab39c3-4149-4922-9078-89a03cd0403e/31fef1a4-c0a4-432e-a8fb-5ebbc4414308"
 storage_version_token = "1792692296880297"
 content_type = "text/html"
+
+[[outputs]]
+id = "wMl4mpLFlS7CTKOrHjCs5"
+uri = "file://generated-artifacts/signal-details/compact-signal-cards.png"
+type = "image"
+title = "Updated SOXL signal cards"
+description = "Actual app screenshot: larger text, compact cards, no micro-font footnotes, and technical details kept in closed dropdowns."
+logical_id = "89181286-f29c-4344-a482-8a01e7b9abdf"
+content_hash = "sha256:2ed382140fded3fba06d0d690de7b1116881315d64d3e24e1e1f2e9280e2d04b"
+size = 178314
+mtime_ms = 1794847444604
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/89181286-f29c-4344-a482-8a01e7b9abdf/9183168b-b4ee-4cea-9308-4e2eeaca3be9"
+storage_version_token = "1794847453981032"
+content_type = "image/png"
+
+[[outputs]]
+id = "xwgtgmHvvT3hYzajtoLaM"
+uri = "file://generated-artifacts/console-free-movement/02-console-above-chart-clean.png"
+type = "image"
+title = "Console moved above the entire chart frame"
+description = "Real mouse drag verified: console top 68 pixels, chart frame top 328 pixels. Resizing, collapse/reopen, stock input and drawing/Undo also passed."
+logical_id = "a8c8061a-890c-4df0-886a-860af40ffc8e"
+content_hash = "sha256:88caab2a6692514933f55ddcb03ae69cf4132c32bf0a3ccb018a2135f2411651"
+size = 155132
+mtime_ms = 1794849672511
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/a8c8061a-890c-4df0-886a-860af40ffc8e/4e1c9ecc-3544-482a-a983-02cf42eafbb6"
+storage_version_token = "1794849840110505"
+content_type = "image/png"
