@@ -386,6 +386,7 @@
   </div>
   <button class="tbtn" onclick="resetView()">Reset View</button>
   <button class="tbtn" onclick="fitSoxlPrices(event)">Fit prices</button>
+  <button class="tbtn" id="show-future" onclick="showFutureProjection()">Show future &#8594;</button>
   <button class="tbtn" id="below-chart" onclick="jumpBelowChart(event)"
     style="font-weight:700;color:#fff;background:#175cd3;border-color:#175cd3">Below chart &#8595;</button>
   <span id="view-date-message" role="status" aria-live="polite"></span>
@@ -465,6 +466,7 @@ var plotlyEventsBound = false;
 var futureHorizonYears = 0;
 var chartWindow = null;
 var lastFittedWindow = '';
+var projectionCoverageEnd = 0;
 var undoStack = [];
 var hoveredLineIndex = -1;
 var hoveredLineDistance = Infinity;
@@ -959,7 +961,7 @@ var latestMarketQuote = null;
 var benchmarkQuotes = {};
 var customStocks = SOXLCustomStocks.install({
   base: function() { return chartData; },
-  changed: function() { renderChart(); renderBenchmarkPrices(); positionRightControlRail(); },
+  changed: function() { renderChart({fitPrices:true}); renderBenchmarkPrices(); positionRightControlRail(); },
   quotes: function(values) { Object.assign(benchmarkQuotes, values); },
   showExisting: function(symbol) {
     if (SOXLBenchmarkVisibility.names.indexOf(symbol) === -1) return false;
@@ -1066,7 +1068,10 @@ function applyBenchmarkVisibility() {
 }
 SOXLBenchmarkVisibility.subscribe(function(state) {
   benchmarkVisibility = state;
-  applyBenchmarkVisibility();
+  var visibilityUpdate = applyBenchmarkVisibility();
+  if (chartData && rendered) {
+    Promise.resolve(visibilityUpdate).then(function() { renderChart({fitPrices:true}); });
+  }
 });
 function acceptMarketFeed(payload) {
   if (!payload || typeof payload !== 'object') return;
@@ -1385,9 +1390,23 @@ function setFutureHorizon(value) {
   chartWindow=[dataDateWindow()[0],getFutureEndMs()];
   selectedRange=null;
   document.getElementById('analyze-bar').style.display='none';
-  renderChart({resetViewport: true});
+  renderChart({resetViewport: true,fitProjections:true});
   announce('Future projection horizon set to ' + futureHorizonYears + ' years.');
   trackEvent('future_horizon_changed', {years: futureHorizonYears});
+}
+
+function showFutureProjection() {
+  if (!chartData) return;
+  if (futureHorizonYears < 1) futureHorizonYears = 5;
+  document.getElementById('futureHorizon').value = String(futureHorizonYears);
+  var history = dataDateWindow();
+  var recent = new Date(history[1]);
+  recent.setUTCFullYear(recent.getUTCFullYear() - 2);
+  chartWindow = [Math.max(history[0], recent.getTime()), getFutureEndMs()];
+  selectedRange = null;
+  document.getElementById('analyze-bar').style.display = 'none';
+  renderChart({resetViewport:true,fitProjections:true});
+  announce('Showing recent prices and future trendline projections. Drag left to look further ahead.');
 }
 
 function fitSoxlPrices(event) {
@@ -1396,8 +1415,8 @@ function fitSoxlPrices(event) {
     event.stopPropagation();
   }
   if (!chartData) return;
-  renderChart({resetViewport:true});
-  announce('Chart fitted to visible prices in the selected date window.');
+  renderChart({fitPrices:true});
+  announce('Prices fitted without changing the dates you are viewing.');
   if (event) trackEvent('chart_prices_fitted', {scale: scaleMode});
 }
 
@@ -1995,7 +2014,7 @@ function inspectTrendLine(event) {
   var timestamp = x0 + xFraction * (x1 - x0);
   var yRange = layout.yaxis.range;
   var ySpan = yRange[1] - yRange[0];
-  var futureMs = getFutureEndMs();
+  var futureMs = Math.max(getFutureEndMs(), projectionCoverageEnd);
   var nearest = null;
   var requestedLine = document.getElementById('projection-line').value;
 
@@ -2361,7 +2380,7 @@ function renderChart(options) {
   var dateWindow=currentDateWindow();
   var windowKey=dateWindow.join(':');
   if(lastFittedWindow!==windowKey) {
-    options.resetViewport=true;
+    if(chartWindow) options.resetViewport=true;
     lastFittedWindow=windowKey;
     document.getElementById('start-date').value=msToDateStr(dateWindow[0]);
     document.getElementById('end-date').value=msToDateStr(dateWindow[1]);
@@ -2492,7 +2511,9 @@ function renderChart(options) {
     });
   }
 
-  var futureMs = getFutureEndMs();
+  var futureMs = Math.max(automaticLineEndMs(), dateWindow[1], projectionCoverageEnd,
+    lockedViewport ? SOXLPriceAxis.navigationDateRange(lockedViewport.xRange,dateWindow)[1] : 0);
+  projectionCoverageEnd = futureMs;
 
   for (var i = 0; i < lines.length; i++) {
     var ln = lines[i];
@@ -2582,17 +2603,24 @@ function renderChart(options) {
       trace.visible = Boolean(benchmarkVisibility[trace.name]);
   });
 
-  var xAxisRange=SOXLPriceAxis.dateRange(lockedViewport ? lockedViewport.xRange : dateWindow,dateWindow);
-  var fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote);
+  var xAxisRange=SOXLPriceAxis.navigationDateRange(lockedViewport ? lockedViewport.xRange : dateWindow,dateWindow);
+  var fitOptions = options.fitProjections || (options.fitPrices && futureHorizonYears > 0)
+    ? {includeProjections:true} : undefined;
+  var fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote,fitOptions);
   if(!fittedWindow) {
-    xAxisRange=dateWindow;
-    fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote);
+    fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote,{includeProjections:true});
+  }
+  if(!fittedWindow) {
+    fittedWindow=SOXLPriceAxis.fitWindow(traces,dateWindow,scaleMode,latestMarketQuote);
   }
   if(!fittedWindow) {
     document.getElementById('view-date-message').textContent='No valid prices in this date window.';
     return;
   }
-  var priceAxisRange=fittedWindow.range;
+  var priceAxisRange=lockedViewport && !options.fitPrices
+    ? SOXLPriceAxis.navigationPriceRange(lockedViewport.yRange,scaleMode,fittedWindow.range)
+    : SOXLPriceAxis.navigationPriceRange(fittedWindow.range,scaleMode,fittedWindow.range);
+  var navigationPriceBounds=SOXLPriceAxis.priceBounds(scaleMode);
   var priceTickConfig = SOXLPriceAxis.ticks(priceAxisRange, currentChartHeight - 88, scaleMode);
   var layout = {
     yaxis: {
@@ -2601,16 +2629,16 @@ function renderChart(options) {
       gridcolor: '#eee',
       range: priceAxisRange,
       autorange: false,
-      minallowed: priceAxisRange[0],
-      maxallowed: priceAxisRange[1],
+      minallowed: navigationPriceBounds[0],
+      maxallowed: navigationPriceBounds[1],
       fixedrange: false
     },
     xaxis: {
       type: 'date',
       range: xAxisRange.map(function(value){return new Date(value).toISOString();}),
       autorange: false,
-      minallowed: new Date(dateWindow[0]).toISOString(),
-      maxallowed: new Date(dateWindow[1]).toISOString(),
+      minallowed: SOXLPriceAxis.dateBounds[0],
+      maxallowed: SOXLPriceAxis.dateBounds[1],
       title: '', gridcolor: '#eee',
       tickformatstops: [
         {dtickrange: [null, 86400000], value: '%b %d, %Y'},
@@ -2657,7 +2685,14 @@ function renderChart(options) {
   }).then(function() {
     document.getElementById('chart-render-error').hidden = true;
     SOXLPriceAxis.install(chartDiv, function() {
-      return {window:currentDateWindow(),mode:scaleMode,quote:latestMarketQuote};
+      return {window:currentDateWindow(),mode:scaleMode,quote:latestMarketQuote,
+        onNavigate:function(range) {
+          if(lines.length && range[1] > projectionCoverageEnd) {
+            projectionCoverageEnd=Math.min(Date.parse(SOXLPriceAxis.dateBounds[1]),
+              range[1]+2*365.25*86400000);
+            renderChart();
+          }
+        }};
     });
     installAxisArea(chartDiv);
     installPriceGuide(chartDiv, function() { return latestMarketQuote; }, function() {

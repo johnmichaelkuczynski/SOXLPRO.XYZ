@@ -26,6 +26,12 @@ bottom of the page, collapsed, not above the investor-facing signals or chart.
 **Why:** The user explicitly said it belongs "way at the bottom" so it does not
 distract people deciding whether to buy SOXL.
 
+Do not show pink price-feed setup/unavailable banners or yellow database-delay
+banners in the investor interface. Retain operational evidence in diagnostics.
+
+**Why:** The user repeatedly pointed to those banners and explicitly demanded
+their removal; they distract from the price, signal, and chart.
+
 Put the custom-stock ticker input in the console's first content area, formerly
 occupied by the CHART CONTROLS heading; in a wide console it sits beside benchmarks.
 

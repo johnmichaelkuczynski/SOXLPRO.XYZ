@@ -1,4 +1,10 @@
 from datetime import datetime, timezone
+from inspect import unwrap
+from unittest.mock import patch
+
+import pytest
+import top_soxl_price
+from tiingo_market_data import TiingoError
 
 from top_soxl_price import price_display
 from price_labels import public_price_text
@@ -36,3 +42,38 @@ def test_public_errors_do_not_show_provider_names_or_raw_setup_path():
     assert "yahoo" not in text.lower()
     assert "unavailable" in text
     assert "connection page" in text
+
+
+@pytest.mark.parametrize("failure", [
+    None,
+    TiingoError("The owner must authorize price feed at the price-feed connection page."),
+    OSError("Token storage cannot be read."),
+])
+def test_missing_price_does_not_render_warning_banner_or_setup_commentary(failure):
+    with patch("live_market_quote.fetch_live_quote") as fetch, \
+         patch.object(top_soxl_price, "st") as st:
+        if isinstance(failure, Exception):
+            fetch.side_effect = failure
+        else:
+            fetch.return_value = failure
+        unwrap(top_soxl_price.render_top_soxl_price)()
+        st.error.assert_not_called()
+        st.warning.assert_not_called()
+        html = st.markdown.call_args.args[0]
+        assert "—" in html
+        assert "Current price unavailable" not in html
+        assert "authorize" not in html
+        assert "Token storage" not in html
+
+
+def test_valid_price_and_timestamp_still_render():
+    now = datetime.now(timezone.utc).isoformat()
+    with patch("live_market_quote.fetch_live_quote", return_value={
+        "source": "Tiingo", "price": 55.25, "observed_at": now,
+        "observed_label": "12:00 PM ET", "session": "Regular session",
+    }), patch.object(top_soxl_price, "st") as st:
+        unwrap(top_soxl_price.render_top_soxl_price)()
+        html = st.markdown.call_args.args[0]
+        assert "$55.25" in html
+        assert "12:00 PM ET" in html
+        st.error.assert_not_called()

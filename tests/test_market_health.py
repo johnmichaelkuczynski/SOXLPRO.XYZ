@@ -28,6 +28,10 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(calls[-2:], ["_background_update_diagnostics", "flush_analytics"])
         self.assertNotIn('st.caption("Saved market results', source)
 
+    def test_database_delay_does_not_render_warning_banner(self):
+        import inspect
+        self.assertNotIn("st.warning(", inspect.getsource(health.render_diagnostics))
+
     def evidence(self, status="ok", stamp=STAMP):
         return {"status": status, "checked_at": STAMP,
                 "worker_read_status": "ok" if status in ("ok", "empty") else status,

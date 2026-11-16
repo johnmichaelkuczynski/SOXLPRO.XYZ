@@ -51,15 +51,33 @@
         values[1]<=bounds[0] || values[0]>=bounds[1]) return bounds;
     return [Math.max(values[0],bounds[0]),Math.min(values[1],bounds[1])];
   }
-  function fitWindow(traces, window, mode, quote) {
+  const dateBounds=['1900-01-01T00:00:00Z','2200-01-01T00:00:00Z'];
+  function navigationDateRange(range, fallback) {
+    const values=Array.isArray(range)?range.map(timestamp):[];
+    const bounds=dateBounds.map(timestamp);
+    return values.length===2 && values.every(Number.isFinite) &&
+      values[1]>values[0] && values[0]>=bounds[0] && values[1]<=bounds[1]
+      ? values : fallback.map(timestamp);
+  }
+  function priceBounds(mode) { return mode==='log'?[-12,12]:[0,1e12]; }
+  function navigationPriceRange(range, mode, fallback) {
+    if(!Array.isArray(range) || range.length!==2 || !range.every(Number.isFinite) ||
+        range[1]<=range[0]) return fallback.slice();
+    const bounds=priceBounds(mode);
+    const values=[Math.max(bounds[0],range[0]),Math.min(bounds[1],range[1])];
+    return values[1]>values[0]?values:fallback.slice();
+  }
+  function fitWindow(traces, window, mode, quote, options) {
     const dates=window.map(timestamp),prices=[];
     (traces||[]).forEach(trace=>{
+      const projection=trace.meta && trace.meta.channelLineIndex!==undefined;
       if (trace.visible===false || trace.visible==='legendonly' ||
-          (trace.meta && trace.meta.channelLineIndex!==undefined)) return;
+          (projection && !(options && options.includeProjections))) return;
       const x=trace.x||[],y=trace.y||[];
       for(let i=0;i<Math.min(x.length,y.length);i++) {
         const when=timestamp(x[i]),price=Number(y[i]);
-        if(when>=dates[0] && when<=dates[1] && Number.isFinite(price) && price>0)
+        if(when>=dates[0] && when<=dates[1] && Number.isFinite(price) && price>0 &&
+            (!projection || (price>=1e-12 && price<=1e12)))
           prices.push(price);
       }
     });
@@ -79,16 +97,16 @@
       if (!chart._fullLayout || !chart.layout) return;
       if (pending) { queued=true;return; }
       const options=chart._priceAxisOptions(),axis=chart._fullLayout.yaxis;
-      let xRange=dateRange(chart._fullLayout.xaxis.range,options.window);
-      let fitted=fitWindow(chart.data,xRange,options.mode,options.quote);
-      if(!fitted) {
-        xRange=options.window.map(timestamp);
-        fitted=fitWindow(chart.data,xRange,options.mode,options.quote);
-      }
+      const xRange=navigationDateRange(chart._fullLayout.xaxis.range,options.window);
+      const fitted=fitWindow(chart.data,options.window,options.mode,options.quote);
       if(!fitted) return;
-      const config=ticks(fitted.range,axis._length,options.mode);
-      config.range=fitted.range;config.autorange=false;
-      config.minallowed=fitted.range[0];config.maxallowed=fitted.range[1];
+      // Refresh labels, not the user's viewport. A valid pan/zoom must survive
+      // mouse release and live-price updates, including future-only windows.
+      const range=navigationPriceRange(axis.range,options.mode,fitted.range);
+      const config=ticks(range,axis._length,options.mode);
+      config.range=range;config.autorange=false;
+      const limits=priceBounds(options.mode);
+      config.minallowed=limits[0];config.maxallowed=limits[1];
       const update={};
       Object.keys(config).forEach(key=>{
         const current=key==='range'?axis.range:chart.layout.yaxis[key];
@@ -97,6 +115,7 @@
       const currentX=chart._fullLayout.xaxis.range.map(timestamp);
       if(currentX.some((value,i)=>Math.abs(value-xRange[i])>1))
         update['xaxis.range']=xRange.map(value=>new Date(value).toISOString());
+      if(options.onNavigate) options.onNavigate(xRange);
       if(!Object.keys(update).length) return;
       update['yaxis.autorange']=false;
       pending = true;
@@ -111,7 +130,8 @@
     chart._readablePriceAxis = {refresh};
     refresh();
   }
-  const api = {ticks,label,fit,dateRange,fitWindow,install};
+  const api = {ticks,label,fit,dateRange,navigationDateRange,navigationPriceRange,
+    priceBounds,dateBounds,fitWindow,install};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SOXLPriceAxis = api;
 })(typeof window !== 'undefined' ? window : globalThis);

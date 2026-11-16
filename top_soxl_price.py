@@ -49,15 +49,17 @@ def render_top_soxl_price():
         price, context = None, "Current price unavailable. " + public_price_text(exc)
     except OSError:
         price, context = None, "Current price unavailable. Token storage cannot be read."
-    if price is None:
-        st.error(context)
     display = f"${price:,.2f}" if price is not None else "—"
+    context_html = (
+        '<div style="font-size:.85rem;color:#475569;margin-top:6px;">'
+        f'{escape(context)}</div>'
+        if price is not None and context else ""
+    )
     st.markdown(
         '<section aria-label="Latest SOXL price" style="margin:0 0 16px;">'
         '<div style="font-size:1rem;font-weight:750;color:#475569;">SOXL</div>'
         f'<div style="font-size:clamp(3.5rem,8vw,6rem);font-weight:800;'
         f'line-height:1.1;color:#0f172a;font-variant-numeric:tabular-nums;">{display}</div>'
-        f'<div style="font-size:.85rem;color:#475569;margin-top:6px;">'
-        f'{escape(context)}</div></section>',
+        f'{context_html}</section>',
         unsafe_allow_html=True,
     )

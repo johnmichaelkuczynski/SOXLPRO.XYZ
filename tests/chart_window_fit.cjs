@@ -39,7 +39,19 @@ const html=fs.readFileSync('components/chart_draw/index.html','utf8');
 assert.doesNotMatch(html,/inclination-slider|Chart incline|Adjust Inclination|sliderInclinationBase/);
 assert.match(html,/function resetView\(\)[\s\S]*?return renderChart\(\{resetViewport:true\}\)/);
 assert.match(html,/futureHorizonYears = 0/);
-assert.match(html,/fitWindow\(traces,xAxisRange,scaleMode,latestMarketQuote\)/);
+assert.match(html,/fitWindow\(traces,xAxisRange,scaleMode,latestMarketQuote,fitOptions\)/);
+assert.match(html,/id="show-future" onclick="showFutureProjection\(\)"/);
+assert.doesNotMatch(html,/minallowed: new Date\(dateWindow/);
+const future=['2030-01-01','2035-01-01'];
+assert.deepEqual(axis.navigationDateRange(future,full),future.map(Date.parse));
+assert.deepEqual(axis.navigationDateRange(['2090-01-01','3200-01-01'],full),full.map(Date.parse));
+assert.deepEqual(axis.navigationPriceRange([1,3],'log',result.range),[1,3]);
+assert.deepEqual(axis.navigationPriceRange([60,78],'log',result.range),result.range);
+const futureLine={meta:{channelLineIndex:0},x:future,y:[100,250]};
+assert.equal(axis.fitWindow([futureLine],future,'log'),null);
+assert.equal(axis.fitWindow([futureLine],future,'log',null,{includeProjections:true}).max,250);
+assert.equal(axis.fitWindow([projection],full,'log',null,{includeProjections:true}),null,
+  'Even explicit projection fitting rejects astronomical extrapolation values');
 // Exercise the actual controller, including an extreme range during a pending update.
 let updates=0;const handlers={};
 const chart={data:[soxl,projection],layout:{yaxis:{}},_fullLayout:{
@@ -59,10 +71,18 @@ global.Plotly={relayout:(_chart,update)=>{
   axis.install(chart,()=>({window:full,mode:'log',quote:null}));
   chart._fullLayout.yaxis.range=[62,78];handlers.plotly_relayout();
   await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(chart._fullLayout.yaxis.range,result.range);
-  assert.equal(chart.layout.yaxis.ticktext.length,6);
-  chart._fullLayout.xaxis.range=full;handlers.plotly_relayout();
-  await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(chart._fullLayout.yaxis.range,axis.fitWindow([soxl],full,'log').range);
-  console.log('Window-fit tests passed: selected dates, 7.5% padding, true log coordinates, 5–8 dollar labels, overlays, excluded projections, UTC dates, extreme-range recovery, reset and removed incline.');
+  assert.equal(chart.layout.yaxis.ticktext.length,6);
+  chart._fullLayout.xaxis.range=future;
+  chart._fullLayout.yaxis.range=[1,3];
+  handlers.plotly_relayout();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(chart._fullLayout.xaxis.range,future,'Releasing a future pan must not snap to historical dates');
+  assert.deepEqual(chart._fullLayout.yaxis.range,[1,3],'A valid manual zoom must survive fitting callbacks');
+  handlers.plotly_afterplot();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(chart._fullLayout.xaxis.range,future,'Subsequent redraws preserve future navigation');
+  assert.deepEqual(chart._fullLayout.yaxis.range,[1,3]);
+  assert.ok(updates<8);
+  console.log('Window-fit tests passed: sensible historical fit, readable ticks, persistent future pan/zoom, explicit projection fitting, UTC dates and extreme-range protection.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
