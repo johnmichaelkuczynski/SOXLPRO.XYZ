@@ -3,10 +3,11 @@
 
   function placement(state, viewport, frame, plot) {
     const margin = 8;
-    const floor = Math.max(margin, viewport.header + margin);
-    const width = Math.min(state.width, viewport.width - margin * 2);
-    const height = Math.max(140, Math.min(state.height, viewport.height - floor - margin));
     const free = state.dock === "free";
+    const floor = free ? margin : Math.max(margin, viewport.header + margin);
+    const width = Math.min(state.width, viewport.width - margin * 2);
+    const minimumHeight = Math.min(140, Math.max(48, viewport.height - floor - margin));
+    const height = Math.max(minimumHeight, Math.min(state.height, viewport.height - floor - margin));
     const below = state.dock === "bottom";
     const origin = frame.top + (below ? plot.parking : plot.top) + 12;
     const end = frame.top + (below ? plot.parking + height + 24 : plot.bottom);
@@ -16,9 +17,20 @@
     const left = Math.max(margin, Math.min(Number.isFinite(wantedLeft) ? wantedLeft : margin,
       viewport.width - width - margin));
     const wantedTop = free && Number.isFinite(state.top) ? state.top : origin;
-    const top = Math.max(floor, Math.min(wantedTop, free ? viewport.height - 64 : Number.MAX_VALUE));
-    return {left, top, width, maxHeight: Math.max(140, Math.min(height, viewport.height - top - margin)),
+    const top = Math.max(floor, Math.min(wantedTop,
+      free ? viewport.height - minimumHeight - margin : Number.MAX_VALUE));
+    return {left, top, width, maxHeight: Math.max(minimumHeight, Math.min(height, viewport.height - top - margin)),
       visible: free || (origin < viewport.height - 140 && end > floor + 20)};
+  }
+
+  function edgeScrollVelocity(pointerY, viewportHeight) {
+    if (!Number.isFinite(pointerY) || !Number.isFinite(viewportHeight) || viewportHeight <= 0)
+      return 0;
+    const edge = Math.min(56, viewportHeight / 3);
+    if (pointerY < edge) return -Math.min(28, 4 + (edge - pointerY) * 0.4);
+    if (pointerY > viewportHeight - edge)
+      return Math.min(28, 4 + (pointerY - viewportHeight + edge) * 0.4);
+    return 0;
   }
 
   function scopeRules(rules, prefix) {
@@ -161,7 +173,7 @@
     }
   }
 
-  const api = {placement, scopeRules, install};
+  const api = {placement, edgeScrollVelocity, scopeRules, install};
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SOXLFloatingConsole = api;
 })(typeof window !== "undefined" ? window : globalThis);

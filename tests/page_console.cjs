@@ -13,7 +13,19 @@ assert.equal(free.maxHeight,720);
 assert.ok(free.visible);
 const edges=portal.placement({...base,left:2000,top:-500},viewport,frame,plot);
 assert.equal(edges.left,992);
-assert.equal(edges.top,56,"Only the app viewport/header bounds constrain a free console.");
+assert.equal(edges.top,8,"Free movement includes the page-header area, not only the chart.");
+const bottomEdge=portal.placement({...base,top:5000},viewport,frame,plot);
+assert.ok(bottomEdge.top+bottomEdge.maxHeight<=viewport.height-8,
+  "A free panel must retain a reachable internal scroll area at the bottom edge.");
+for(const top of [8,80,250,500]) {
+  const box=portal.placement({...base,top},viewport,{...frame,top:1500},plot);
+  assert.equal(box.top,top,"The offscreen chart must not constrain page-wide placement.");
+  assert.ok(box.visible);
+}
+assert.ok(portal.edgeScrollVelocity(10,900)<0);
+assert.ok(portal.edgeScrollVelocity(890,900)>0);
+assert.equal(portal.edgeScrollVelocity(450,900),0);
+assert.equal(portal.edgeScrollVelocity(NaN,900),0);
 const docked=portal.placement({...base,dock:"right"},viewport,frame,plot);
 assert.equal(docked.left,908);
 assert.equal(docked.top,812);
@@ -44,6 +56,11 @@ assert.match(html,/pointerDocument\.addEventListener\('pointermove', moveRail\)/
 assert.match(html,/pointerDocument\.addEventListener\('pointermove', resizeRail\)/);
 assert.match(html,/handle\.setPointerCapture\(event\.pointerId\)/);
 assert.match(html,/pageConsole && pageConsole\.active/);
+assert.match(html,/requestAnimationFrame\(scrollAtPageEdge\)/);
+assert.match(html,/cancelAnimationFrame\(edgeScrollFrame\)/);
+assert.match(html,/pointerDocument\.defaultView \|\| window/,
+  "Use the owning page's animation clock when the chart iframe scrolls out of view.");
+assert.match(html,/toolbarEl\.addEventListener\('lostpointercapture', stopMoving/);
 assert.match(html,/editrevision: JSON\.stringify\(lines\)/,
   "Plotly must discard temporary drawn shapes when the persisted line model changes.");
 console.log("Page console passed: above-frame movement, viewport bounds, docking, scoped styles, parent-document pointers, resizing capture and diagnostics isolation.");

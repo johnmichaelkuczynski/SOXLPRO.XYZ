@@ -51,3 +51,16 @@ actual Streamlit host. Preserve the existing drawing model and control callbacks
 when changing the console's hosting document; pointer events must follow that
 document. Isolated diagnostic frames must never promote controls onto the user's
 main page.
+
+Free dragging includes the app-header region. Holding the pointer at a viewport
+edge must scroll the actual Streamlit page so the same drag can reach sections
+above or below the currently visible chart. Stop scrolling on release, cancel,
+lost capture, or disposal; isolated diagnostics must not scroll the user page.
+
+**Why:** The user repeated that the panel must move anywhere in the app, not
+merely across the graph or within one visible screen.
+
+**How to apply:** Schedule drag animation on the controls' owning window. The
+chart iframe can scroll out of view while its promoted controls remain visible;
+depending on the child frame's animation clock can stall the visible interaction.
+Keep minimum readable panel height inside the viewport at its lower edge.

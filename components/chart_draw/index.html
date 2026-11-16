@@ -763,8 +763,32 @@ toolbarEl.addEventListener('pointerdown', function(event) {
   var startY = event.clientY;
   var startRect = toolbarEl.getBoundingClientRect();
   var pointerDocument = toolbarEl.ownerDocument;
+  var pointerWindow = pointerDocument.defaultView || window;
   var requestedHeight = parseFloat(toolbarEl.style.height) || startRect.height;
   var moving = false;
+  var edgeScrollFrame = null;
+  var pointerY = startY;
+  var isolatedDrag = new URLSearchParams(window.location.search).has('diagnostics_sandbox');
+
+  function scrollAtPageEdge() {
+    edgeScrollFrame = null;
+    if (!moving || isolatedDrag) return;
+    try {
+      var promoted = pageConsole && pageConsole.active;
+      var inFrame = window.frameElement && window.parent;
+      var parentY = promoted || !inFrame ? pointerY :
+        window.frameElement.getBoundingClientRect().top + pointerY;
+      var viewportHeight = inFrame ? window.parent.innerHeight : window.innerHeight;
+      var distance = SOXLFloatingConsole.edgeScrollVelocity(parentY, viewportHeight);
+      if (!distance) return;
+      scrollRailParent({top:distance, behavior:'instant'});
+      positionRightControlRail();
+      // The owning page stays visible even when the chart iframe scrolls away.
+      edgeScrollFrame = pointerWindow.requestAnimationFrame(scrollAtPageEdge);
+    } catch (error) {
+      // A restricted third-party embed may not expose its page scroll owner.
+    }
+  }
 
   function moveRail(moveEvent) {
     var dx = moveEvent.clientX - startX;
@@ -781,17 +805,17 @@ toolbarEl.addEventListener('pointerdown', function(event) {
     railDock = 'free';
     railFreeLeft = startRect.left + dx;
     railFreeTop = startRect.top + dy;
+    pointerY = moveEvent.clientY;
     positionRightControlRail();
-    try {
-      if (!(pageConsole && pageConsole.active) && window.parent && window.frameElement) {
-        var pointerInParent = window.frameElement.getBoundingClientRect().top + moveEvent.clientY;
-        if (pointerInParent > window.parent.innerHeight - 45) scrollRailParent({top: 24});
-        if (pointerInParent < 45) scrollRailParent({top: -24});
-      }
-    } catch (error) {}
+    if (edgeScrollFrame === null)
+      edgeScrollFrame = pointerWindow.requestAnimationFrame(scrollAtPageEdge);
   }
   function stopMoving() {
     if (moving) suppressPanelClick = true;
+    moving = false;
+    if (edgeScrollFrame !== null) pointerWindow.cancelAnimationFrame(edgeScrollFrame);
+    edgeScrollFrame = null;
+    toolbarEl.removeEventListener('lostpointercapture', stopMoving);
     if (toolbarEl.hasPointerCapture && toolbarEl.hasPointerCapture(event.pointerId)) {
       toolbarEl.releasePointerCapture(event.pointerId);
     }
@@ -803,6 +827,7 @@ toolbarEl.addEventListener('pointerdown', function(event) {
   pointerDocument.addEventListener('pointermove', moveRail);
   pointerDocument.addEventListener('pointerup', stopMoving);
   pointerDocument.addEventListener('pointercancel', stopMoving);
+  toolbarEl.addEventListener('lostpointercapture', stopMoving, {once:true});
   toolbarEl.addEventListener('console-dispose', stopMoving, {once:true});
 });
 

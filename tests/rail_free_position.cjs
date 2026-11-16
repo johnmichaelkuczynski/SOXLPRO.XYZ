@@ -8,12 +8,13 @@ const toolbar = {style:{height:"600px"}, offsetWidth:280, offsetHeight:600};
 const tab = {style:{}};
 const context = {
   toolbarEl:toolbar, railDock:"free", railFreeTop:100, railFreeLeft:400,
+  pageConsole:null,
   railTopOffset:0, railManuallySized:true, railCollapsed:false,
   fitRailContent(){}, positionRailResizeHandles(){},
   visibleRailBounds:()=>({top:12,bottom:1200}),
   document:{
     documentElement:{clientWidth:1200},
-    getElementById:id => id === "inclination-bar" ?
+    getElementById:id => id === "chart-view-bar" ?
       {offsetTop:400,offsetHeight:80} : tab
   }
 };
