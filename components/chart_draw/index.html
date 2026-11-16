@@ -15,6 +15,10 @@
 <style id="chart-controls-styles">
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: transparent; overflow-x: hidden; position: relative; }
+  #chart-render-error {
+    background: transparent !important; border: 0 !important; color: #334155 !important;
+  }
+  #custom-stock-status { color: #334155 !important; }
   #toolbar {
     display: flex; position: absolute; z-index: 300; right: 12px; top: 12px;
     width: 250px; height: 720px; padding: 0;
@@ -1104,30 +1108,23 @@ function updateMarketFeedStatus() {
   if (latestMarketQuote) {
     var q = latestMarketQuote;
     status.textContent = 'SOXL $' + q.price.toFixed(2) + ' · ' + q.session +
-      ' · ' + q.observed_label +
-      (Date.now() - Date.parse(q.observed_at) > 900000 ? ' · Last available quote (not live)' : ' · May be delayed') +
-      (marketFeedError ? ' · ' + publicPriceText(marketFeedError) : '');
-    status.title = 'Latest trade and observation time. Historical chart bars are separate from the current quote. ' +
-      publicPriceText(q.feed_warning) + ' Checked: ' + q.checked_at;
+      ' · ' + q.observed_label;
+    status.title = '';
     return;
   }
-  if (marketFeedError) { status.textContent = publicPriceText(marketFeedError); return; }
-  status.textContent = 'Current price unavailable.';
-  status.title = 'Historical chart data is not a current quote.';
+  status.textContent = '';
+  status.title = '';
 }
 
 function updateMarketSummary() {
   var state = document.getElementById('market-summary-state');
   [['Regular session','regular'],['After-hours','post'],['Pre-market','pre']].forEach(function(pair) {
     var last = latestMarketQuote && latestMarketQuote.session === pair[0] ? latestMarketQuote : null;
-    document.getElementById('market-' + pair[1] + '-price').textContent = last ? '$' + last.price.toFixed(4) : 'Unavailable';
+    document.getElementById('market-' + pair[1] + '-price').textContent = last ? '$' + last.price.toFixed(4) : '—';
     document.getElementById('market-' + pair[1] + '-time').textContent = last
-      ? last.observed_label : 'No trade supplied for this session.';
+      ? last.observed_label : '';
   });
-  state.textContent = publicPriceText(marketFeedError) || (marketFeed
-    ? 'Feed checked: ' + new Date(marketFeed.checked).toLocaleString('en-US', {timeZone:'America/New_York'}) +
-      ' ET. Each session shows its own latest available timestamp.'
-    : 'Waiting for price data.');
+  state.textContent = '';
 }
 
 function soxlMarketTrace() {

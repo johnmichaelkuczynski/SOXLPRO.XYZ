@@ -132,11 +132,9 @@ class SeoDocumentTests(unittest.TestCase):
             "SOXL Pro is a research app for SOXL, the Direxion Daily Semiconductor Bull 3X Shares ETF.",
             initial_text,
         )
-        self.assertIn(
-            "SOXL Pro provides educational research tools, not investment advice.",
-            initial_text,
-        )
-        self.assertIn("Leveraged ETFs and options can produce substantial losses.", initial_text)
+        self.assertIn("options risk and reward analysis", initial_text)
+        self.assertNotIn("not investment advice", initial_text.lower())
+        self.assertNotIn("Past performance", initial_text)
 
     def test_robots_are_explicitly_environment_specific(self):
         self.assertEqual(robots_txt(production=False), "User-agent: *\nDisallow: /\n")

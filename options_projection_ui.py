@@ -113,16 +113,6 @@ def _fan_chart(result, premium, contracts, horizon_date, position_view):
     return fig
 
 
-def _disclosure():
-    st.caption(
-        "Experimental, unvalidated model; not investment advice. Approximate "
-        "Black–Scholes European pricing is used for American options and does not "
-        "capture early exercise or assignment. IV scenarios are assumptions, not "
-        "calibrated probabilities. Quotes are snapshots, not a live-price or "
-        "execution guarantee. Profit estimates exclude fees, slippage and taxes."
-    )
-
-
 @st.dialog("Options projection", width="large")
 def _projection_dialog(history, contract):
     st.markdown(f"**{_contract_label(contract)}**")
@@ -187,7 +177,6 @@ def _projection_dialog(history, contract):
         "Chart view", ["Option premium", "Position P/L"], horizontal=True,
         key=key + "_view",
     )
-    _disclosure()
     if premium is None:
         st.info("Enter a purchase premium to calculate this scenario.")
         return
@@ -330,12 +319,6 @@ def render_options_projection(history: pd.DataFrame):
         "multiplier": "Multiplier",
     })
     st.dataframe(table, hide_index=True, width="stretch")
-    st.caption(
-        "Timestamps are supplied by the provider. Quotes may be delayed or stale; "
-        "underlying and option observations may have different timestamps."
-    )
-    if any(row.get("delayed") is True for row in chain):
-        st.info("Schwab labels these option quotes delayed. They are not real-time execution prices.")
     selected = st.selectbox(
         "Select contract", range(len(chain)),
         format_func=lambda index: _contract_label(chain[index]),

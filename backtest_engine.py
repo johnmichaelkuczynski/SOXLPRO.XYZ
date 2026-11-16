@@ -1062,10 +1062,7 @@ def render_calibration_chart(predicted_probs, realized_outcomes, n_bins=10):
     return fig, brier
 
 
-DISCLAIMER = (
-    "*Past performance does not guarantee future results. Backtests are subject to "
-    "lookahead bias, survivorship bias, and overfitting.*"
-)
+DISCLAIMER = ""  # Compatibility for callers of older report helpers.
 
 # ---------------------------------------------------------------------------
 # Report builders (TXT / CSV / DOCX / PDF) for downloadable backtest results
@@ -1111,11 +1108,6 @@ def build_report_text(title, params, methodology, stats_rows, date_range=None):
         lines.append("  ".join("-" * w for w in widths))
         for r in rows:
             lines.append(fmt.format(*r))
-    lines.append("")
-    lines.append("DISCLAIMER")
-    lines.append("-" * 78)
-    lines.append("Past performance does not guarantee future results. Backtests are subject")
-    lines.append("to lookahead bias, survivorship bias, and overfitting.")
     lines.append("")
     return "\n".join(lines)
 
@@ -1165,14 +1157,6 @@ def build_report_docx(title, params, methodology, stats_rows, date_range=None):
             for ci, val in enumerate(row):
                 table.rows[ri].cells[ci].text = val
 
-    doc.add_heading("Disclaimer", level=2)
-    p = doc.add_paragraph(
-        "Past performance does not guarantee future results. Backtests are subject "
-        "to lookahead bias, survivorship bias, and overfitting."
-    )
-    for run in p.runs:
-        run.italic = True
-        run.font.size = Pt(9)
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -1228,12 +1212,6 @@ def build_report_pdf(title, params, methodology, stats_rows, date_range=None):
         elements.append(table)
     elements.append(Spacer(1, 14))
 
-    elements.append(Paragraph("Disclaimer", styles["Heading2"]))
-    elements.append(Paragraph(
-        "Past performance does not guarantee future results. Backtests are "
-        "subject to lookahead bias, survivorship bias, and overfitting.",
-        italic_small,
-    ))
     doc.build(elements)
     return buf.getvalue()
 

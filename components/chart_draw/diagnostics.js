@@ -53,7 +53,7 @@
         const quote=benchmarkQuotes[name]||{};
         assert(Number.isFinite(quote.price)&&quote.price>0&&Number.isFinite(Date.parse(quote.observed_at)),
           'The displayed benchmark quote is unavailable or has no valid observation time.');
-        return `Latest available observation: ${quote.price}; ${quote.observed_at}. Not a guarantee of real-time data.`;
+        return `Latest available observation: ${quote.price}; ${quote.observed_at}.`;
       },'Quote readouts');
     }
     let frame;

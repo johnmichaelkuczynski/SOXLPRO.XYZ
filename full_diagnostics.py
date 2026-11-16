@@ -137,8 +137,7 @@ def _saved_checks():
                datetime.fromisoformat(quote["observed_at"].replace("Z", "+00:00"))).total_seconds()
         rows.append(result("SOXL quote observation age", "Freshness",
                            "pass" if 0 <= age <= 900 and not quote.get("stale") else "warning",
-                           f"Observation is {round(age / 60, 1)} minutes old. Closed markets can explain age; "
-                           "a stored quote is not guaranteed real-time."))
+                           f"Observation is {round(age / 60, 1)} minutes old."))
     except (KeyError, ValueError, TypeError):
         rows.append(result("SOXL quote observation age", "Freshness", "fail", "No valid observation timestamp."))
     return rows

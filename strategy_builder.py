@@ -90,6 +90,7 @@ def generate_strategy(messages, close_prices):
     prob_table = compute_probability_table(close_prices, horizons, magnitudes)
 
     system_prompt = f"""You are an expert SOXL (Direxion Daily Semiconductor Bull 3X Shares) strategy architect. You help users build personalized entry/exit strategies based on historical statistical analysis.
+Do not include legal disclaimers or boilerplate warning paragraphs.
 
 CURRENT MARKET DATA (as of {stats['date']}):
 - Current Price: ${stats['current_price']}
@@ -146,8 +147,7 @@ WHEN GENERATING THE FINAL STRATEGY, you MUST output it in this exact format betw
       "probability": "XX%",
       "source": "Based on X-day horizon, Y% magnitude"
     }}
-  ],
-  "disclaimer": "Personally constructed strategy document. Not financial advice. Leveraged ETFs can go to zero."
+  ]
 }}
 ===STRATEGY_END===
 
@@ -220,7 +220,7 @@ def parse_strategy_json(text):
     data.setdefault("summary", "")
     data.setdefault("reserve", {})
     data.setdefault("probabilities_used", [])
-    data.setdefault("disclaimer", "Not financial advice. Leveraged ETFs can go to zero.")
+    data.pop("disclaimer", None)
 
     reserve = data["reserve"]
     reserve.setdefault("amount", "")
@@ -345,9 +345,6 @@ def render_strategy_html(strategy):
             </table>
         </div>
 
-        <div class="disclaimer">
-            &#9888; {esc(strategy.get('disclaimer', 'Not financial advice. Leveraged ETFs can go to zero.'))}
-        </div>
     </div>
     """
     return html

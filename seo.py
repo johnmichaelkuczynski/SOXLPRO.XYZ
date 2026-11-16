@@ -19,15 +19,7 @@ ABOUT_HTML = """<section aria-label="About SOXL Pro">
 such as QQQ, and study historical price-move probabilities.</p>
 <p>The app includes options risk and reward analysis, volatility tools,
 SOXL–QQQ comparisons, strategy backtesting, and an AI-assisted strategy builder.
-Historical estimates depend on the selected data window and model assumptions;
-they are not guaranteed forecasts.</p>
-<h3>Understand the risks</h3>
-<p>SOXL seeks three times the daily performance of its semiconductor index,
-before fees and expenses. Daily resetting and compounding mean returns over
-longer periods can differ substantially from three times the index return.
-Leveraged ETFs and options can produce substantial losses.</p>
-<p>SOXL Pro provides educational research tools, not investment advice.
-Past performance does not guarantee future results. Market data may be delayed.</p>
+Historical estimates use the selected data window and model settings.</p>
 </section>"""
 
 

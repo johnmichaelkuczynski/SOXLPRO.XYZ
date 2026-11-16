@@ -31,9 +31,6 @@ def price_display(saved):
         context = " · ".join(str(part) for part in (
             quote.get("session"),
             quote.get("observed_label") or observed.isoformat(),
-            "Last available price (not live)"
-            if (datetime.now(timezone.utc) - observed).total_seconds() > 900
-            else ("Delayed" if quote.get("delayed") else None),
         ) if part)
         return price, public_price_text(context)
     return None, "Current price unavailable."

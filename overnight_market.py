@@ -125,9 +125,7 @@ def overnight_chart(rows):
 def render_overnight_market():
     with st.container(border=True):
         st.subheader("SOXL Overnight · After-hours & Pre-market")
-        st.caption("Automatic refresh every 60 seconds while this page is open. "
-                   "Source: Yahoo Finance · 5-minute price bars, which may be delayed. "
-                   "Not a real-time quote or a continuous 24-hour feed.")
+        st.caption("5-minute price bars · Refreshes every 60 seconds.")
         if st.button("Refresh overnight prices", key="refresh_overnight"):
             fetch_overnight_market.clear()
         payload = fetch_overnight_market()
@@ -156,12 +154,7 @@ def render_overnight_market():
         col_move.metric("Overnight move", f"${latest.change:+,.4f}", f"{latest.change_pct:+.2f}%")
         col_range.metric("Observed 5-minute closing range",
                          f"${night.price.min():,.2f} – ${night.price.max():,.2f}")
-        st.caption("Latest price bar starts: " + time_label(latest.time) +
-                   ". Bar timestamps are not trade-by-trade quote timestamps.")
-        age_minutes = (pd.Timestamp.now(tz=ET) - latest.time).total_seconds() / 60
-        if age_minutes > 15:
-            st.info("Historical session data: the latest available price bar is more than 15 minutes old. "
-                    "The extended-hours session may be closed, or the feed may be delayed.")
+        st.caption("Latest price bar starts: " + time_label(latest.time))
         for column, label in zip(st.columns(2), ("After-hours", "Pre-market")):
             segment = night[night.session == label]
             if segment.empty:

@@ -21,10 +21,8 @@ import streamlit as st
 
 
 INTERPRETATION_TEXT = (
-    "This tool tests statistical associations in historical data. It does not "
-    "establish causation or guarantee future performance. A relationship is "
-    "meaningful only if it remains stable in untouched out-of-sample data and "
-    "adds value beyond standard volatility and momentum measures."
+    "Tests historical statistical associations, out-of-sample stability, and "
+    "incremental value beyond standard volatility and momentum measures."
 )
 
 ANCHOR_MODES = {

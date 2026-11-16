@@ -390,8 +390,7 @@ def render_call_risk_reward_tab():
     metric_cols[2].metric("Expirations", f"{len(expirations)}")
     metric_cols[3].metric("Chain fetched", fetched_at.strftime("%H:%M:%S"))
     st.caption(
-        f"Snapshot fetched {fetched_at.strftime('%Y-%m-%d %H:%M:%S')} local server time. "
-        "Quotes may be delayed; bid/ask quality varies outside regular market hours."
+        f"Snapshot fetched {fetched_at.strftime('%Y-%m-%d %H:%M:%S')} local server time."
     )
 
     with st.container(border=True):
@@ -542,15 +541,7 @@ def render_call_risk_reward_tab():
   open-interest shortfall versus 500 contracts.
 
 The probability uses the contract's current implied volatility and a constant
-risk-free rate. It is a risk-neutral model estimate—not a forecast of SOXL's
-actual return and not a guarantee. Contracts with missing or implausible IV keep
+risk-free rate. It is a risk-neutral model estimate. Contracts with missing or implausible IV keep
 their exact payoff scenarios but show no probability or Risk Score.
             """
         )
-
-    st.warning(
-        "Model limitations: unchanged inputs, no dividends or borrow effects, no "
-        "volatility-skew evolution, no jumps or leveraged-ETF path decay, no early "
-        "exercise, commissions, taxes, or slippage beyond buying at the ask. "
-        "This is scenario analysis, not investment advice."
-    )

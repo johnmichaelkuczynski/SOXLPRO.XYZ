@@ -68,7 +68,7 @@ def render_validation():
             a.metric("Observed profitable trades", f'{summary["observed_profit_rate"]:.1%}')
             b.metric("Mean forecast probability", f'{summary["mean_predicted"]:.1%}')
             c.metric("Scored trade horizons", summary["n"])
-            st.caption("These are historical measurements, not a recommendation or validated future success rate.")
+            st.caption("Historical measurements.")
             st.dataframe(pd.DataFrame(summary["calibration_bins"]), hide_index=True)
             st.json({"overall": summary, "by_expiry_regime_and_horizon":
                      report["groups"].get("expiry_regime_horizon", {})}, expanded=False)

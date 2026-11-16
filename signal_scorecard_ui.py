@@ -51,8 +51,7 @@ def render_rating_scorecard(closes, current_rating):
                                key="daily_rating_signal_type",
                                help="These labels mean how long after a signal we look for SOXL to finish higher: "
                                     "about 1 month for Short-term, or 6–12 months for Long-term. "
-                                    "They do NOT mean how much past data is used to calculate the signal. "
-                                    "A rise is not guaranteed.")
+                                    "They do NOT mean how much past data is used to calculate the signal.")
     if signal_type == "Short-term":
         st.caption("Reconstructed deployment policy on 2019 onward—not recommendations issued in real time. "
                    "The untouched candidate's separate training/test results appear in the frozen study.")
@@ -124,11 +123,6 @@ def render_rating_scorecard(closes, current_rating):
     if spaced and count < 20:
         st.warning("Too thin to trust: fewer than 20 non-overlapping observations.")
     st.caption(f"{pending:,} selected-rating observations are still awaiting their full outcome and are excluded from performance statistics.")
-    st.warning(
-        "These are historical conditional outcomes, not a proven success probability for the "
-        "next trade. Daily observations can overlap and share the same rally or decline. "
-        "The comparison is descriptive, not proof that the rating adds predictive value."
-    )
 
     with st.expander("Compare every rating"):
         table = summary.copy()

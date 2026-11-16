@@ -11,7 +11,7 @@ from data_providers import (
 from backtest_engine import (
     equity_curve_from_returns, buy_and_hold_curve, compute_stats,
     random_entry_baseline, render_equity_chart, render_calibration_chart,
-    DISCLAIMER, TRADING_DAYS,
+    TRADING_DAYS,
     build_report_text, build_report_csv, build_report_docx, build_report_pdf,
     safe_filename,
     soxl_allocation_engine, simulate_allocation_engine, ALLOCATION_DEFAULTS,
@@ -84,7 +84,6 @@ def _render_results(strategy_eq, soxl_df, qqq_df, trade_returns, holding_days, t
         {"Series": "Random Entry Baseline",   **compute_stats(rand_eq, returns=pd.Series(rand_trades), n_trades=len(rand_trades))},
     ]
     st.dataframe(pd.DataFrame(stats_rows), use_container_width=True, hide_index=True)
-    st.caption(DISCLAIMER)
     _render_download_buttons(title, params, methodology, stats_rows,
                               date_range=(soxl_df.index.min().date(), soxl_df.index.max().date()))
 
@@ -234,7 +233,6 @@ def _probability_engine_tab():
         })
         with st.expander("Show forecast log"):
             st.dataframe(forecast_df.tail(200), use_container_width=True, hide_index=True)
-        st.caption(DISCLAIMER)
 
         title = f"Probability Engine — {magnitude}% move within {horizon}d"
         stats_rows = [
@@ -567,7 +565,6 @@ def _vol_surface_tab():
                                   "volume", "mid", "entry_close", "exit_close", "days_observed",
                                   "pnl_pct"] if c in rdf.columns]
         st.dataframe(rdf[show_cols], use_container_width=True, hide_index=True)
-        st.caption(DISCLAIMER)
 
         title = f"Vol Surface signals — {int(max_contracts)} contracts, {int(holding_days)}d hold"
         valid = rdf.dropna(subset=["pnl_pct"]) if "pnl_pct" in rdf.columns else pd.DataFrame()
@@ -1374,7 +1371,6 @@ def _allocation_engine_tab():
             })
             st.dataframe(show.tail(500), use_container_width=True)
 
-        st.caption(DISCLAIMER)
 
         # --- Downloads ---
         if len(equity) >= 2:

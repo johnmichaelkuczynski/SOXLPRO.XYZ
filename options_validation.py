@@ -300,10 +300,10 @@ def run_study(history, quotes, sessions, config=StudyConfig()):
         "groups": grouped, "observations": rows, "exclusions": excluded,
         "limitations": [
             "User-supplied historical snapshots; provenance and full contract-universe coverage require independent audit.",
-            "Entry ask and exit bid plus fees/slippage; quote liquidity and fills are not guaranteed.",
+            "Entry ask and exit bid plus fees/slippage.",
             "Future half-spread is held at entry half-spread for forecasts, not learned from future quotes.",
             "Daily path extremes use only supplied regular-close sessions, exclude entry, and are not intraday extremes.",
-            "Overlapping trades are dependent; monthly block intervals are descriptive, not proof of calibration.",
+            "Overlapping trades are dependent; monthly block intervals are descriptive.",
             "CRR uses continuous yield; discrete ex-dividend exercise, assignments and corporate actions are not modeled.",
             "IV may be European-implied; American/midpoint residuals are diagnostics, not isolated causal pricing errors.",
             "No automatic strengthening of claims, even with large samples or favorable scores.",

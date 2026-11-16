@@ -253,10 +253,6 @@ def render_price_scenario(closes, current_price, quote_label):
         )
 
     st.caption(
-        "These estimates rely purely on model assumptions, NOT validated "
-        "predictive probabilities or a recommendation. This method is separate "
-        "from the old analogue validation. The existing daily "
-        "rating is not a guarantee; NO EDGE and all daily signal readings "
-        "remain unchanged."
+        "Model-based scenario estimates. Daily signals remain separate."
     )
     _method_help()

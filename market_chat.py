@@ -608,7 +608,8 @@ def answer_market_question(
     )
     catalog = _evidence_catalog(intelligence)
     catalog.update(PRODUCT_EVIDENCE)
-    system = """You are the conversational intelligence inside SOXL Pro. Users
+    system = """You are the conversational intelligence inside SOXL Pro.
+Do not include legal disclaimers or boilerplate warning paragraphs. Users
 may talk with you naturally about the entire app, not only the chart. Answer
 their latest question directly, organically, and in plain English. Use prior
 conversation for context.
@@ -713,11 +714,5 @@ forward evidence and treat findings as research context."""
         parts.append(
             f"**Data basis:** {intelligence['analysis_basis']} "
             f"Daily-close data is current through {intelligence['as_of']}."
-        )
-    if asks_for_market_evidence:
-        parts.append(
-            "_Risk note: SOXL is a leveraged ETF. Historical relationships can "
-            "break down quickly, so this is research context—not personalized "
-            "investment advice._"
         )
     return "\n\n".join(parts)

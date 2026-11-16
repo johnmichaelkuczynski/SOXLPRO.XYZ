@@ -35,6 +35,8 @@ from seo import ABOUT_HTML, TITLE
 
 
 st.set_page_config(page_title=TITLE, page_icon="📈", layout="wide")
+from clean_presentation import apply_clean_presentation
+apply_clean_presentation()
 
 from top_soxl_price import render_top_soxl_price
 

@@ -84,14 +84,11 @@ def compute_market_snapshot(price_data, quote=None):
 
     state = (quote or {}).get("state", "")
     if (quote or {}).get("observed_label"):
-        price_context = (
-            f'{quote["session"]} · {quote["observed_label"]}'
-            + (" · Last available quote (not live)" if quote["stale"] else " · May be delayed")
-        )
+        price_context = f'{quote["session"]} · {quote["observed_label"]}'
     elif (quote or {}).get("extended"):
         price_context = "Pre-market" if state == "PRE" else "After hours"
     elif quote_price is not None:
-        price_context = "Live market price"
+        price_context = "SOXL price"
     else:
         price_context = f"Close · {latest_date:%b %-d, %Y}"
 
@@ -205,11 +202,3 @@ def render_market_snapshot(price_data, quote=None, refresh_quotes=False, saved=N
         </div>
         """
     st.markdown(html.replace("\n", ""), unsafe_allow_html=True)
-    if refresh_quotes:
-        warning = (quote or {}).get("feed_warning")
-        st.caption(
-            (f"{public_price_text(warning)}. " if warning else "")
-            + ("Quote feeds unavailable; showing historical close. " if not quote else "")
-            + "Quotes checked every minute. Robinhood overnight quotes are best-effort; "
-            "continuous 8 p.m.–4 a.m. coverage is not guaranteed."
-        )

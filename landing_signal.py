@@ -262,7 +262,6 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
                 "Lower percentiles are closer to historical lows; higher percentiles are closer to historical highs. "
                 + rating_threshold_description()
             )
-            st.caption("Historical-range position is not proof that buying here will be profitable.")
     with short_term:
         if saved is None:
             render_short_term_signal(closes)
@@ -278,7 +277,7 @@ def render_landing_signal(price_data, saved=None, quote=None, after_chart=None):
         observed = (quote or {}).get("observed_at") or "timestamp unavailable"
         quote_label = (
             f"Latest available SOXL quote: ${scenario_price:,.2f} · Observed: {observed}. "
-            "Same saved snapshot as the market summary above; not guaranteed real-time."
+            "Same saved snapshot as the market summary above."
         )
     else:
         scenario_price = float(closes.iloc[-1])
@@ -324,9 +323,7 @@ Overbought above 80%.
 
 **Long-term signal (6–12 months):** {rating_threshold_description()}
 
-The dashboard uses completed daily closing prices beginning in 2010. It is a
-historical mean-reversion indicator, not a guarantee or personalized investment
-advice.
+The dashboard uses completed daily closing prices beginning in 2010.
             """
         )
     return chart_slot

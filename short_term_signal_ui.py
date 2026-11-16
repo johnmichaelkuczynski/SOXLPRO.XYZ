@@ -71,7 +71,7 @@ def render_short_term_signal(closes, saved=None):
         st.write(manifest["rule_text"])
         st.caption("Selected using 2010–2018 only; frozen before 2019–2026 evaluation. "
                    "Required: at least 30 non-overlapping observations and +10 percentage points versus baseline.")
-        st.caption("Historical conditional outcomes, not a guaranteed probability for the next trade. "
+        st.caption("Historical conditional outcomes. "
                    "Drawdowns use closing prices, not intraday lows. No costs or slippage.")
         report = REPORT_PATH
         if report.exists():
