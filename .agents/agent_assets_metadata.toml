@@ -551,3 +551,73 @@ mtime_ms = 1794849672511
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/a8c8061a-890c-4df0-886a-860af40ffc8e/4e1c9ecc-3544-482a-a983-02cf42eafbb6"
 storage_version_token = "1794849840110505"
 content_type = "image/png"
+
+[[outputs]]
+id = "hmujCaEpfIiHsxUxzQF-I"
+uri = "file://generated-artifacts/clean-interface/no-warning-panels.jpg"
+type = "image"
+title = "Updated interface without warning panels"
+description = "Verified rendered page after removing price-feed notices and disclaimer blocks. Missing-price and unconfigured-key cases were checked separately and display no price warning."
+logical_id = "f379b937-b033-4569-8280-dfe15397dec3"
+content_hash = "sha256:dca242f163a4e84d01fad5ac2b2732749bd91d07b7c29711f80d69dadf6fa888"
+size = 164133
+mtime_ms = 1794852966816
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/f379b937-b033-4569-8280-dfe15397dec3/d237a934-5e01-4ffc-9d06-2405c2301568"
+storage_version_token = "1794853016192805"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "2c7ac9ejT1sYtgaheOY3e"
+uri = "file://generated-artifacts/earliest-outlook/earliest-historical-outlook.jpg"
+type = "image"
+title = "Earliest historical outlook replaces the next-month dead end"
+description = "Verified rendered card: one trading day, 53% historical higher-close frequency, and 110 non-overlapping matching outcomes. Baseline and statistical evidence are available in the dropdown."
+logical_id = "3a1e9951-9c2c-4673-9b28-a13c2f7de015"
+content_hash = "sha256:083689241f4303948135151ea792d40f5f8057c5d7725173d1d33eac66bc4da3"
+size = 110552
+mtime_ms = 1794853974969
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/3a1e9951-9c2c-4673-9b28-a13c2f7de015/68ee5d22-8411-4f11-9f8d-a6c275881c11"
+storage_version_token = "1794854064335801"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "rfoDOKNka4qyCHNKN7CnZ"
+uri = "file://generated-artifacts/panel-page-movement/01-panel-above-chart.png"
+type = "image"
+title = "Panel manually dragged above the entire chart"
+description = "Captured after a real drag and release at the top of the app. The panel is above the chart iframe, and the existing drawn line was preserved. This demonstrates free placement, not a changed default position."
+logical_id = "ba31c62a-4a31-4aad-8702-7060de38fac2"
+content_hash = "sha256:f898a8769cfda274fabcd526c8bc91ab02ada8444815d523e2ff1148aa04256d"
+size = 172463
+mtime_ms = 1794854955119
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/ba31c62a-4a31-4aad-8702-7060de38fac2/e01e26bc-4a50-4d26-88a5-a24cc37e1152"
+storage_version_token = "1794855162015862"
+content_type = "image/png"
+
+[[outputs]]
+id = "XiSTb-8c0s5t__euLrWGs"
+uri = "file://generated-artifacts/panel-page-movement/02-panel-bottom-outside-graph.png"
+type = "image"
+title = "Panel manually dragged into the lower analysis section"
+description = "Captured after dragging to the lower screen edge and scrolling down the app. The chart is offscreen, the panel remains reachable, and page scrolling stopped on release."
+logical_id = "7ba25978-0043-4893-80b5-4874ae3dae91"
+content_hash = "sha256:001e8b56358e1fa3ad8690b7624576ab8b3fed5b4441a5b63acd8e40da41dfe9"
+size = 127460
+mtime_ms = 1794855039560
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/7ba25978-0043-4893-80b5-4874ae3dae91/9befd7a9-2725-42f5-a685-89f73aeebf23"
+storage_version_token = "1794855162734724"
+content_type = "image/png"
+
+[[outputs]]
+id = "gw_zGrHAt8qkHRBnFMCiX"
+uri = "file://generated-artifacts/future-navigation-2075/03-fixed-released-future-pan.png"
+type = "image"
+title = "Future chart position retained after dragging and releasing"
+description = "Verified in the rendered app: the 2071–2081 window stayed in place after a real leftward drag and release. The future projection is visible with six readable dollar labels; Fit prices preserved the dates and the original trendline."
+logical_id = "60bfd80d-ccab-43cb-bd90-7d989f4d4f68"
+content_hash = "sha256:911e860da6be1cd03f13ee91d2314753d7c48997a0a053b55b2886c0307d4ff0"
+size = 132960
+mtime_ms = 1794856198511
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/60bfd80d-ccab-43cb-bd90-7d989f4d4f68/566acf47-4031-401d-8bfe-d21efdf1251d"
+storage_version_token = "1794856333365007"
+content_type = "image/png"
