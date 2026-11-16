@@ -1187,11 +1187,43 @@ function refreshMarketTrace() {
 }
 
 chartDiv.addEventListener('pointerdown', function() { chartGestureActive = true; }, true);
-document.addEventListener('pointerup', function() {
+function finishChartGesture() {
+  if (!chartGestureActive) return;
   chartGestureActive = false;
-  if (pendingMarketUpdate) setTimeout(refreshMarketTrace, 150);
-});
-document.addEventListener('pointercancel', function() { chartGestureActive = false; });
+  // Pointer-up precedes Plotly's native mouse-up. Let it commit the displayed
+  // ranges before changing labels, extending projections or accepting new data.
+  setTimeout(function() {
+    if (chartGestureActive) return;
+    if (!chartRenderTask && pendingChartRender) {
+      var next = pendingChartRender;
+      pendingChartRender = null;
+      renderChart(next);
+    } else if (chartDiv._readablePriceAxis) {
+      chartDiv._readablePriceAxis.refresh();
+    }
+    if (pendingMarketUpdate) refreshMarketTrace();
+  }, 0);
+}
+document.addEventListener('pointerup', finishChartGesture, true);
+document.addEventListener('pointercancel', finishChartGesture, true);
+// Releasing outside the iframe must not leave the chart permanently "dragging".
+var gestureParentDocument = null;
+try {
+  if (window.parent !== window &&
+      !new URLSearchParams(window.location.search).has('diagnostics_sandbox')) {
+    gestureParentDocument = window.parent.document;
+    gestureParentDocument.addEventListener('pointerup', finishChartGesture, true);
+    gestureParentDocument.addEventListener('pointercancel', finishChartGesture, true);
+  }
+} catch (error) { /* A restricted embed retains its own document listeners. */ }
+function detachChartGestureParent() {
+  if (!gestureParentDocument) return;
+  gestureParentDocument.removeEventListener('pointerup', finishChartGesture, true);
+  gestureParentDocument.removeEventListener('pointercancel', finishChartGesture, true);
+  gestureParentDocument = null;
+}
+window.addEventListener('pagehide', detachChartGestureParent, {once:true});
+toolbarEl.addEventListener('console-dispose', detachChartGestureParent, {once:true});
 
 window.addEventListener("message", function(event) {
   if (!event.data) return;
@@ -2373,7 +2405,9 @@ function handlePlotlyRelayout(eventData) {
 }
 
 function captureChartViewport() {
-  var layout = chartDiv.layout;
+  // _fullLayout is what is actually displayed. Input layout can still contain
+  // the pre-drag range while Plotly is completing a native pan/zoom.
+  var layout = chartDiv._fullLayout || chartDiv.layout;
   if (!layout || !layout.xaxis || !layout.yaxis ||
       !Array.isArray(layout.xaxis.range) || !Array.isArray(layout.yaxis.range)) {
     return null;
@@ -2391,9 +2425,9 @@ function renderChart(options) {
   options = options || {};
   // Streamlit and market-feed updates can arrive while Plotly is rebuilding.
   // Finish that rebuild before applying the newest arguments.
-  if (chartRenderTask) {
+  if (chartRenderTask || chartGestureActive) {
     pendingChartRender = Object.assign({}, pendingChartRender || {}, options);
-    return chartRenderTask;
+    return chartRenderTask || Promise.resolve();
   }
   if(selectedRange && !selecting) {
     chartWindow=[Date.parse(selectedRange.start+'T00:00:00Z'),
@@ -2626,7 +2660,7 @@ function renderChart(options) {
   });
 
   var xAxisRange=SOXLPriceAxis.navigationDateRange(lockedViewport ? lockedViewport.xRange : dateWindow,dateWindow);
-  var fitOptions = options.fitProjections || (options.fitPrices && futureHorizonYears > 0)
+  var fitOptions = options.fitProjections || (options.fitPrices && xAxisRange[1] > dataDateWindow()[1])
     ? {includeProjections:true} : undefined;
   var fittedWindow=SOXLPriceAxis.fitWindow(traces,xAxisRange,scaleMode,latestMarketQuote,fitOptions);
   if(!fittedWindow) {
@@ -2644,6 +2678,9 @@ function renderChart(options) {
     : SOXLPriceAxis.navigationPriceRange(fittedWindow.range,scaleMode,fittedWindow.range);
   var navigationPriceBounds=SOXLPriceAxis.priceBounds(scaleMode);
   var priceTickConfig = SOXLPriceAxis.ticks(priceAxisRange, currentChartHeight - 88, scaleMode);
+  var priceLabelWidth = Math.max.apply(null, (priceTickConfig.ticktext || []).map(function(text) {
+    return text.length * 7 + 16;
+  }));
   var layout = {
     yaxis: {
       type: scaleMode, tickprefix: '$', title: '',
@@ -2674,7 +2711,7 @@ function renderChart(options) {
     width: Math.round(document.getElementById('chart-scroll').clientWidth * currentChartWidth / 100),
     height: currentChartHeight,
     // Reserve a header row for the live quote so it cannot cover the legend.
-    margin: {l: 65, r: 20, t: 48, b: 40},
+    margin: {l: Math.max(65, Math.min(180, priceLabelWidth)), r: 20, t: 48, b: 40},
     uirevision: 'explicit-viewport-lock',
     // Native drawline shapes are temporary input; persisted lines render as
     // traces. Do not let the stable viewport revision preserve those shapes
@@ -2708,6 +2745,7 @@ function renderChart(options) {
     document.getElementById('chart-render-error').hidden = true;
     SOXLPriceAxis.install(chartDiv, function() {
       return {window:currentDateWindow(),mode:scaleMode,quote:latestMarketQuote,
+        gestureActive:chartGestureActive,
         onNavigate:function(range) {
           if(lines.length && range[1] > projectionCoverageEnd) {
             projectionCoverageEnd=Math.min(Date.parse(SOXLPriceAxis.dateBounds[1]),

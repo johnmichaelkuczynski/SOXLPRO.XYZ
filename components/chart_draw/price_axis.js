@@ -37,6 +37,7 @@
   }
   function timestamp(value) {
     if(typeof value==='number') return value;
+    if(Object.prototype.toString.call(value)==='[object Date]') return value.getTime();
     // Plotly's timezone-less date strings are UTC chart coordinates, not the
     // browser's local timezone. Treating them as local causes relayout loops.
     let text=String(value||'').replace(' ','T');
@@ -97,6 +98,7 @@
       if (!chart._fullLayout || !chart.layout) return;
       if (pending) { queued=true;return; }
       const options=chart._priceAxisOptions(),axis=chart._fullLayout.yaxis;
+      if(options.gestureActive) return;
       const xRange=navigationDateRange(chart._fullLayout.xaxis.range,options.window);
       const fitted=fitWindow(chart.data,options.window,options.mode,options.quote);
       if(!fitted) return;
@@ -110,10 +112,15 @@
       const update={};
       Object.keys(config).forEach(key=>{
         const current=key==='range'?axis.range:chart.layout.yaxis[key];
-        if(JSON.stringify(current)!==JSON.stringify(config[key])) update['yaxis.'+key]=config[key];
+        if(JSON.stringify(current)!==JSON.stringify(config[key]) ||
+            (key==='range' && JSON.stringify(chart.layout.yaxis.range)!==JSON.stringify(config.range)))
+          update['yaxis.'+key]=config[key];
       });
       const currentX=chart._fullLayout.xaxis.range.map(timestamp);
-      if(currentX.some((value,i)=>Math.abs(value-xRange[i])>1))
+      const inputX=chart.layout.xaxis && chart.layout.xaxis.range || [];
+      if(currentX.some((value,i)=>!Number.isFinite(value) || Math.abs(value-xRange[i])>1) ||
+          inputX.length!==2 ||
+          inputX.map(timestamp).some((value,i)=>!Number.isFinite(value) || Math.abs(value-xRange[i])>1))
         update['xaxis.range']=xRange.map(value=>new Date(value).toISOString());
       if(options.onNavigate) options.onNavigate(xRange);
       if(!Object.keys(update).length) return;

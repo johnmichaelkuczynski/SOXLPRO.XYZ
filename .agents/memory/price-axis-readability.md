@@ -49,3 +49,25 @@ active relayouts without replacing valid user-selected ranges.
 Interpret Plotly timezone-less date/time range strings as UTC chart coordinates.
 **Why:** Browser-local parsing changes them in non-UTC timezones and can make
 the range-repair listener repeatedly relayout an already-correct date range.
+
+Preserve the displayed Plotly viewport, not merely its input layout. Defer label
+relayouts and projection rebuilds during a chart gesture, then resume after native
+mouse-up has committed. Synchronize input ranges to the displayed ranges before
+label-only redraws.
+
+**Why:** Plotly's input layout can still hold historical bounds while the visible
+chart has already panned decades ahead. Copying those stale bounds into a
+projection rebuild reproduces the user's reported snap-back around 2075.
+
+**How to apply:** Use the live full layout for viewport capture, including both
+axes. Release/cancel outside the iframe must also finish the gesture. Explicit
+future-price fitting follows the dates actually viewed, not a horizon dropdown
+that manual navigation need not change. Initial historical fitting remains
+separate from manual navigation.
+
+Handle actual Date objects, including those from another window, before applying
+string timezone normalization.
+
+**Why:** Projection samples use Date objects. Treating their human-readable
+strings as ISO text made all projection timestamps invalid, silently dropped
+their prices from fitting, and substituted a historical Y-axis in a future view.

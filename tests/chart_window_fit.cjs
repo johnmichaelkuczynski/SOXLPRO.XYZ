@@ -50,6 +50,14 @@ assert.deepEqual(axis.navigationPriceRange([60,78],'log',result.range),result.ra
 const futureLine={meta:{channelLineIndex:0},x:future,y:[100,250]};
 assert.equal(axis.fitWindow([futureLine],future,'log'),null);
 assert.equal(axis.fitWindow([futureLine],future,'log',null,{includeProjections:true}).max,250);
+for(const x of [
+  future.map(value=>new Date(value)),
+  require('node:vm').runInNewContext("['2030-01-01','2035-01-01'].map(value=>new Date(value))")
+]) {
+  const datedProjection={meta:{channelLineIndex:0},x,y:[100,250]};
+  assert.equal(axis.fitWindow([datedProjection],future,'log',null,{includeProjections:true})?.max,250,
+    'Actual projection traces contain Date objects, including dates from another window');
+}
 assert.equal(axis.fitWindow([projection],full,'log',null,{includeProjections:true}),null,
   'Even explicit projection fitting rejects astronomical extrapolation values');
 // Exercise the actual controller, including an extreme range during a pending update.
@@ -77,11 +85,11 @@ global.Plotly={relayout:(_chart,update)=>{
   chart._fullLayout.yaxis.range=[1,3];
   handlers.plotly_relayout();
   await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(chart._fullLayout.xaxis.range,future,'Releasing a future pan must not snap to historical dates');
+  assert.deepEqual(chart._fullLayout.xaxis.range.map(Date.parse),future.map(Date.parse),'Releasing a future pan must not snap to historical dates');
   assert.deepEqual(chart._fullLayout.yaxis.range,[1,3],'A valid manual zoom must survive fitting callbacks');
   handlers.plotly_afterplot();
   await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(chart._fullLayout.xaxis.range,future,'Subsequent redraws preserve future navigation');
+  assert.deepEqual(chart._fullLayout.xaxis.range.map(Date.parse),future.map(Date.parse),'Subsequent redraws preserve future navigation');
   assert.deepEqual(chart._fullLayout.yaxis.range,[1,3]);
   assert.ok(updates<8);
   console.log('Window-fit tests passed: sensible historical fit, readable ticks, persistent future pan/zoom, explicit projection fitting, UTC dates and extreme-range protection.');
