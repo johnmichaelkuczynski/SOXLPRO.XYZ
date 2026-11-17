@@ -36,7 +36,8 @@ for(const mode of ['log','linear']) for(const height of [212,562,1200]) {
 assert.deepEqual(axis.dateRange(['1950-01-01','3200-01-01'],full),full.map(Date.parse));
 assert.deepEqual(axis.dateRange(['2024-01-01 00:00:00','2024-02-01 23:59:59.999'],full),recent.map(Date.parse),'Plotly timezone-less coordinates are UTC');
 const html=fs.readFileSync('components/chart_draw/index.html','utf8');
-assert.doesNotMatch(html,/inclination-slider|Chart incline|Adjust Inclination|sliderInclinationBase/);
+assert.match(html,/id="inclination-slider"/);
+assert.match(html,/Chart incline/);
 assert.match(html,/function resetView\(\)[\s\S]*?return renderChart\(\{resetViewport:true\}\)/);
 assert.match(html,/futureHorizonYears = 0/);
 assert.match(html,/fitWindow\(traces,xAxisRange,scaleMode,latestMarketQuote,fitOptions\)/);

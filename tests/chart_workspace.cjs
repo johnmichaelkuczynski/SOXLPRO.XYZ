@@ -25,18 +25,22 @@ const lines = types.map((kind, index) => ({
 }));
 const input = {value: "2020-01-01"}, output = {};
 const context = {lines, scaleMode: "log", SOXLChannelResize: {priceAt},
-  document: {getElementById: id => id === "channel-price-date" ? input : output},
+  chartData: {dates:["2020-01-01"], prices:[10]},
+  msToDateStr: time => new Date(time).toISOString().slice(0, 10),
+  setFrameHeight() {},
+  document: {body:{scrollHeight:1000}, getElementById: id => id === "channel-price-date" ? input : output},
   addAutomaticChannelLine() { throw Error("Existing lines must not be replaced"); }};
 vm.createContext(context);
 vm.runInContext("function showChannelPricesForDate() {" + source + "\nshowChannelPricesForDate();", context);
 assert.match(output.textContent, /Low: \$5\.00.*Median: \$10\.00.*High: \$20\.00/);
-assert.match(output.textContent, /not actual daily trading highs\/lows/);
+assert.match(output.textContent, /2020-01-01/);
 lines[0].y1 = 3;
 vm.runInContext("showChannelPricesForDate()", context);
 assert.match(output.textContent, /Low: \$3\.00/);
 input.value = "";
 vm.runInContext("showChannelPricesForDate()", context);
-assert.equal(output.textContent, "Choose a date first.");
+assert.equal(input.value, "2020-01-01");
+assert.match(output.textContent, /Low: \$3\.00/);
 assert.match(html, /width: calc\(100% - 308px\)/);
 assert.match(html, /id="chart-size-grip"/);
 assert.ok(html.indexOf('id="chart-action-row"') < html.indexOf('id="chart-scroll"'));

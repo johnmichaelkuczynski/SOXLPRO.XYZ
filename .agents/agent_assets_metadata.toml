@@ -621,3 +621,17 @@ mtime_ms = 1794856198511
 storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/60bfd80d-ccab-43cb-bd90-7d989f4d4f68/566acf47-4031-401d-8bfe-d21efdf1251d"
 storage_version_token = "1794856333365007"
 content_type = "image/png"
+
+[[outputs]]
+id = "hQ5cvQzHzwE496Db0KBXh"
+uri = "file://generated-artifacts/chart-incline/restored-control.jpg"
+type = "image"
+title = "Chart incline restored above the graph"
+description = "Current preview showing the restored Flatter–Steeper slider and prefilled channel-price date."
+logical_id = "7395fc26-4e1b-41db-b156-6e190e314c9e"
+content_hash = "sha256:21644e8f7afecd55cf061917e7592cfcbc5415f1be1be86f4369836c3767f449"
+size = 201276
+mtime_ms = 1794929793192
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:de52bbfd-5370-42e6-ac3b-722069d4df4a/7395fc26-4e1b-41db-b156-6e190e314c9e/6af87dcb-a1ba-4336-9875-a6b9125baefe"
+storage_version_token = "1794929838626932"
+content_type = "image/jpeg"

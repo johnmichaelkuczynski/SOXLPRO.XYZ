@@ -377,7 +377,7 @@
 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;">
   <label for="channel-price-date">Channel prices on</label>
   <input id="channel-price-date" type="date" style="font:inherit;padding:6px;border:1px solid #cbd5e1;border-radius:5px;">
-  <button class="tbtn" onclick="showChannelPricesForDate()">Show low / median / high</button>
+  <button id="show-channel-prices" class="tbtn" onclick="showChannelPricesForDate()">Show low / median / high</button>
   <div id="channel-date-prices" role="status" aria-live="polite" style="width:100%;font-size:16px;"></div>
 </div>
 <div id="chart-view-bar" style="position:relative;z-index:30;background:#edf3fa;border:1px solid #cad7e5;border-radius:7px;padding:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -390,6 +390,14 @@
   </div>
   <button class="tbtn" onclick="resetView()">Reset View</button>
   <button class="tbtn" onclick="fitSoxlPrices(event)">Fit prices</button>
+  <label for="inclination-slider"><strong>Chart incline</strong> — Flatter</label>
+  <input id="inclination-slider" aria-label="Chart incline: flatter to steeper"
+    type="range" min="20" max="180" value="100" step="5"
+    style="flex:1;min-width:140px;max-width:300px;cursor:ew-resize"
+    onpointerdown="captureInclinationBase()" onkeydown="captureInclinationBase()"
+    oninput="applyInclinationSlider(this.value)">
+  <span>Steeper</span>
+  <output id="inclination-value" for="inclination-slider">100%</output>
   <button class="tbtn" id="show-future" onclick="showFutureProjection()">Show future &#8594;</button>
   <button class="tbtn" id="below-chart" onclick="jumpBelowChart(event)"
     style="font-weight:700;color:#fff;background:#175cd3;border-color:#175cd3">Below chart &#8595;</button>
@@ -1285,6 +1293,10 @@ window.addEventListener("message", function(event) {
      renderBenchmarkPrices();
      renderBenchmarkToggles();
      configureKeyboardDateInputs();
+    var channelPriceDate = document.getElementById('channel-price-date');
+    if (!channelPriceDate.value && chartData.dates.length) {
+      channelPriceDate.value = msToDateStr(new Date(chartData.dates[chartData.dates.length - 1]).getTime());
+    }
     if (!rendered) {
       lines = (args.lines || []).slice();
       rendered = true;
@@ -1497,6 +1509,48 @@ function setChartHeight(value) {
     positionRightControlRail();
     setFrameHeight(document.body.scrollHeight + 20);
   });
+}
+
+var sliderInclinationBase = null;
+function resetInclinationSlider() {
+  sliderInclinationBase = null;
+  document.getElementById('inclination-slider').value = 100;
+  document.getElementById('inclination-value').textContent = '100%';
+}
+
+function captureInclinationBase() {
+  var viewport = captureChartViewport();
+  if (!viewport || !viewport.yRange) return;
+  var range = viewport.yRange.map(Number);
+  var percent = Number(document.getElementById('inclination-slider').value) || 100;
+  sliderInclinationBase = {
+    middle: (range[0] + range[1]) / 2,
+    span: (range[1] - range[0]) * percent / 100
+  };
+}
+
+function applyInclinationSlider(value) {
+  if (!chartData || !chartDiv._fullLayout) return;
+  var percent = Math.max(20, Math.min(180, Number(value) || 100));
+  if (!sliderInclinationBase) captureInclinationBase();
+  if (!sliderInclinationBase) return;
+  var viewport = captureChartViewport();
+  var limits = SOXLPriceAxis.priceBounds(scaleMode);
+  // Plotly log-axis coordinates are already base-10 exponents.
+  var span = Math.min(limits[1] - limits[0], sliderInclinationBase.span * 100 / percent);
+  var low = Math.max(limits[0], Math.min(sliderInclinationBase.middle - span / 2, limits[1] - span));
+  var range = [low, low + span];
+  var update = {
+    'xaxis.range': viewport.xRange.slice(),
+    'xaxis.autorange': false,
+    'yaxis.range': range,
+    'yaxis.autorange': false
+  };
+  var ticks = SOXLPriceAxis.ticks(range, currentChartHeight - 88, scaleMode);
+  Object.keys(ticks).forEach(function(key) { update['yaxis.' + key] = ticks[key]; });
+  document.getElementById('inclination-slider').value = percent;
+  document.getElementById('inclination-value').textContent = percent + '%';
+  return Plotly.relayout(chartDiv, update);
 }
 
 function setChartWidth(value) {
@@ -2442,6 +2496,7 @@ function renderChart(options) {
     document.getElementById('end-date').value=msToDateStr(dateWindow[1]);
     configureKeyboardDateInputs();
   }
+  if (options.resetViewport || options.fitPrices) resetInclinationSlider();
   var lockedViewport = options.resetViewport ? null : captureChartViewport();
   var traces = [];
 
@@ -2905,8 +2960,17 @@ function renderLineReadouts() {
 
 var channelDateReadoutActive = false;
 function showChannelPricesForDate() {
-  var value = document.getElementById('channel-price-date').value;
+  var input = document.getElementById('channel-price-date');
   var output = document.getElementById('channel-date-prices');
+  if (!chartData || !chartData.dates.length) {
+    output.textContent = 'Channel prices need at least two SOXL prices.';
+    return;
+  }
+  // Make the first click useful even when no date has been entered.
+  if (!input.value) {
+    input.value = msToDateStr(new Date(chartData.dates[chartData.dates.length - 1]).getTime());
+  }
+  var value = input.value;
   var timestamp = Date.parse(value + 'T12:00:00Z');
   if (!Number.isFinite(timestamp)) { output.textContent = 'Choose a date first.'; return; }
   channelDateReadoutActive = true;
@@ -2920,7 +2984,8 @@ function showChannelPricesForDate() {
   output.textContent = ['Low', 'Median', 'High'].map(function(label, i) {
     return label + ': ' + (values[i] === null ? 'unavailable' :
       '$' + values[i].toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
-  }).join('   ·   ') + ' — Channel estimates for ' + value + ', not actual daily trading highs/lows.';
+  }).join('   ·   ') + ' — ' + value;
+  setFrameHeight(document.body.scrollHeight + 20);
 }
 
 var sizeGrip = document.getElementById('chart-size-grip');

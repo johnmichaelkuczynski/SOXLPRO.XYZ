@@ -71,3 +71,14 @@ string timezone normalization.
 **Why:** Projection samples use Date objects. Treating their human-readable
 strings as ISO text made all projection timestamps invalid, silently dropped
 their prices from fitting, and substituted a historical Y-axis in a future view.
+
+Keep the Chart incline control available. The user reversed the earlier removal
+request and repeatedly requested its restoration. It adjusts visual steepness,
+not the mathematical slope or stored prices of channel lines.
+
+**Why:** Removing the control was not a necessary part of correcting the
+historical axis limits, and the user needs it to inspect projections.
+
+**How to apply:** Preserve the currently displayed dates, including manual
+future navigation, when changing inclination. Reset View and explicit price
+fitting should return the inclination indicator to its neutral setting.
