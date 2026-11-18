@@ -1,7 +1,7 @@
-modules = ["python-3.11", "nodejs-20", "web", "nix", "postgresql-16"]
+modules = ["python-3.11", "nodejs-20", "web", "nix"]
 [deployment]
-deploymentTarget = "cloudrun"
-run = ["python", "seo_server.py"]
+deploymentTarget = "autoscale"
+run = ["streamlit", "run", "app.py", "--server.port", "5000"]
 
 [nix]
 channel = "stable-25_05"
@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python seo_server.py"
+args = "streamlit run app.py --server.port 5000"
 waitForPort = 5000
 
 [[ports]]
@@ -39,25 +39,7 @@ externalPort = 80
 localPort = 8000
 externalPort = 8000
 
-[[ports]]
-localPort = 8765
-externalPort = 3001
-exposeLocalhost = true
-
 [agent]
 integrations = ["python_anthropic_ai_integrations:1.0.0", "python_openai_ai_integrations:1.0.0"]
 stack = "STREAMLIT"
 expertMode = true
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 180000
-
-[userenv]
-
-[userenv.production]
-APP_ENV = "production"
-
-[userenv.shared]
-APP_ENV = "development"
-PUBLIC_APP_URL = "https://soxlpro.xyz"
