@@ -2210,6 +2210,7 @@ function inspectTrendLine(event) {
     var dateHeading = document.createElement('div');
     dateHeading.textContent = 'Projected date: ' + formatProjectedDate(timestamp);
     trendTooltip.appendChild(dateHeading);
+    comparisons.sort(function(a, b) { return b.price - a.price || a.index - b.index; });
     comparisons.forEach(function(comparison) {
       var item = lines[comparison.index];
       var section = document.createElement('section');

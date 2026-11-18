@@ -25,6 +25,11 @@ were an example, not a limit on which existing trendlines to compare.
 
 **How to apply:** Keep one shared-date comparison readout. Explicit selection
 can choose the inspected line but must not filter out the other comparisons.
+Order the cards from highest projected price to lowest at that date, matching
+the trendlines' visual top-to-bottom order rather than their creation order.
+
+**Why:** The user explicitly corrected the reversed comparison order and wants
+the top line's price/probability first, the middle next, and the bottom last.
 
 For targets below the starting price, “hitting” means a future downward touch,
 not simply being at or above the target already.

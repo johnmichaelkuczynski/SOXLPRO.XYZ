@@ -63,12 +63,15 @@ function sections() {
 }
 function verifyComparison() {
   assert.equal(sections().length, lines.length);
+  const ordered = lines.map((line,index) => ({line,index})).sort((a,b) => b.line.y1-a.line.y1);
   sections().forEach((section, index) => {
-    assert.equal(section.style.backgroundColor, lines[index].color);
+    const line = ordered[index].line;
+    assert.equal(section['data-line-index'], ordered[index].index);
+    assert.equal(section.style.backgroundColor, line.color);
     assert.ok(section.children.some(c =>
-      c.textContent === 'Projected SOXL price: $'+lines[index].y1.toFixed(2)));
+      c.textContent === 'Projected SOXL price: $'+line.y1.toFixed(2)));
     assert.ok(section.children.some(c => c.textContent ===
-      'Probability of hitting this by or before this date: '+lines[index].y1.toFixed(1)+'%'));
+      'Probability of hitting this by or before this date: '+line.y1.toFixed(1)+'%'));
   });
   assert.deepEqual(probabilityCalls.slice(-lines.length).map(c => c.timestamp),
     lines.map(() => Date.parse('2030-01-01')));
@@ -110,6 +113,10 @@ requested = '';
 inspectTrendLine({type:'click',clientX:x,clientY:198});
 verifyComparison();
 assert.equal(sections().length, 2);
+// Creation order must not reverse the visual top-to-bottom ordering.
+lines.reverse();
+inspectTrendLine({type:'click',clientX:x,clientY:198});
+verifyComparison();
 // Non-flat lines must be evaluated separately at exactly the same date.
 lines[0].y2 = 200;
 lines[1].y2 = 20;
@@ -119,13 +126,16 @@ for (const scale of ['linear', 'log']) {
   inspectTrendLine({type:'click',clientX:x,clientY:198});
   const fraction = (Date.parse('2030-01-01')-start)/(end-start);
   const calls = probabilityCalls.slice(-lines.length);
-  lines.forEach((line, i) => {
+  sections().forEach((section, i) => {
+    const line = lines[section['data-line-index']];
     const expected = scale === 'log'
       ? 10 ** (Math.log10(line.y1)+(Math.log10(line.y2)-Math.log10(line.y1))*fraction)
       : line.y1+(line.y2-line.y1)*fraction;
     assert.ok(Math.abs(calls[i].price-expected)<1e-9);
     assert.equal(calls[i].timestamp, Date.parse('2030-01-01'));
   });
+  assert.ok(calls.every((call,i) => !i || calls[i-1].price >= call.price),
+    'Card order follows actual projected height at this date, even when lines cross');
 }
 assert.equal(JSON.stringify(lines), original, 'Comparison must not mutate channel endpoints');
 """
