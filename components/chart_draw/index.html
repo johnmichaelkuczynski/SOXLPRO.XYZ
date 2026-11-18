@@ -306,6 +306,7 @@
   <button class="tbtn" id="drawBtn" aria-pressed="false" onclick="toggleDraw()">&#9998; Draw Line</button>
   <span class="rail-label" style="text-align:center;">AUTOMATIC CHANNEL LINES</span>
   <span style="font-size:12px;color:#475569;">Drag a channel's round end handles to resize it.</span>
+  <button class="tbtn" id="allChannelLinesBtn" onclick="addAllAutomaticChannelLines()" style="grid-column:1 / -1;font-weight:700;">Draw All Three Trendlines</button>
   <button class="tbtn" id="medianLineBtn" onclick="addAutomaticChannelLine('median')">Median Line</button>
   <button class="tbtn" id="upperChannelBtn" onclick="addAutomaticChannelLine('upper')">Upper Channel Line</button>
   <button class="tbtn" id="lowerChannelBtn" onclick="addAutomaticChannelLine('lower')">Lower Channel Line</button>
@@ -1785,6 +1786,32 @@ function addAutomaticChannelLine(kind, previewOnly) {
     method: 'automatic_channel',
     channel_type: kind,
     selected_period: Boolean(selectedRange)
+  });
+}
+
+function addAllAutomaticChannelLines() {
+  if (!chartData) return;
+  var missing = ['lower', 'median', 'upper'].filter(function(kind) {
+    return !lines.some(function(line) { return line.automaticType === kind; });
+  });
+  if (!missing.length) {
+    announce('All three channel trendlines are already on the chart.');
+    return;
+  }
+  var generated = missing.map(function(kind) {
+    return addAutomaticChannelLine(kind, true);
+  });
+  // Do not leave a partial channel set if any calculation fails.
+  if (generated.some(function(line) { return !line; })) return;
+  saveUndoState();
+  Array.prototype.push.apply(lines, generated);
+  renderChart();
+  renderLineList();
+  setComponentValue({action: 'set_all', lines: lines});
+  announce('Lower, median, and upper trendlines are on the chart. Existing lines preserved.');
+  trackEvent('trend_lines_created', {
+    method: 'automatic_channel_set', added_count: generated.length,
+    line_count: lines.length, scale: scaleMode, selected_period: Boolean(selectedRange)
   });
 }
 
