@@ -210,6 +210,11 @@
     font-size: 13px; line-height: 1.45;
   }
   #trend-tooltip strong { display: block; color: #fff; margin-bottom: 3px; }
+  #trend-tooltip .projection-comparison {
+    margin-top: 6px; padding: 7px 9px; border-radius: 5px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.3);
+  }
+  #trend-tooltip .projection-comparison-price { font-size: 16px; font-weight: 700; }
   body.projection-readout-active .hoverlayer { visibility: hidden; }
   #trend-tooltip { position: fixed; z-index: 1000; max-width: calc(100vw - 16px); }
   #cursor-tools {
@@ -2091,6 +2096,7 @@ document.getElementById('projection-line').addEventListener('change', function()
 });
 
 function inspectTrendLine(event) {
+  if (event.target && trendTooltip.contains(event.target)) return;
   lastProjectionPointer = {clientX:event.clientX, clientY:event.clientY};
   document.body.classList.remove('projection-readout-active');
   hoveredLineIndex = -1;
@@ -2122,19 +2128,17 @@ function inspectTrendLine(event) {
   var timestamp = x0 + xFraction * (x1 - x0);
   var yRange = layout.yaxis.range;
   var ySpan = yRange[1] - yRange[0];
-  var futureMs = Math.max(getFutureEndMs(), projectionCoverageEnd);
   var nearest = null;
+  var comparisons = [];
   var requestedLine = document.getElementById('projection-line').value;
 
   for (var index = 0; index < lines.length; index++) {
-    if (requestedLine !== '' && index !== Number(requestedLine)) continue;
     var line = lines[index];
     var lineStart = lineTimestamp(line, 1);
     var lineEnd = lineTimestamp(line, 2);
     var lineSpan = lineEnd - lineStart;
     if (!lineSpan || line.y1 <= 0 || line.y2 <= 0) continue;
     var earliest = Math.min(lineStart, lineEnd) - 63072000000;
-    if (timestamp < earliest) continue;
 
     var transformedStart = scaleMode === 'log' ? Math.log10(line.y1) : line.y1;
     var transformedEnd = scaleMode === 'log' ? Math.log10(line.y2) : line.y2;
@@ -2142,6 +2146,11 @@ function inspectTrendLine(event) {
     var transformedPrice = transformedStart + slope * (timestamp - lineStart);
     var price = scaleMode === 'log' ? Math.pow(10, transformedPrice) : transformedPrice;
     if (!Number.isFinite(price) || price <= 0) continue;
+    comparisons.push({index: index, price: price});
+    // Explicit selection chooses the inspected line, not which comparisons
+    // are shown. Every existing valid line uses this exact same timestamp.
+    if (requestedLine !== '' && index !== Number(requestedLine)) continue;
+    if (timestamp < earliest) continue;
 
     var yFraction = (transformedPrice - yRange[0]) / ySpan;
     var projectedY = plotArea.t + (1 - yFraction) * plotArea.h;
@@ -2166,22 +2175,37 @@ function inspectTrendLine(event) {
   var lastPriceDate = chartData && chartData.dates.length
     ? Date.parse(chartData.dates[chartData.dates.length - 1]) : -Infinity;
   if (requestedLine !== '' || timestamp > lastPriceDate || nearest.distance <= 24) {
-    var name = lines[nearest.index].label || ('Trend line ' + (nearest.index + 1));
-    trendTooltip.style.backgroundColor = lines[nearest.index].color || COLORS[nearest.index % COLORS.length];
+    trendTooltip.style.backgroundColor = '#0f172a';
     trendTooltip.replaceChildren();
     var heading = document.createElement('strong');
-    heading.textContent = name + ' projection';
+    heading.textContent = 'Trendline comparison';
     trendTooltip.appendChild(heading);
-    [
-      'Projected date: ' + formatProjectedDate(timestamp),
-      'Projected SOXL price: $' + nearest.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}),
-      'Probability of hitting this by or before this date: ' + formatHitProbability(nearest.price, timestamp),
-      'Historical-model estimate'
-    ].forEach(function(text) {
-      var row = document.createElement('div');
-      row.textContent = text;
-      trendTooltip.appendChild(row);
+    var dateHeading = document.createElement('div');
+    dateHeading.textContent = 'Projected date: ' + formatProjectedDate(timestamp);
+    trendTooltip.appendChild(dateHeading);
+    comparisons.forEach(function(comparison) {
+      var item = lines[comparison.index];
+      var section = document.createElement('section');
+      section.className = 'projection-comparison';
+      section.style.backgroundColor = item.color || COLORS[comparison.index % COLORS.length];
+      section.setAttribute('data-line-index', comparison.index);
+      var title = document.createElement('strong');
+      title.textContent = item.label || ('Trend line ' + (comparison.index + 1));
+      section.appendChild(title);
+      var priceRow = document.createElement('div');
+      priceRow.className = 'projection-comparison-price';
+      priceRow.textContent = 'Projected SOXL price: $' + comparison.price.toLocaleString('en-US',
+        {minimumFractionDigits:2, maximumFractionDigits:2});
+      section.appendChild(priceRow);
+      var probabilityRow = document.createElement('div');
+      probabilityRow.textContent = 'Probability of hitting this by or before this date: ' +
+        formatHitProbability(comparison.price, timestamp);
+      section.appendChild(probabilityRow);
+      trendTooltip.appendChild(section);
     });
+    var qualification = document.createElement('div');
+    qualification.textContent = 'Historical-model estimates';
+    trendTooltip.appendChild(qualification);
     trendTooltip.style.display = 'block';
     document.body.classList.add('projection-readout-active');
     var width = trendTooltip.offsetWidth;
@@ -2199,6 +2223,12 @@ function inspectTrendLine(event) {
         visibleRight = Math.min(visibleRight, window.parent.innerWidth - frameBounds.left);
       }
     } catch (error) { /* Cross-origin embeds retain the local viewport bounds. */ }
+    trendTooltip.style.maxHeight = Math.max(100, visibleBottom - visibleTop - 16) + 'px';
+    trendTooltip.style.overflowY = 'auto';
+    trendTooltip.style.pointerEvents = event.type === 'click' ? 'auto' : 'none';
+    // Re-measure after constraining a long list to the visible page.
+    width = trendTooltip.offsetWidth;
+    height = trendTooltip.offsetHeight;
     var left = event.clientX + 18;
     if (left + width > visibleRight - 8) left = event.clientX - width - 18;
     var top = event.clientY + 18;
@@ -2234,6 +2264,7 @@ function inspectTrendLine(event) {
 
 chartContainer.addEventListener('pointermove', inspectTrendLine, true);
 chartContainer.addEventListener('mousemove', inspectTrendLine, true);
+chartContainer.addEventListener('click', inspectTrendLine, true);
 chartContainer.addEventListener('mouseleave', function() {
   document.body.classList.remove('projection-readout-active');
   hoveredLineIndex = -1;

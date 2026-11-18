@@ -25,7 +25,9 @@ var document = {
     remove() { active = false; }, add() { active = true; }
   }},
   getElementById() { return {value: requested}; },
-  createElement() { return {}; }
+  createElement() { return {style:{}, children:[],
+    setAttribute(key, value) { this[key] = value; },
+    appendChild(child) { this.children.push(child); }}; }
 };
 var window = {innerHeight: 900, innerWidth: 1200};
 var start = Date.parse('2020-01-01'), end = Date.parse('2035-01-01');
@@ -46,12 +48,31 @@ var chartDiv = {
 function lineTimestamp(line, index) { return line['x'+index]; }
 function getFutureEndMs() { return end; }
 function formatProjectedDate() { return 'Jan 1, 2030'; }
-function formatHitProbability() { return '42.0%'; }
+var probabilityCalls = [];
+function formatHitProbability(price, timestamp) {
+  probabilityCalls.push({price, timestamp});
+  return price.toFixed(1) + '%';
+}
 function estimateHitProbability() { return null; }
 function getHitProbabilityModel() { return null; }
 """ + "\nfunction inspectTrendLine(event) {" + handler + """
-// 2030 is future space. Each line must own its own popup and price.
+// 2030 is future space. Every inspection compares all lines at that date.
 const x = 65 + (Date.parse('2030-01-01') - start) / (end-start)*1000;
+function sections() {
+  return trendTooltip.children.filter(c => c.className === 'projection-comparison');
+}
+function verifyComparison() {
+  assert.equal(sections().length, lines.length);
+  sections().forEach((section, index) => {
+    assert.equal(section.style.backgroundColor, lines[index].color);
+    assert.ok(section.children.some(c =>
+      c.textContent === 'Projected SOXL price: $'+lines[index].y1.toFixed(2)));
+    assert.ok(section.children.some(c => c.textContent ===
+      'Probability of hitting this by or before this date: '+lines[index].y1.toFixed(1)+'%'));
+  });
+  assert.deepEqual(probabilityCalls.slice(-lines.length).map(c => c.timestamp),
+    lines.map(() => Date.parse('2030-01-01')));
+}
 for (const mode of ['pan', 'select', 'draw']) {
   currentMode = mode;
   for (let index=0; index<3; index++) {
@@ -59,9 +80,7 @@ for (const mode of ['pan', 'select', 'draw']) {
     inspectTrendLine({clientX:x, clientY:y});
     assert.equal(trendTooltip.style.display, 'block');
     assert.equal(hoveredLineIndex, index);
-    assert.equal(trendTooltip.style.backgroundColor, lines[index].color);
-    assert.ok(trendTooltip.children.some(c =>
-      c.textContent === 'Projected SOXL price: $'+lines[index].y1.toFixed(2)));
+    verifyComparison();
     assert.ok(active);
   }
 }
@@ -77,9 +96,42 @@ assert.equal(trendTooltip.style.display, 'block');
 requested = '2';
 inspectTrendLine({clientX:x, clientY:198});
 assert.equal(hoveredLineIndex, 2);
-assert.equal(trendTooltip.style.backgroundColor, '#393');
+verifyComparison();
+// A click is wired to the same comparison, including manually drawn lines.
+lines.push({x1:start,x2:end,y1:5,y2:5,color:'#123456',label:'My trendline'});
+inspectTrendLine({type:'click',clientX:x,clientY:498});
+verifyComparison();
+assert.equal(trendTooltip.style.pointerEvents, 'auto');
+assert.equal(trendTooltip.style.overflowY, 'auto');
+// One or two lines still work, without inventing missing channels.
+lines.pop();
+lines.pop();
+requested = '';
+inspectTrendLine({type:'click',clientX:x,clientY:198});
+verifyComparison();
+assert.equal(sections().length, 2);
+// Non-flat lines must be evaluated separately at exactly the same date.
+lines[0].y2 = 200;
+lines[1].y2 = 20;
+const original = JSON.stringify(lines);
+for (const scale of ['linear', 'log']) {
+  scaleMode = scale;
+  inspectTrendLine({type:'click',clientX:x,clientY:198});
+  const fraction = (Date.parse('2030-01-01')-start)/(end-start);
+  const calls = probabilityCalls.slice(-lines.length);
+  lines.forEach((line, i) => {
+    const expected = scale === 'log'
+      ? 10 ** (Math.log10(line.y1)+(Math.log10(line.y2)-Math.log10(line.y1))*fraction)
+      : line.y1+(line.y2-line.y1)*fraction;
+    assert.ok(Math.abs(calls[i].price-expected)<1e-9);
+    assert.equal(calls[i].timestamp, Date.parse('2030-01-01'));
+  });
+}
+assert.equal(JSON.stringify(lines), original, 'Comparison must not mutate channel endpoints');
 """
-        subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
+        self.assertIn("chartContainer.addEventListener('click', inspectTrendLine, true);", html)
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,18 @@ deadline, not merely closing at that price on the displayed date.
 **How to apply:** Preserve the exact probability interpretation and keep the
 estimate visibly qualified whenever future projection hover behavior changes.
 
+Inspecting one trendline should compare every existing valid trendline at the
+same date, each with its own projected price, by-or-before hit probability,
+name, and matching line color. Include manually drawn lines, not just the three
+automatic channels; do not create missing lines for the comparison.
+
+**Why:** The user explicitly requested instant same-date comparisons instead
+of inspecting the lower, median, and upper lines separately. The three channels
+were an example, not a limit on which existing trendlines to compare.
+
+**How to apply:** Keep one shared-date comparison readout. Explicit selection
+can choose the inspected line but must not filter out the other comparisons.
+
 For targets below the starting price, “hitting” means a future downward touch,
 not simply being at or above the target already.
 

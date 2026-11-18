@@ -35,11 +35,12 @@ near a different line. Clamp popups to the visible parent viewport, not merely
 the tall chart iframe. Floating controls can intercept pointer events over
 future chart points; selection must allow reading the chosen line elsewhere.
 
-Projection popup backgrounds must match their corresponding trendline color.
+Each projection comparison card must match its corresponding trendline color.
 
 **Why:** The user explicitly requires matching colors to identify each line's readout.
 
-**How to apply:** Preserve the match for automatic and explicitly selected lines.
+**How to apply:** Preserve the match for every line's card within the shared
+same-date comparison, including automatic and explicitly selected lines.
 
 Keep projection inspection available while period-selection mode is enabled;
 hide it only during an active selection drag.

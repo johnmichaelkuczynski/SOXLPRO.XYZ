@@ -39,6 +39,11 @@ externalPort = 80
 localPort = 8000
 externalPort = 8000
 
+[[ports]]
+localPort = 8765
+externalPort = 3001
+exposeLocalhost = true
+
 [agent]
 integrations = ["python_anthropic_ai_integrations:1.0.0", "python_openai_ai_integrations:1.0.0"]
 stack = "STREAMLIT"
